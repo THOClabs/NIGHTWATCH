@@ -1,0 +1,13 @@
+# NIGHTWATCH Services Dependencies
+
+# Ephemeris calculations (JPL DE440)
+skyfield>=1.45
+
+# Async HTTP client (weather station API)
+aiohttp>=3.8
+
+# Serial communication (mount control)
+pyserial>=3.5
+
+# Optional: ZWO camera support
+# zwoasi>=0.0.23
