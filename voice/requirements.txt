@@ -1,0 +1,15 @@
+# NIGHTWATCH Voice Pipeline Dependencies
+
+# Speech-to-Text (choose one)
+faster-whisper>=0.10.0    # Recommended: faster inference
+# openai-whisper>=20231117  # Alternative: official OpenAI package
+
+# Text-to-Speech
+piper-tts>=1.2.0          # Fast local TTS
+
+# Audio I/O
+sounddevice>=0.4.6
+numpy>=1.24
+
+# Optional: Alternative TTS
+# TTS>=0.22.0              # Coqui TTS (larger, more voices)
