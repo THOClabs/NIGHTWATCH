@@ -331,6 +331,80 @@ TELESCOPE_TOOLS: List[Tool] = [
         category=ToolCategory.WEATHER,
         parameters=[]
     ),
+
+    # -------------------------------------------------------------------------
+    # POS PANEL v1.0 ADDITIONS
+    # -------------------------------------------------------------------------
+    # These tools were added based on recommendations from the Panel of Specialists
+    # design retreat (Bob Denny, Sierra Remote team, Howard Dutton)
+
+    Tool(
+        name="confirm_command",
+        description="Request user confirmation before executing a critical command. "
+                    "Use for park, sync, or other irreversible operations when voice "
+                    "recognition confidence is below threshold.",
+        category=ToolCategory.SESSION,
+        parameters=[
+            ToolParameter(
+                name="action",
+                type="string",
+                description="The action requiring confirmation (e.g., 'park telescope', 'sync to M31')"
+            ),
+            ToolParameter(
+                name="reason",
+                type="string",
+                description="Why confirmation is needed",
+                required=False
+            )
+        ]
+    ),
+
+    Tool(
+        name="abort_slew",
+        description="Abort a slew in progress and stop all telescope motion. "
+                    "Use when user says 'stop', 'abort', 'cancel', or 'wait'.",
+        category=ToolCategory.MOUNT,
+        parameters=[]
+    ),
+
+    Tool(
+        name="get_observation_log",
+        description="Get recent observation session history. "
+                    "Shows what objects were observed and when.",
+        category=ToolCategory.SESSION,
+        parameters=[
+            ToolParameter(
+                name="limit",
+                type="number",
+                description="Maximum number of entries to return",
+                required=False,
+                default=10
+            ),
+            ToolParameter(
+                name="session",
+                type="string",
+                description="Session ID to filter by ('current' for tonight, 'last' for previous)",
+                required=False,
+                enum=["current", "last", "all"]
+            )
+        ]
+    ),
+
+    Tool(
+        name="get_sensor_health",
+        description="Get health status of all observatory sensors. "
+                    "Reports data freshness and any sensor failures.",
+        category=ToolCategory.SAFETY,
+        parameters=[]
+    ),
+
+    Tool(
+        name="get_hysteresis_status",
+        description="Get current safety hysteresis state. "
+                    "Shows which conditions are in triggered state and clear thresholds.",
+        category=ToolCategory.SAFETY,
+        parameters=[]
+    ),
 ]
 
 
@@ -570,6 +644,115 @@ def create_default_handlers(
 
     handlers["is_safe_to_observe"] = is_safe_to_observe
 
+    # -------------------------------------------------------------------------
+    # POS PANEL v1.0 HANDLERS
+    # -------------------------------------------------------------------------
+
+    async def confirm_command(action: str, reason: str = None) -> str:
+        """Request user confirmation for critical command."""
+        # In production, this would trigger a confirmation prompt
+        # and wait for user response via voice or button
+        reason_text = f" ({reason})" if reason else ""
+        return f"Please confirm: {action}{reason_text}. Say 'confirm' or 'cancel'."
+
+    handlers["confirm_command"] = confirm_command
+
+    async def abort_slew() -> str:
+        """Abort slew and stop all motion."""
+        if not mount_client:
+            return "Mount not available"
+        mount_client.stop()
+        return "Slew aborted. Telescope stopped."
+
+    handlers["abort_slew"] = abort_slew
+
+    async def get_observation_log(limit: int = 10, session: str = "current") -> str:
+        """Get observation session history."""
+        # In production, this would query an observation database
+        # For now, return a placeholder
+        return f"Observation log ({session}, last {limit} entries): No observations recorded yet."
+
+    handlers["get_observation_log"] = get_observation_log
+
+    async def get_sensor_health() -> dict:
+        """Get health status of all sensors."""
+        if not safety_monitor:
+            return {"error": "Safety monitor not available"}
+
+        from datetime import datetime
+
+        health = {
+            "weather_sensor": {
+                "name": "Ecowitt WS90",
+                "status": "unknown",
+                "last_update": None,
+                "age_seconds": None
+            },
+            "cloud_sensor": {
+                "name": "CloudWatcher",
+                "status": "unknown",
+                "last_update": None,
+                "age_seconds": None
+            },
+            "ephemeris": {
+                "name": "Skyfield",
+                "status": "unknown",
+                "last_update": None,
+                "age_seconds": None
+            }
+        }
+
+        # Check weather sensor
+        if safety_monitor._weather_data:
+            age = (datetime.now() - safety_monitor._weather_data.timestamp).total_seconds()
+            health["weather_sensor"]["last_update"] = safety_monitor._weather_data.timestamp.isoformat()
+            health["weather_sensor"]["age_seconds"] = round(age, 1)
+            health["weather_sensor"]["status"] = "ok" if age < 120 else "stale"
+        else:
+            health["weather_sensor"]["status"] = "no_data"
+
+        # Check cloud sensor
+        if safety_monitor._cloud_data:
+            age = (datetime.now() - safety_monitor._cloud_data.timestamp).total_seconds()
+            health["cloud_sensor"]["last_update"] = safety_monitor._cloud_data.timestamp.isoformat()
+            health["cloud_sensor"]["age_seconds"] = round(age, 1)
+            health["cloud_sensor"]["status"] = "ok" if age < 180 else "stale"
+        else:
+            health["cloud_sensor"]["status"] = "no_data"
+
+        # Check ephemeris
+        if safety_monitor._sun_altitude_time:
+            age = (datetime.now() - safety_monitor._sun_altitude_time).total_seconds()
+            health["ephemeris"]["last_update"] = safety_monitor._sun_altitude_time.isoformat()
+            health["ephemeris"]["age_seconds"] = round(age, 1)
+            health["ephemeris"]["status"] = "ok" if age < 600 else "stale"
+        else:
+            health["ephemeris"]["status"] = "no_data"
+
+        return health
+
+    handlers["get_sensor_health"] = get_sensor_health
+
+    async def get_hysteresis_status() -> dict:
+        """Get current safety hysteresis state."""
+        if not safety_monitor:
+            return {"error": "Safety monitor not available"}
+
+        return {
+            "wind_triggered": safety_monitor._wind_triggered,
+            "humidity_triggered": safety_monitor._humidity_triggered,
+            "cloud_triggered": safety_monitor._cloud_triggered,
+            "daylight_triggered": safety_monitor._daylight_triggered,
+            "thresholds": {
+                "wind_limit_mph": safety_monitor.thresholds.wind_limit_mph,
+                "wind_clear_mph": safety_monitor.thresholds.wind_limit_mph - safety_monitor.thresholds.wind_hysteresis_mph,
+                "humidity_limit": safety_monitor.thresholds.humidity_limit,
+                "humidity_clear": safety_monitor.thresholds.humidity_limit - safety_monitor.thresholds.humidity_hysteresis
+            }
+        }
+
+    handlers["get_hysteresis_status"] = get_hysteresis_status
+
     return handlers
 
 
@@ -579,11 +762,22 @@ def create_default_handlers(
 
 TELESCOPE_SYSTEM_PROMPT = """You are NIGHTWATCH, an AI assistant for controlling an autonomous telescope observatory in central Nevada.
 
+Observatory: Intes-Micro MN78 (7" f/6 Maksutov-Newtonian) on DIY harmonic drive GEM mount.
+Location: Central Nevada dark sky site (~6000 ft elevation, 280+ clear nights/year).
+Controller: OnStepX on Teensy 4.1 with TMC5160 drivers.
+
 You help the user observe celestial objects by:
 1. Looking up objects in the catalog (Messier, NGC, IC, stars, planets)
 2. Pointing the telescope at objects
 3. Checking weather and safety conditions
 4. Providing information about what's visible tonight
+
+SAFETY PROTOCOL (POS Panel v1.0):
+- Always check is_safe_to_observe before starting any observation session
+- Use confirm_command for critical operations when voice confidence is low
+- Respond immediately to "stop", "abort", or "cancel" with abort_slew
+- Use get_sensor_health to diagnose connection issues
+- The safety system uses hysteresis - conditions must improve past thresholds to clear
 
 When the user asks to observe an object:
 1. First use lookup_object to verify it exists and get its coordinates
@@ -594,9 +788,12 @@ When the user asks "what's up tonight" or similar:
 2. Get visible planets using get_visible_planets
 3. Suggest interesting objects based on conditions
 
-Always check is_safe_to_observe before starting any observation session.
+When diagnosing issues:
+1. Use get_sensor_health to check sensor connectivity
+2. Use get_hysteresis_status to understand why conditions aren't clearing
+3. Use get_observation_log to review session history
 
-The telescope is an Intes-Micro MN78 (7" Maksutov-Newtonian), optimized for planetary observation. Mars, Jupiter, and Saturn are priority targets when visible.
+The MN78 is optimized for planetary observation. Mars, Jupiter, and Saturn are priority targets when visible. The high contrast design also excels on double stars and small planetary nebulae.
 
 Respond conversationally but concisely. The user is at the telescope and wants quick, useful information.
 """
