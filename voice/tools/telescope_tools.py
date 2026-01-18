@@ -27,6 +27,10 @@ class ToolCategory(Enum):
     GUIDING = "guiding"      # v2.0: Autoguiding control
     CAMERA = "camera"        # v2.0: Camera/imaging control
     ALERTS = "alerts"        # v2.0: Alert management
+    FOCUS = "focus"          # v3.0: Focus control
+    ASTROMETRY = "astrometry"  # v3.0: Plate solving
+    ENCLOSURE = "enclosure"  # v3.0: Roof/dome control
+    POWER = "power"          # v3.0: Power management
 
 
 @dataclass
@@ -561,6 +565,197 @@ TELESCOPE_TOOLS: List[Tool] = [
         category=ToolCategory.WEATHER,
         parameters=[]
     ),
+
+    # -------------------------------------------------------------------------
+    # POS PANEL v3.0 ADDITIONS - FOCUS CONTROL
+    # -------------------------------------------------------------------------
+    # Auto-focus tools (Larry Weber recommendations)
+
+    Tool(
+        name="auto_focus",
+        description="Run automatic focus routine using HFD measurement. "
+                    "Finds optimal focus position by sampling V-curve.",
+        category=ToolCategory.FOCUS,
+        parameters=[]
+    ),
+
+    Tool(
+        name="get_focus_status",
+        description="Get current focus position, temperature, and whether "
+                    "refocusing is needed based on temperature change.",
+        category=ToolCategory.FOCUS,
+        parameters=[]
+    ),
+
+    Tool(
+        name="move_focus",
+        description="Move focuser to specific position or by relative amount.",
+        category=ToolCategory.FOCUS,
+        parameters=[
+            ToolParameter(
+                name="position",
+                type="number",
+                description="Absolute position in steps, or relative steps if relative=true"
+            ),
+            ToolParameter(
+                name="relative",
+                type="boolean",
+                description="If true, move by relative amount instead of absolute",
+                required=False,
+                default=False
+            )
+        ]
+    ),
+
+    Tool(
+        name="enable_temp_compensation",
+        description="Enable temperature-based focus compensation. "
+                    "Automatically adjusts focus as temperature changes.",
+        category=ToolCategory.FOCUS,
+        parameters=[
+            ToolParameter(
+                name="enabled",
+                type="boolean",
+                description="True to enable, False to disable"
+            )
+        ]
+    ),
+
+    # -------------------------------------------------------------------------
+    # POS PANEL v3.0 ADDITIONS - PLATE SOLVING
+    # -------------------------------------------------------------------------
+    # Astrometry tools (Dustin Lang recommendations)
+
+    Tool(
+        name="plate_solve",
+        description="Plate solve current image to determine exact pointing. "
+                    "Returns precise RA/DEC coordinates.",
+        category=ToolCategory.ASTROMETRY,
+        parameters=[
+            ToolParameter(
+                name="sync_mount",
+                type="boolean",
+                description="If true, sync mount to solved position",
+                required=False,
+                default=True
+            )
+        ]
+    ),
+
+    Tool(
+        name="get_pointing_error",
+        description="Get pointing error between expected and actual position "
+                    "based on last plate solve.",
+        category=ToolCategory.ASTROMETRY,
+        parameters=[]
+    ),
+
+    Tool(
+        name="center_object",
+        description="Use plate solving to precisely center an object. "
+                    "Iteratively solves and corrects until centered.",
+        category=ToolCategory.ASTROMETRY,
+        parameters=[
+            ToolParameter(
+                name="object_name",
+                type="string",
+                description="Name of object to center"
+            ),
+            ToolParameter(
+                name="max_iterations",
+                type="number",
+                description="Maximum centering iterations",
+                required=False,
+                default=3
+            )
+        ]
+    ),
+
+    # -------------------------------------------------------------------------
+    # POS PANEL v3.0 ADDITIONS - ENCLOSURE CONTROL
+    # -------------------------------------------------------------------------
+    # Roof/dome control tools (AAG CloudWatcher team recommendations)
+
+    Tool(
+        name="open_roof",
+        description="Open the roll-off roof. Requires all safety conditions "
+                    "to be met and telescope to be parked.",
+        category=ToolCategory.ENCLOSURE,
+        parameters=[]
+    ),
+
+    Tool(
+        name="close_roof",
+        description="Close the roll-off roof. Use emergency=true to bypass "
+                    "safety checks in critical situations.",
+        category=ToolCategory.ENCLOSURE,
+        parameters=[
+            ToolParameter(
+                name="emergency",
+                type="boolean",
+                description="Emergency close - bypass all checks",
+                required=False,
+                default=False
+            )
+        ]
+    ),
+
+    Tool(
+        name="get_roof_status",
+        description="Get current roof status including position, safety conditions, "
+                    "and whether it can be opened.",
+        category=ToolCategory.ENCLOSURE,
+        parameters=[]
+    ),
+
+    Tool(
+        name="stop_roof",
+        description="Immediately stop roof motion.",
+        category=ToolCategory.ENCLOSURE,
+        parameters=[]
+    ),
+
+    # -------------------------------------------------------------------------
+    # POS PANEL v3.0 ADDITIONS - POWER MANAGEMENT
+    # -------------------------------------------------------------------------
+    # UPS and power control tools
+
+    Tool(
+        name="get_power_status",
+        description="Get UPS status including battery level, runtime estimate, "
+                    "and whether on mains or battery power.",
+        category=ToolCategory.POWER,
+        parameters=[]
+    ),
+
+    Tool(
+        name="get_power_events",
+        description="Get recent power events such as outages and restorations.",
+        category=ToolCategory.POWER,
+        parameters=[
+            ToolParameter(
+                name="hours",
+                type="number",
+                description="Number of hours of history to return",
+                required=False,
+                default=24
+            )
+        ]
+    ),
+
+    Tool(
+        name="emergency_shutdown",
+        description="Initiate emergency shutdown sequence. Closes roof, parks telescope, "
+                    "and prepares for safe power loss.",
+        category=ToolCategory.POWER,
+        parameters=[
+            ToolParameter(
+                name="reason",
+                type="string",
+                description="Reason for emergency shutdown"
+            )
+        ]
+    ),
 ]
 
 
@@ -921,16 +1116,19 @@ TELESCOPE_SYSTEM_PROMPT = """You are NIGHTWATCH, an AI assistant for controlling
 Observatory: Intes-Micro MN78 (7" f/6 Maksutov-Newtonian) on DIY harmonic drive GEM mount.
 Location: Central Nevada dark sky site (~6000 ft elevation, 280+ clear nights/year).
 Controller: OnStepX on Teensy 4.1 with TMC5160 drivers.
-Camera: ZWO ASI662MC for planetary imaging.
-Guiding: PHD2 with ASI120MM-S guide camera.
-Version: 2.0 (POS Panel certified)
+Imaging Camera: ZWO ASI662MC for planetary imaging.
+Guide Camera: ASI120MM-S with PHD2 autoguiding.
+Focuser: ZWO EAF with temperature compensation.
+Enclosure: Roll-off roof with weather interlocks.
+Power: APC Smart-UPS with NUT monitoring.
+Version: 3.0 (POS Panel certified - Full Automation)
 
 You help the user observe and image celestial objects by:
-1. Looking up objects in the catalog (Messier, NGC, IC, stars, planets)
-2. Pointing the telescope at objects
-3. Checking weather and safety conditions
+1. Managing the complete observatory (roof, power, safety)
+2. Pointing and tracking celestial objects
+3. Auto-focusing and plate solving for precision
 4. Controlling camera capture and guiding
-5. Providing information about what's visible tonight
+5. Monitoring conditions and responding to events
 
 SAFETY PROTOCOL (POS Panel v1.0):
 - Always check is_safe_to_observe before starting any observation session
@@ -946,28 +1144,44 @@ IMAGING WORKFLOW (POS Panel v2.0):
 4. Begin capture with start_capture (60-90 seconds for planets)
 5. Dither between captures with dither to reduce noise
 
-When the user asks to observe an object:
-1. First use lookup_object to verify it exists and get its coordinates
-2. Then use goto_object to slew the telescope
+FULL AUTOMATION WORKFLOW (POS Panel v3.0):
+1. Check get_power_status to ensure UPS is healthy
+2. Check conditions with is_safe_to_observe
+3. Open roof with open_roof (verifies telescope parked, weather safe)
+4. Unpark telescope with unpark_telescope
+5. GOTO target with goto_object
+6. Plate solve with plate_solve to verify pointing
+7. Auto-focus with auto_focus (or enable_temp_compensation for continuous)
+8. Start guiding with start_guiding
+9. Begin imaging with start_capture
+10. Monitor with get_focus_status, get_guiding_status, get_alerts
+11. Close session: stop_capture, stop_guiding, park_telescope, close_roof
 
-When the user wants to image a planet:
-1. Check if it's above 30° altitude for best seeing
-2. GOTO the target
-3. Start guiding if needed
-4. Use start_capture with appropriate duration
+ENCLOSURE SAFETY (v3.0):
+- NEVER open roof without checking get_roof_status first
+- Roof will auto-close on rain detection (hardware interlock)
+- Rain holdoff: 30 minutes after last rain before roof can reopen
+- Telescope MUST be parked before roof can open
+- Use close_roof with emergency=true only for critical situations
 
-When the user asks "what's up tonight" or similar:
-1. Check if it's dark using is_it_dark
-2. Get visible planets using get_visible_planets
-3. Check seeing prediction with get_seeing_prediction
-4. Suggest priority targets based on conditions
+FOCUS MANAGEMENT (v3.0):
+- Run auto_focus after large slews or temperature changes
+- Use get_focus_status to check if refocus needed (every 2°C or 30 min)
+- enable_temp_compensation for automated focus adjustment
+- Temperature coefficient: ~2.5 steps/°C typical
 
-When diagnosing issues:
-1. Use get_sensor_health to check sensor connectivity
-2. Use get_hysteresis_status to understand why conditions aren't clearing
-3. Use get_guiding_status to check autoguiding performance
-4. Use get_alerts to see recent system alerts
-5. Use get_observation_log to review session history
+PLATE SOLVING (v3.0):
+- Use plate_solve after GOTO to verify pointing accuracy
+- Use center_object to precisely center faint targets
+- get_pointing_error shows deviation from expected position
+- Sync improves pointing model for future GOTOs
+
+POWER MANAGEMENT (v3.0):
+- Monitor get_power_status for battery level
+- At 50% battery: System auto-parks telescope
+- At 20% battery: Emergency roof close and shutdown
+- get_power_events shows recent power outages
+- emergency_shutdown for manual safe shutdown
 
 Camera settings (Damian Peach recommendations):
 - Mars: gain 280, exposure 8ms
@@ -976,7 +1190,7 @@ Camera settings (Damian Peach recommendations):
 
 The MN78 is optimized for planetary observation. Mars, Jupiter, and Saturn are priority targets when visible. The high contrast design also excels on double stars and small planetary nebulae.
 
-Respond conversationally but concisely. The user is at the telescope and wants quick, useful information.
+Respond conversationally but concisely. The user is at the telescope and wants quick, useful information. For autonomous operation, proactively monitor conditions and alert the user to issues.
 """
 
 
