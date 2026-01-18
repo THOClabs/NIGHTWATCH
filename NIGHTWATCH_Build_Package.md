@@ -1172,11 +1172,11 @@ NIGHTWATCH/
 │   └── onstepx_config/
 │       └── Config.h                 # CREATED - Initial OnStepX config
 ├── services/
-│   ├── catalog/                     # Pending - NGC/IC/Messier lookup
+│   ├── catalog/                     # CREATED - SQLite object database
 │   ├── ephemeris/                   # Pending - Skyfield integration
-│   ├── mount_control/               # Pending - LX200 protocol client
-│   ├── weather/                     # Pending - Ecowitt API integration
-│   └── safety_monitor/              # Pending - Automation logic
+│   ├── mount_control/               # CREATED - LX200 protocol client
+│   ├── weather/                     # CREATED - Ecowitt API integration
+│   └── safety_monitor/              # CREATED - Automation logic
 ├── voice/
 │   ├── stt/                         # Pending - Whisper integration
 │   ├── llm/                         # Pending - Llama 3.x tools
@@ -1202,10 +1202,38 @@ NIGHTWATCH/
 |---------|------|--------|---------|
 | 1.0 | 2026-01-17 | Claude | Initial combined build package |
 | 1.1 | 2026-01-18 | Claude | Component sourcing research completed, Appendix A populated |
+| 1.2 | 2026-01-18 | Claude | Core Python services implemented |
 
 ---
 
 ## Progress Log
+
+### 2026-01-18: Core Services Implemented
+
+**Completed:**
+- Mount Control Service (services/mount_control/)
+  - LX200 protocol client for OnStepX communication
+  - TCP and serial connection support
+  - Full command set: goto, tracking, parking, status
+- Weather Service (services/weather/)
+  - Ecowitt WS90 API integration
+  - Real-time data polling with safety thresholds
+- Safety Monitor (services/safety_monitor/)
+  - Automated observatory safety logic
+  - Weather, cloud, and daylight evaluation
+  - Emergency park capability
+- Catalog Service (services/catalog/)
+  - SQLite astronomical object database
+  - Messier, NGC, IC, named star support
+  - Voice-friendly lookup interface
+
+**HEMY Reference Design Analysis:**
+- Mount type: Harmonic drive with timing belts
+- Payload: 15 kg without counterweights
+- Weight: < 4 kg excluding base
+- Performance: ~1 arcsec RMS, ~0.14 arcsec resolution
+- Electronics: Teensy 4.0 MicroMod + TMC5160 drivers
+- Cost: 800-1000 EUR total build
 
 ### 2026-01-18: Research Phase Initiated
 
@@ -1227,8 +1255,8 @@ NIGHTWATCH/
 **Next Steps:**
 - Contact APM Telescopes for MN78 quote
 - Set eBay alerts for CSF-32 and CSF-25 harmonic drives
-- Clone HEMY repository for frame design adaptation
-- Begin CAD work for NIGHTWATCH-specific modifications
+- Implement ephemeris service with Skyfield
+- Begin voice pipeline development
 
 ---
 
