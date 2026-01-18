@@ -1,6 +1,7 @@
 # NIGHTWATCH Panel of Specialists (POS) Design Retreat
-## 10-Day Agile Design Session Simulation
+## 20-Day Agile Design Session Simulation
 ### Location: Virtual Retreat | Date: January 2026
+### Version: 2.0
 
 ---
 
@@ -550,19 +551,1323 @@ Network Security Checklist:
 
 ---
 
-## Retreat Conclusion
+## v1.0 Milestone Complete
 
 The Panel of Specialists has completed a comprehensive 10-day review of the NIGHTWATCH autonomous telescope project. All major subsystems have been validated by domain experts, and specific improvements have been identified and documented.
 
-**Unanimous Panel Assessment:** The NIGHTWATCH design is sound and ready for v1.0 implementation with the recommended modifications.
+**v1.0 Assessment:** The NIGHTWATCH design is sound and ready for implementation with the recommended modifications.
+
+---
+
+# PHASE 2: Advanced Features (Days 11-20)
+
+---
+
+## Day 11: PHD2 Guiding Integration
+
+### Focus: Autoguiding System Architecture
+
+**Morning Session: Craig Stark + Richard Hedrick Lead**
+
+**PHD2 Integration Strategy:**
+> *Craig Stark:* "Even with harmonic drives and encoders, guiding improves long-exposure performance:
+> 1. Use PHD2's socket server for automation integration
+> 2. Guide camera: ZWO ASI120MM-S (sensitive, fast download)
+> 3. Off-axis guider preferred over separate guide scope
+> 4. Initial calibration: Run Guiding Assistant for baseline
+> 5. Predictive PEC: PHD2 can learn periodic error patterns"
+
+**Guide Camera Specifications:**
+```
+Recommended: ZWO ASI120MM-S
+- Sensor: AR0130 CMOS
+- Resolution: 1280x960
+- Pixel size: 3.75μm
+- Read noise: 4e- (low gain)
+- FPS: 60+ for responsive guiding
+- Interface: USB 2.0 (sufficient)
+```
+
+**Integration Architecture:**
+```python
+# services/guiding/phd2_client.py
+
+class PHD2Client:
+    """
+    PHD2 socket server client for guiding integration.
+
+    Protocol: JSON-RPC over TCP (default port 4400)
+    """
+
+    async def connect(self, host: str = "localhost", port: int = 4400):
+        """Connect to PHD2 socket server."""
+
+    async def start_guiding(self) -> bool:
+        """Begin autoguiding with current star."""
+
+    async def stop_guiding(self) -> bool:
+        """Stop autoguiding."""
+
+    async def get_guide_stats(self) -> GuideStats:
+        """Get current guiding statistics (RMS, peak, etc.)."""
+
+    async def dither(self, pixels: float = 5.0) -> bool:
+        """Dither for imaging between exposures."""
+
+    async def get_calibration_data(self) -> CalibrationData:
+        """Retrieve calibration for diagnostics."""
+```
+
+### Afternoon Session: Guiding Workflow
+
+**Automated Guiding Workflow:**
+1. Camera powers on with main system
+2. PHD2 auto-connects via socket
+3. Guiding Assistant runs on first use
+4. Auto-selects guide star after GOTO
+5. Calibrates if mount has moved significantly
+6. Begins guiding, monitors RMS
+7. Alerts if guiding degrades
+
+**Voice Commands Added:**
+```python
+Tool(
+    name="start_guiding",
+    description="Start autoguiding with PHD2",
+    category=ToolCategory.GUIDING,
+    parameters=[]
+),
+
+Tool(
+    name="stop_guiding",
+    description="Stop autoguiding",
+    category=ToolCategory.GUIDING,
+    parameters=[]
+),
+
+Tool(
+    name="get_guiding_status",
+    description="Get current guiding RMS and status",
+    category=ToolCategory.GUIDING,
+    parameters=[]
+),
+```
+
+---
+
+## Day 12: Camera Control & Imaging Pipeline
+
+### Focus: ASI662MC Integration, Capture Automation
+
+**Morning Session: Damian Peach + Craig Stark Lead**
+
+**ZWO ASI662MC Configuration:**
+> *Damian Peach:* "Optimal settings for planetary with MN78:
+> 1. Gain: 250-300 for Mars (balance noise/speed)
+> 2. Exposure: 5-15ms depending on seeing
+> 3. ROI: Crop to 640x480 for faster capture
+> 4. Binning: 1x1 only (already undersampled at f/6)
+> 5. Format: SER files for stacking, 60-90 seconds each"
+
+**Camera Service Implementation:**
+```python
+# services/camera/asi_camera.py
+
+from dataclasses import dataclass
+from enum import Enum
+from typing import Optional
+import zwoasi as asi
+
+class ImageFormat(Enum):
+    RAW8 = "RAW8"
+    RAW16 = "RAW16"
+    SER = "SER"
+    FITS = "FITS"
+
+@dataclass
+class CameraSettings:
+    """Camera configuration for capture."""
+    gain: int = 250
+    exposure_ms: float = 10.0
+    roi: Optional[tuple] = None  # (x, y, width, height)
+    binning: int = 1
+    format: ImageFormat = ImageFormat.SER
+
+@dataclass
+class CaptureSession:
+    """Active capture session metadata."""
+    target: str
+    start_time: datetime
+    frame_count: int
+    settings: CameraSettings
+    output_path: Path
+
+class ASICamera:
+    """
+    ZWO ASI camera control for NIGHTWATCH.
+
+    Supports both planetary (high-speed SER) and deep-sky (long exposure FITS).
+    """
+
+    def __init__(self, camera_index: int = 0):
+        asi.init()
+        self.camera = asi.Camera(camera_index)
+        self._capturing = False
+
+    def initialize(self):
+        """Initialize camera with default settings."""
+        self.camera.set_control_value(asi.ASI_GAIN, 250)
+        self.camera.set_control_value(asi.ASI_EXPOSURE, 10000)  # microseconds
+        self.camera.set_control_value(asi.ASI_BANDWIDTHOVERLOAD, 80)
+
+    async def start_capture(self,
+                           target: str,
+                           duration_sec: float = 60.0,
+                           settings: Optional[CameraSettings] = None) -> CaptureSession:
+        """
+        Start planetary video capture.
+
+        Args:
+            target: Name of target being captured
+            duration_sec: Duration of capture in seconds
+            settings: Camera settings (or use defaults)
+
+        Returns:
+            CaptureSession with metadata
+        """
+
+    async def capture_single(self,
+                            exposure_sec: float,
+                            format: ImageFormat = ImageFormat.FITS) -> Path:
+        """Capture single frame (for deep-sky or testing)."""
+
+    def get_temperature(self) -> float:
+        """Get sensor temperature in Celsius."""
+        return self.camera.get_control_value(asi.ASI_TEMPERATURE)[0] / 10.0
+```
+
+### Afternoon Session: Imaging Queue
+
+**Multi-Target Imaging Queue:**
+```python
+# services/scheduler/imaging_queue.py
+
+@dataclass
+class ImagingTask:
+    """Single imaging task in queue."""
+    target: str
+    priority: int
+    capture_type: str  # "planetary", "lunar", "deep_sky"
+    duration_sec: float
+    filter: Optional[str] = None
+    repeat_count: int = 1
+    conditions: Optional[dict] = None  # min altitude, max seeing, etc.
+
+class ImagingQueue:
+    """
+    Priority queue for automated imaging sessions.
+
+    Features:
+    - Priority-based scheduling
+    - Condition checking (altitude, seeing, moon)
+    - Automatic target switching
+    - Resume after weather hold
+    """
+
+    def __init__(self):
+        self._queue: List[ImagingTask] = []
+        self._current: Optional[ImagingTask] = None
+
+    async def add_task(self, task: ImagingTask):
+        """Add task to queue with priority sorting."""
+
+    async def get_next_task(self) -> Optional[ImagingTask]:
+        """Get highest priority task that meets conditions."""
+
+    async def run(self):
+        """Main queue execution loop."""
+```
+
+---
+
+## Day 13: Advanced Scheduler
+
+### Focus: Multi-Night Planning, Ephemeris-Based Scheduling
+
+**Morning Session: Bob Denny + Damian Peach Lead**
+
+**Scheduler Architecture:**
+> *Bob Denny:* "ACP's scheduler philosophy applies here:
+> 1. Constraint-based: 'Observe X when altitude > 40° and moon < 30%'
+> 2. Priority weights: Scientific value vs. time sensitivity
+> 3. Mosaic support: Multi-panel targets with overlap
+> 4. Transit windows: Automatic for planets
+> 5. Retry logic: Weather interruption recovery"
+
+**Transit Window Calculation:**
+```python
+# services/scheduler/transit_planner.py
+
+@dataclass
+class TransitWindow:
+    """Optimal observation window for a target."""
+    target: str
+    rise_time: datetime
+    transit_time: datetime
+    set_time: datetime
+    max_altitude: float
+    optimal_start: datetime  # 1 hour before transit
+    optimal_end: datetime    # 1 hour after transit
+
+class TransitPlanner:
+    """
+    Calculate optimal observation windows for targets.
+
+    Uses ephemeris service for planet transits and
+    catalog data for fixed objects.
+    """
+
+    def __init__(self, ephemeris_service, location: Location):
+        self.ephemeris = ephemeris_service
+        self.location = location
+
+    def get_planet_transit(self,
+                           planet: str,
+                           date: date) -> Optional[TransitWindow]:
+        """Calculate transit window for planet on given date."""
+
+    def get_optimal_targets(self,
+                            night_start: datetime,
+                            night_end: datetime,
+                            min_altitude: float = 30.0) -> List[TransitWindow]:
+        """
+        Get all observable targets sorted by quality.
+
+        Returns targets with their optimal windows, sorted by
+        combination of altitude, duration, and priority.
+        """
+
+    def plan_night(self,
+                   date: date,
+                   priorities: Dict[str, int]) -> List[ScheduledObservation]:
+        """
+        Plan complete night's observations.
+
+        Optimizes target sequence to minimize slew time
+        while respecting transit windows and priorities.
+        """
+```
+
+### Afternoon Session: Conflict Resolution
+
+**Scheduling Constraints:**
+```python
+@dataclass
+class SchedulingConstraints:
+    """Constraints for observation scheduling."""
+
+    # Time constraints
+    min_altitude: float = 25.0          # degrees
+    max_altitude: float = 85.0          # avoid zenith for GEM
+
+    # Moon constraints
+    max_moon_illumination: float = 0.6  # 60% for faint targets
+    min_moon_distance: float = 30.0     # degrees from target
+
+    # Seeing constraints
+    max_seeing_arcsec: float = 3.0      # skip if seeing bad
+
+    # Mount constraints
+    avoid_meridian_flip: bool = False   # prefer continuous tracking
+    min_time_before_flip: float = 600   # seconds
+
+    # Weather constraints
+    require_clear: bool = True
+    max_wind_mph: float = 20.0
+```
+
+---
+
+## Day 14: Machine Learning Integration
+
+### Focus: Seeing Prediction, Image Quality Assessment
+
+**Morning Session: Michael Clive + Antonio García Lead**
+
+**ML Architecture for NIGHTWATCH:**
+> *Michael Clive:* "DGX Spark can run multiple inference tasks:
+> 1. Seeing prediction: LSTM on weather history
+> 2. Image quality scoring: CNN on capture frames
+> 3. Cloud prediction: Time-series on IR sensor data
+> 4. Anomaly detection: Autoencoder on telemetry
+> 5. All models: ONNX format for portability"
+
+**Seeing Prediction Model:**
+```python
+# services/ml/seeing_predictor.py
+
+import numpy as np
+from datetime import datetime, timedelta
+from typing import List, Tuple
+
+@dataclass
+class SeeingPrediction:
+    """Predicted seeing conditions."""
+    timestamp: datetime
+    predicted_arcsec: float
+    confidence: float
+    factors: dict  # Contributing factors
+
+class SeeingPredictor:
+    """
+    Predict astronomical seeing from weather data.
+
+    Model: LSTM trained on weather → seeing correlations.
+    Inputs: Temperature, humidity, wind, pressure (6-hour history)
+    Output: Predicted seeing in arcseconds (1-hour ahead)
+    """
+
+    def __init__(self, model_path: Path):
+        self.model = onnxruntime.InferenceSession(str(model_path))
+        self._history: List[WeatherReading] = []
+        self._history_hours = 6
+
+    def update(self, weather: WeatherReading):
+        """Add weather reading to history."""
+        self._history.append(weather)
+        # Keep only last 6 hours
+        cutoff = datetime.now() - timedelta(hours=self._history_hours)
+        self._history = [w for w in self._history if w.timestamp > cutoff]
+
+    def predict(self) -> Optional[SeeingPrediction]:
+        """
+        Predict seeing for next hour.
+
+        Requires at least 2 hours of weather history.
+        """
+        if len(self._history) < 12:  # 10-min intervals, 2 hours
+            return None
+
+        # Prepare input features
+        features = self._prepare_features()
+
+        # Run inference
+        result = self.model.run(None, {"input": features})
+        seeing = result[0][0]
+        confidence = result[1][0]
+
+        return SeeingPrediction(
+            timestamp=datetime.now() + timedelta(hours=1),
+            predicted_arcsec=float(seeing),
+            confidence=float(confidence),
+            factors=self._analyze_factors()
+        )
+```
+
+**Image Quality Scorer:**
+```python
+# services/ml/image_scorer.py
+
+@dataclass
+class ImageQuality:
+    """Image quality assessment."""
+    sharpness: float      # 0-100
+    contrast: float       # 0-100
+    noise_level: float    # 0-100 (lower is better)
+    overall_score: float  # 0-100
+    usable: bool          # Above threshold?
+    recommendation: str   # "keep", "discard", "review"
+
+class ImageQualityScorer:
+    """
+    Assess planetary image quality for automated processing.
+
+    Model: CNN trained on human-labeled planetary images.
+    Output: Quality scores for stacking decisions.
+    """
+
+    def __init__(self, model_path: Path):
+        self.model = onnxruntime.InferenceSession(str(model_path))
+        self.threshold = 60.0  # Minimum score to keep
+
+    def score_frame(self, frame: np.ndarray) -> ImageQuality:
+        """Score single video frame."""
+
+    async def score_ser_file(self,
+                             ser_path: Path,
+                             sample_rate: float = 0.1) -> List[ImageQuality]:
+        """
+        Score SER file by sampling frames.
+
+        Args:
+            ser_path: Path to SER video file
+            sample_rate: Fraction of frames to sample (0.1 = 10%)
+
+        Returns:
+            Quality scores for sampled frames
+        """
+
+    def recommend_frames(self,
+                         scores: List[ImageQuality],
+                         keep_percentage: float = 0.3) -> List[int]:
+        """Get indices of best frames for stacking."""
+```
+
+### Afternoon Session: Training Data
+
+**Data Collection Strategy:**
+```
+Training Data Requirements:
+
+Seeing Prediction:
+- Weather readings: 6 months minimum
+- Seeing measurements: DIMM or image analysis
+- 10-minute intervals
+- Correlation with actual image quality
+
+Image Quality:
+- 10,000+ labeled planetary frames
+- Distribution across seeing conditions
+- Mars, Jupiter, Saturn representation
+- Human scoring or derived from stacking results
+```
+
+---
+
+## Day 15: Dashboard & Mobile Interface
+
+### Focus: Real-Time Monitoring, Remote Control
+
+**Morning Session: Michael Hansen + SRO Team Lead**
+
+**Dashboard Architecture:**
+```
+┌────────────────────────────────────────────────────────────────┐
+│                    NIGHTWATCH Dashboard v2.0                     │
+├────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│  ┌──────────────────┐  ┌──────────────────┐  ┌───────────────┐ │
+│  │   All-Sky Cam    │  │   Last Capture   │  │   Guiding     │ │
+│  │   [Live Feed]    │  │   [Mars 2.3"]    │  │   RMS: 0.42"  │ │
+│  │                  │  │                  │  │   [Graph]     │ │
+│  └──────────────────┘  └──────────────────┘  └───────────────┘ │
+│                                                                  │
+│  ┌─────────────────────────────────────────────────────────────┐│
+│  │ Mount Status                                                 ││
+│  │ Target: Mars  RA: 04h 32m 15s  DEC: +23° 45' 12"           ││
+│  │ Tracking: SIDEREAL  Pier: EAST  Alt: 58.3°  Az: 145.2°     ││
+│  └─────────────────────────────────────────────────────────────┘│
+│                                                                  │
+│  ┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌───────────┐ │
+│  │ Temp: 42°F  │ │ Humid: 35%  │ │ Wind: 8 mph │ │ Sky: CLR  │ │
+│  │ Dew: 28°F   │ │ Press: 1013 │ │ Gust: 12mph │ │ Moon: 23% │ │
+│  └─────────────┘ └─────────────┘ └─────────────┘ └───────────┘ │
+│                                                                  │
+│  ┌─────────────────────────────────────────────────────────────┐│
+│  │ [PARK] [UNPARK] [STOP] [HOME] | Voice: [🎤 Push to Talk]   ││
+│  └─────────────────────────────────────────────────────────────┘│
+│                                                                  │
+└────────────────────────────────────────────────────────────────┘
+```
+
+**Backend WebSocket API:**
+```python
+# services/dashboard/websocket_server.py
+
+from fastapi import FastAPI, WebSocket
+from typing import Dict, Any
+import asyncio
+import json
+
+app = FastAPI()
+
+class DashboardServer:
+    """
+    WebSocket server for real-time dashboard updates.
+
+    Streams:
+    - Mount position (1 Hz)
+    - Weather data (0.1 Hz)
+    - Guiding stats (2 Hz)
+    - Safety status (0.2 Hz)
+    - All-sky camera (0.1 Hz JPEG)
+    """
+
+    def __init__(self):
+        self.clients: List[WebSocket] = []
+        self._streams = {}
+
+    async def broadcast(self, message_type: str, data: Any):
+        """Send update to all connected clients."""
+        message = json.dumps({
+            "type": message_type,
+            "timestamp": datetime.now().isoformat(),
+            "data": data
+        })
+        for client in self.clients:
+            await client.send_text(message)
+
+    async def run_streams(self):
+        """Run all data streams."""
+        await asyncio.gather(
+            self._stream_mount_position(),
+            self._stream_weather(),
+            self._stream_guiding(),
+            self._stream_safety(),
+            self._stream_allsky(),
+        )
+```
+
+### Afternoon Session: Mobile App Design
+
+**Mobile App Features:**
+```
+NIGHTWATCH Mobile v2.0
+
+Screens:
+1. Dashboard
+   - Status at a glance
+   - Quick controls (park/unpark)
+   - Voice button
+
+2. Sky View
+   - Current pointing
+   - Visible objects overlay
+   - Tap to GOTO
+
+3. Weather
+   - Current conditions
+   - 24-hour graphs
+   - Forecast integration
+
+4. Gallery
+   - Recent captures
+   - Quick share
+   - Processing status
+
+5. Alerts
+   - Push notifications
+   - Alert history
+   - Settings
+
+Tech Stack:
+- Flutter for cross-platform
+- WebSocket for real-time
+- Native voice for iOS/Android
+```
+
+---
+
+## Day 16: Alert & Notification System
+
+### Focus: Multi-Channel Alerts, Escalation
+
+**Morning Session: SRO Team + Bob Denny Lead**
+
+**Alert Hierarchy:**
+```python
+# services/alerts/alert_manager.py
+
+class AlertLevel(Enum):
+    DEBUG = 0      # Detailed logging only
+    INFO = 1       # Normal operations (email digest)
+    WARNING = 2    # Attention needed (push notification)
+    CRITICAL = 3   # Immediate action (SMS + push + email)
+    EMERGENCY = 4  # System protection activated (all channels + call)
+
+@dataclass
+class Alert:
+    """System alert."""
+    level: AlertLevel
+    source: str           # Subsystem that raised alert
+    message: str
+    timestamp: datetime
+    data: Optional[dict]  # Additional context
+    acknowledged: bool = False
+
+class AlertManager:
+    """
+    Multi-channel alert system for NIGHTWATCH.
+
+    Channels:
+    - Push notifications (Firebase)
+    - SMS (Twilio)
+    - Email (SMTP)
+    - Voice call (Twilio)
+    - Slack/Discord webhooks
+    """
+
+    def __init__(self, config: AlertConfig):
+        self.config = config
+        self._channels = self._init_channels()
+        self._history: List[Alert] = []
+
+    async def raise_alert(self, alert: Alert):
+        """
+        Raise alert through appropriate channels.
+
+        Channel selection based on alert level:
+        - DEBUG: Log only
+        - INFO: Email digest
+        - WARNING: Push notification
+        - CRITICAL: SMS + Push + Email
+        - EMERGENCY: All + Voice call
+        """
+
+    async def acknowledge(self, alert_id: str, user: str):
+        """Acknowledge an alert (stops escalation)."""
+
+    def get_unacknowledged(self) -> List[Alert]:
+        """Get all unacknowledged alerts."""
+```
+
+**Alert Templates:**
+```python
+ALERT_TEMPLATES = {
+    "weather_unsafe": {
+        "level": AlertLevel.WARNING,
+        "message": "Weather conditions unsafe: {reason}. Telescope parking.",
+        "channels": ["push", "email"]
+    },
+    "rain_detected": {
+        "level": AlertLevel.EMERGENCY,
+        "message": "RAIN DETECTED! Emergency close initiated.",
+        "channels": ["push", "sms", "email", "call"]
+    },
+    "guiding_failed": {
+        "level": AlertLevel.WARNING,
+        "message": "Autoguiding lost star. RMS was {rms}\".",
+        "channels": ["push"]
+    },
+    "capture_complete": {
+        "level": AlertLevel.INFO,
+        "message": "Capture of {target} complete. {frames} frames captured.",
+        "channels": ["email"]
+    },
+    "sensor_offline": {
+        "level": AlertLevel.CRITICAL,
+        "message": "Sensor {sensor} offline for {duration}. Safety degraded.",
+        "channels": ["push", "sms", "email"]
+    },
+    "seeing_excellent": {
+        "level": AlertLevel.INFO,
+        "message": "Excellent seeing predicted: {seeing}\". Consider priority targets.",
+        "channels": ["push"]
+    }
+}
+```
+
+### Afternoon Session: Escalation Logic
+
+**Escalation Timeline:**
+```
+EMERGENCY Alert Escalation:
+
+T+0:     Push notification sent
+T+0:     SMS sent
+T+0:     Email sent
+T+30s:   Voice call initiated (if not acknowledged)
+T+60s:   Secondary contact called
+T+5m:    Repeat cycle if still unacknowledged
+T+30m:   System enters safe mode, logs incident
+```
+
+---
+
+## Day 17: Data Management & Cloud Integration
+
+### Focus: Storage, Backup, Synchronization
+
+**Morning Session: SRO Team + Michael Clive Lead**
+
+**Storage Architecture:**
+```
+Local Storage (2TB NVMe):
+├── captures/
+│   ├── 2026-01-15/
+│   │   ├── mars_2145_ser/
+│   │   ├── jupiter_2230_ser/
+│   │   └── saturn_0130_ser/
+│   └── ...
+├── processed/
+│   ├── mars_stack_001.tif
+│   └── ...
+├── calibration/
+│   ├── darks/
+│   ├── flats/
+│   └── bias/
+└── logs/
+    ├── safety/
+    ├── guiding/
+    └── system/
+
+Cloud Backup (Backblaze B2):
+- Automatic sync of processed images
+- 30-day retention of raw SER files
+- Unlimited retention of stacked results
+- Encrypted with user key
+```
+
+**Sync Service:**
+```python
+# services/storage/cloud_sync.py
+
+from pathlib import Path
+from b2sdk.v2 import InMemoryAccountInfo, B2Api
+from dataclasses import dataclass
+from typing import Optional, List
+import asyncio
+
+@dataclass
+class SyncPolicy:
+    """Cloud synchronization policy."""
+    raw_retention_days: int = 30
+    processed_retention_days: int = -1  # Forever
+    sync_interval_hours: float = 1.0
+    bandwidth_limit_mbps: Optional[float] = None
+    encrypt: bool = True
+
+class CloudSyncService:
+    """
+    Background cloud synchronization for NIGHTWATCH data.
+
+    Features:
+    - Automatic upload of processed images
+    - Retention policy enforcement
+    - Bandwidth limiting
+    - Client-side encryption
+    - Resume on network failure
+    """
+
+    def __init__(self,
+                 bucket_name: str,
+                 local_root: Path,
+                 policy: SyncPolicy):
+        self.bucket_name = bucket_name
+        self.local_root = local_root
+        self.policy = policy
+
+    async def sync_processed(self):
+        """Sync processed images to cloud."""
+
+    async def apply_retention(self):
+        """Delete files older than retention policy."""
+
+    async def download_file(self, cloud_path: str, local_path: Path):
+        """Download file from cloud (for multi-device access)."""
+
+    def get_sync_status(self) -> SyncStatus:
+        """Get current sync status and pending uploads."""
+```
+
+### Afternoon Session: Data Pipeline
+
+**Automated Processing Pipeline:**
+```python
+# services/processing/auto_pipeline.py
+
+class AutoProcessingPipeline:
+    """
+    Automated image processing pipeline.
+
+    Workflow:
+    1. Capture completes → trigger processing
+    2. Score frames → identify best for stacking
+    3. Stack frames → AutoStakkert integration
+    4. Sharpen → RegiStax wavelets
+    5. Upload → Cloud sync
+    6. Notify → Alert user of result
+    """
+
+    async def process_capture(self, ser_path: Path) -> ProcessingResult:
+        """Process captured SER file end-to-end."""
+
+        # Score frames
+        scores = await self.scorer.score_ser_file(ser_path)
+
+        # Select best frames
+        best_indices = self.scorer.recommend_frames(scores)
+
+        # Stack (call AutoStakkert CLI)
+        stacked = await self._run_autostakkert(ser_path, best_indices)
+
+        # Sharpen (call RegiStax CLI or internal wavelet)
+        sharpened = await self._apply_wavelets(stacked)
+
+        # Save result
+        output_path = await self._save_result(sharpened)
+
+        # Queue for cloud sync
+        await self.sync_service.queue_upload(output_path)
+
+        # Notify
+        await self.alert_manager.raise_alert(Alert(
+            level=AlertLevel.INFO,
+            source="processing",
+            message=f"Processing complete: {output_path.name}",
+            data={"path": str(output_path), "score": scores[0].overall_score}
+        ))
+
+        return ProcessingResult(output_path=output_path, quality=scores)
+```
+
+---
+
+## Day 18: Citizen Science Integration
+
+### Focus: AAVSO, Planetary Patrol, Data Sharing
+
+**Morning Session: Full Panel Discussion**
+
+**Citizen Science Opportunities:**
+> *Panel Discussion:* "NIGHTWATCH can contribute to several programs:
+>
+> 1. **AAVSO** (American Association of Variable Star Observers)
+>    - Variable star monitoring
+>    - Exoplanet transit timing
+>    - Automated data submission
+>
+> 2. **ALPO** (Association of Lunar & Planetary Observers)
+>    - Planetary storm monitoring
+>    - Mars dust storm detection
+>    - Jupiter impact flashes
+>
+> 3. **Pro-Am Collaborations**
+>    - Asteroid occultation timing
+>    - Comet monitoring
+>    - Supernova early detection
+>
+> 4. **Mars Watch**
+>    - Continuous Mars monitoring network
+>    - Global dust storm early warning
+>    - Polar cap observations"
+
+**AAVSO Integration:**
+```python
+# services/citizen_science/aavso_reporter.py
+
+@dataclass
+class AAVSOObservation:
+    """AAVSO observation report format."""
+    star_name: str
+    date_jd: float
+    magnitude: float
+    mag_error: float
+    filter: str  # V, B, R, I, etc.
+    comparison_star: str
+    check_star: str
+    airmass: float
+    notes: str
+
+class AAVSOReporter:
+    """
+    Automated AAVSO observation reporter.
+
+    Submits photometry data to AAVSO WebObs.
+    """
+
+    def __init__(self, observer_code: str, api_key: str):
+        self.observer_code = observer_code
+        self.api_key = api_key
+        self.base_url = "https://www.aavso.org/apps/webobs/api/"
+
+    async def submit_observation(self, obs: AAVSOObservation) -> bool:
+        """Submit single observation to AAVSO."""
+
+    async def submit_batch(self, observations: List[AAVSOObservation]) -> int:
+        """Submit batch of observations. Returns count submitted."""
+
+    async def get_target_list(self, program: str) -> List[str]:
+        """Get current priority targets for a program."""
+```
+
+### Afternoon Session: Alert Networks
+
+**Transient Alert Integration:**
+```python
+# services/citizen_science/transient_alerts.py
+
+class TransientAlertListener:
+    """
+    Listen for transient alerts from professional networks.
+
+    Sources:
+    - TNS (Transient Name Server)
+    - GCN (Gamma-ray Coordinates Network)
+    - ASAS-SN alerts
+    - ZTF public alerts
+    """
+
+    async def listen_for_alerts(self):
+        """Listen for new transient discoveries."""
+
+    async def evaluate_target(self, alert: TransientAlert) -> bool:
+        """
+        Evaluate if target is observable and interesting.
+
+        Criteria:
+        - Above horizon
+        - Bright enough for MN78
+        - Not too close to moon
+        - Time-critical observation
+        """
+
+    async def trigger_observation(self, alert: TransientAlert):
+        """Interrupt current schedule for transient observation."""
+```
+
+---
+
+## Day 19: Diagnostics & Predictive Maintenance
+
+### Focus: System Health, Failure Prediction
+
+**Morning Session: Richard Hedrick + Howard Dutton Lead**
+
+**Diagnostic Telemetry:**
+```python
+# services/diagnostics/telemetry_collector.py
+
+@dataclass
+class SystemTelemetry:
+    """Complete system health snapshot."""
+    timestamp: datetime
+
+    # Mount telemetry
+    motor_currents: Dict[str, float]      # mA per axis
+    motor_temperatures: Dict[str, float]  # °C per driver
+    encoder_counts: Dict[str, int]        # Raw counts
+    tracking_error_rms: float             # arcsec
+
+    # Camera telemetry
+    sensor_temperature: float             # °C
+    cooler_power: float                   # Percentage
+
+    # Environmental
+    enclosure_temperature: float          # °C
+    humidity_internal: float              # Percentage
+    power_voltage: float                  # V
+    power_current: float                  # A
+
+    # Compute
+    cpu_temperature: float                # °C
+    gpu_temperature: float                # °C (DGX Spark)
+    memory_usage: float                   # Percentage
+    disk_usage: float                     # Percentage
+
+class TelemetryCollector:
+    """
+    Continuous telemetry collection for diagnostics.
+
+    Stores:
+    - 1-second resolution for last hour
+    - 1-minute resolution for last day
+    - 1-hour resolution for last year
+    """
+
+    async def collect(self) -> SystemTelemetry:
+        """Collect current telemetry snapshot."""
+
+    async def store(self, telemetry: SystemTelemetry):
+        """Store telemetry with appropriate resolution."""
+
+    def get_trends(self,
+                   metric: str,
+                   hours: float = 24) -> List[Tuple[datetime, float]]:
+        """Get historical trend for a metric."""
+```
+
+**Predictive Maintenance:**
+```python
+# services/diagnostics/predictive_maintenance.py
+
+@dataclass
+class MaintenanceAlert:
+    """Predicted maintenance need."""
+    component: str
+    issue: str
+    confidence: float
+    predicted_failure: Optional[datetime]
+    recommended_action: str
+    priority: str  # "low", "medium", "high"
+
+class PredictiveMaintenanceMonitor:
+    """
+    Predict maintenance needs from telemetry patterns.
+
+    Monitors:
+    - Motor current trends (bearing wear)
+    - Tracking error trends (mechanical degradation)
+    - Temperature anomalies (cooling issues)
+    - Encoder noise (sensor degradation)
+    """
+
+    def __init__(self, telemetry: TelemetryCollector):
+        self.telemetry = telemetry
+        self.models = self._load_models()
+
+    async def analyze(self) -> List[MaintenanceAlert]:
+        """Analyze current telemetry for maintenance predictions."""
+
+        alerts = []
+
+        # Check motor current trends
+        for axis in ["RA", "DEC"]:
+            trend = self.telemetry.get_trends(f"motor_current_{axis}", hours=168)
+            if self._detect_increasing_trend(trend):
+                alerts.append(MaintenanceAlert(
+                    component=f"{axis} motor/drive",
+                    issue="Increasing current draw detected",
+                    confidence=0.75,
+                    predicted_failure=None,
+                    recommended_action="Inspect bearings and lubrication",
+                    priority="medium"
+                ))
+
+        # Check tracking error trends
+        tracking_trend = self.telemetry.get_trends("tracking_error_rms", hours=168)
+        if self._detect_degradation(tracking_trend):
+            alerts.append(MaintenanceAlert(
+                component="Tracking system",
+                issue="Tracking accuracy degrading",
+                confidence=0.8,
+                predicted_failure=None,
+                recommended_action="Check encoder alignment and worm mesh",
+                priority="high"
+            ))
+
+        return alerts
+```
+
+### Afternoon Session: Health Dashboard
+
+**System Health Panel:**
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    System Health - v2.0                      │
+├─────────────────────────────────────────────────────────────┤
+│                                                              │
+│  Component         Status    Last Check    Trend            │
+│  ─────────────────────────────────────────────────────────  │
+│  RA Motor          ✓ OK      2 min ago     ═══════ stable   │
+│  DEC Motor         ✓ OK      2 min ago     ═══════ stable   │
+│  RA Encoder        ✓ OK      2 min ago     ═══════ stable   │
+│  DEC Encoder       ✓ OK      2 min ago     ═══════ stable   │
+│  Camera            ✓ OK      5 min ago     ═══════ stable   │
+│  Guide Camera      ✓ OK      5 min ago     ═══════ stable   │
+│  Weather Station   ✓ OK      1 min ago     ═══════ stable   │
+│  Cloud Sensor      ⚠ WARN    3 min ago     ═══╱╲══ noisy    │
+│  GPS               ✓ OK      10 min ago    ═══════ stable   │
+│  Power System      ✓ OK      1 min ago     ═══════ stable   │
+│                                                              │
+│  Maintenance Alerts:                                         │
+│  ─────────────────────────────────────────────────────────  │
+│  ⚠ Cloud sensor showing intermittent readings                │
+│    Recommended: Check cable connections and sensor dome      │
+│    Priority: Medium | Predicted impact: Degraded safety      │
+│                                                              │
+└─────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## Day 20: v2.0 Integration & Release Planning
+
+### Morning Session: Full Panel Final Review
+
+**v2.0 Feature Summary:**
+
+| Feature | Lead Specialist | Status | Priority |
+|---------|-----------------|--------|----------|
+| PHD2 Guiding | Craig Stark | Design Complete | P0 |
+| Camera Control | Damian Peach | Design Complete | P0 |
+| Imaging Queue | Bob Denny | Design Complete | P1 |
+| Advanced Scheduler | Bob Denny | Design Complete | P1 |
+| Seeing Prediction ML | Michael Clive | Design Complete | P2 |
+| Image Quality ML | Michael Clive | Design Complete | P1 |
+| Dashboard v2 | Michael Hansen | Design Complete | P0 |
+| Mobile App | Michael Hansen | Design Complete | P2 |
+| Alert System | SRO Team | Design Complete | P0 |
+| Cloud Sync | SRO Team | Design Complete | P1 |
+| AAVSO Integration | Panel | Design Complete | P2 |
+| Predictive Maintenance | Richard Hedrick | Design Complete | P2 |
+
+**Architecture Overview (v2.0):**
+```
+┌────────────────────────────────────────────────────────────────────┐
+│                      NIGHTWATCH v2.0 Architecture                   │
+├────────────────────────────────────────────────────────────────────┤
+│                                                                     │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌───────────┐ │
+│  │   Voice     │  │  Dashboard  │  │   Mobile    │  │   API     │ │
+│  │  Interface  │  │   Web UI    │  │     App     │  │  Clients  │ │
+│  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘  └─────┬─────┘ │
+│         │                │                │                │       │
+│         └────────────────┴────────────────┴────────────────┘       │
+│                                  │                                  │
+│                    ┌─────────────▼─────────────┐                   │
+│                    │    NIGHTWATCH Core API    │                   │
+│                    │   (FastAPI + WebSocket)   │                   │
+│                    └─────────────┬─────────────┘                   │
+│                                  │                                  │
+│    ┌─────────────────────────────┼─────────────────────────────┐   │
+│    │                             │                             │   │
+│    ▼                             ▼                             ▼   │
+│  ┌───────────┐  ┌───────────┐  ┌───────────┐  ┌───────────────┐  │
+│  │   Mount   │  │  Camera   │  │  Guiding  │  │   Scheduler   │  │
+│  │  Service  │  │  Service  │  │  (PHD2)   │  │    Service    │  │
+│  └─────┬─────┘  └─────┬─────┘  └─────┬─────┘  └───────┬───────┘  │
+│        │              │              │                │          │
+│  ┌─────▼─────┐  ┌─────▼─────┐  ┌─────▼─────┐  ┌───────▼───────┐  │
+│  │  OnStepX  │  │ ASI662MC  │  │  ASI120MM │  │   Ephemeris   │  │
+│  │  Teensy   │  │  Camera   │  │   Guide   │  │    Service    │  │
+│  └───────────┘  └───────────┘  └───────────┘  └───────────────┘  │
+│                                                                     │
+│    ┌─────────────────────────────────────────────────────────┐     │
+│    │                    Support Services                      │     │
+│    ├──────────┬──────────┬──────────┬──────────┬────────────┤     │
+│    │  Safety  │ Weather  │  Alerts  │ Storage  │    ML      │     │
+│    │ Monitor  │ Service  │ Manager  │  & Sync  │ Inference  │     │
+│    └──────────┴──────────┴──────────┴──────────┴────────────┘     │
+│                                                                     │
+└────────────────────────────────────────────────────────────────────┘
+```
+
+### Afternoon Session: Implementation Roadmap
+
+**v2.0 Implementation Phases:**
+
+```
+Phase 1: Core Imaging (Weeks 1-4)
+├── Camera service implementation
+├── PHD2 client integration
+├── Basic imaging workflow
+└── Guiding voice commands
+
+Phase 2: Automation (Weeks 5-8)
+├── Advanced scheduler
+├── Imaging queue
+├── Transit planner
+└── Auto-processing pipeline
+
+Phase 3: Intelligence (Weeks 9-12)
+├── Seeing prediction model
+├── Image quality scorer
+├── Predictive maintenance
+└── Model training/validation
+
+Phase 4: Interface (Weeks 13-16)
+├── Dashboard v2.0
+├── Mobile app MVP
+├── Alert system
+└── Cloud sync
+
+Phase 5: Integration (Weeks 17-20)
+├── AAVSO integration
+├── Transient alerts
+├── Full system testing
+└── Documentation
+```
+
+**v2.0 Code Structure:**
+```
+nightwatch/
+├── services/
+│   ├── camera/
+│   │   ├── __init__.py
+│   │   ├── asi_camera.py          # NEW: Camera control
+│   │   └── capture_session.py     # NEW: Capture management
+│   ├── guiding/
+│   │   ├── __init__.py
+│   │   ├── phd2_client.py         # NEW: PHD2 integration
+│   │   └── guide_calibration.py   # NEW: Calibration storage
+│   ├── scheduler/
+│   │   ├── __init__.py
+│   │   ├── imaging_queue.py       # NEW: Multi-target queue
+│   │   └── transit_planner.py     # NEW: Transit windows
+│   ├── ml/
+│   │   ├── __init__.py
+│   │   ├── seeing_predictor.py    # NEW: Seeing prediction
+│   │   └── image_scorer.py        # NEW: Quality assessment
+│   ├── processing/
+│   │   ├── __init__.py
+│   │   └── auto_pipeline.py       # NEW: Auto processing
+│   ├── alerts/
+│   │   ├── __init__.py
+│   │   └── alert_manager.py       # NEW: Multi-channel alerts
+│   ├── storage/
+│   │   ├── __init__.py
+│   │   └── cloud_sync.py          # NEW: Cloud backup
+│   ├── citizen_science/
+│   │   ├── __init__.py
+│   │   ├── aavso_reporter.py      # NEW: AAVSO submission
+│   │   └── transient_alerts.py    # NEW: Alert listener
+│   └── diagnostics/
+│       ├── __init__.py
+│       ├── telemetry_collector.py # NEW: Telemetry
+│       └── predictive_maintenance.py # NEW: Predictions
+├── dashboard/
+│   ├── backend/
+│   │   └── websocket_server.py    # NEW: Real-time API
+│   └── frontend/
+│       └── ...                    # NEW: React dashboard
+└── mobile/
+    └── ...                        # NEW: Flutter app
+```
+
+---
+
+## v2.0 Panel Recommendations Summary
+
+### Critical v2.0 Additions:
+
+1. **Guiding (Craig Stark):** PHD2 integration enables long-exposure imaging and improved tracking verification
+2. **Camera (Damian Peach):** Full camera control allows automated capture sessions
+3. **Scheduler (Bob Denny):** Multi-target queuing and transit planning optimize observing time
+4. **ML (Michael Clive):** Seeing prediction and image quality scoring enable intelligent automation
+5. **Alerts (SRO Team):** Multi-channel notifications keep operator informed
+6. **Storage (SRO Team):** Cloud backup protects valuable data
+7. **Dashboard (Hansen):** Real-time monitoring enables effective remote operation
+8. **Diagnostics (Hedrick):** Predictive maintenance prevents failures
+
+### v2.0 Release Criteria:
+
+| Requirement | Metric | Target |
+|-------------|--------|--------|
+| Guiding RMS | Arcsec | <0.5" |
+| Capture success | Percentage | >95% |
+| Processing latency | Minutes | <5 min |
+| Alert delivery | Seconds | <30 sec |
+| Dashboard latency | Milliseconds | <500 ms |
+| Uptime | Weekly | >98% |
+| Storage availability | Percentage | >99.9% |
+
+---
+
+## Retreat Conclusion (v2.0)
+
+The Panel of Specialists has completed a comprehensive 20-day design retreat for NIGHTWATCH v2.0. The extended retreat added critical imaging, automation, and intelligence capabilities while maintaining the robust foundation established in v1.0.
+
+**Unanimous Panel Assessment:** NIGHTWATCH v2.0 represents a significant advancement toward a fully autonomous, scientifically productive observatory capable of contributing to professional-amateur collaborations.
+
+**Key v2.0 Achievements:**
+- Complete imaging pipeline from capture to processed result
+- Intelligent scheduling with transit optimization
+- Machine learning for seeing prediction and quality assessment
+- Multi-channel alert system for remote operation
+- Cloud integration for data preservation and sharing
+- Citizen science integration for scientific contribution
+- Predictive maintenance for system reliability
 
 **Next Steps:**
-1. Implement all P0 action items
-2. Create comprehensive PR with updated code
-3. Begin Phase 1 (Mount Mechanical) construction
-4. Schedule weekly check-ins with relevant specialists
+1. Implement v2.0 Phase 1 (Core Imaging)
+2. Deploy PHD2 guiding integration
+3. Add camera control and capture automation
+4. Create comprehensive PR for v2.0
 
 ---
 
 *Panel of Specialists Retreat - January 2026*
-*Document Version: 1.0*
+*Document Version: 2.0*
+*Days 1-10: Foundation & v1.0*
+*Days 11-20: Advanced Features & v2.0*
