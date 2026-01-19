@@ -53,6 +53,27 @@ Voice-controlled telescope observatory designed for central Nevada dark sky inst
 └────────────────────────────────────────────────────────────────────┘
 ```
 
+## Design Methodology: Panel of Specialists
+
+NIGHTWATCH uses an innovative **Panel of Specialists (POS)** framework — a simulated 30-day design retreat where 12 domain experts collaboratively refine every aspect of the system.
+
+| Specialist | Domain | Contribution |
+|------------|--------|--------------|
+| Howard Dutton | OnStepX Firmware | Mount control, encoder integration |
+| Damian Peach | Astrophotography | Imaging workflow optimization |
+| Yuri Petrunin | Russian Optics | MN78 thermal management |
+| Michael Clive | NVIDIA AI | DGX Spark voice pipeline |
+| C.W. Musser | Harmonic Drives | Precision mount mechanics |
+| Alec Radford | Speech Recognition | Whisper STT integration |
+| Michael Hansen | Voice Synthesis | Piper TTS deployment |
+| Antonio García | Weather Sensing | Safety interlocks |
+| Richard Hedrick | Precision Mounts | Frame design, FEA |
+| Craig Stark | Autoguiding | PHD2 integration |
+| Bob Denny | Integration | ASCOM/ACP standards |
+| SRO Team | Remote Ops | Power/network resilience |
+
+This multi-perspective deliberation process produces robust designs with documented reasoning. See [pos/README.md](pos/README.md) for the full methodology.
+
 ## Repository Structure
 
 ```
@@ -100,8 +121,9 @@ pip install -r services/requirements.txt
 | Document | Description |
 |----------|-------------|
 | [**NIGHTWATCH_Build_Package.md**](NIGHTWATCH_Build_Package.md) | Complete build specification — optics, mount, electronics, budget |
+| [**Panel of Specialists**](pos/README.md) | Design methodology and expert panel overview |
+| [POS Retreat Simulation](pos/POS_RETREAT_SIMULATION.md) | Full 30-day design deliberation transcript |
 | [Sourcing Research](docs/research/SOURCING_RESEARCH.md) | Component sourcing and vendor research |
-| [POS Retreat Simulation](pos/POS_RETREAT_SIMULATION.md) | Design decision simulation with expert personalities |
 
 ## Roadmap
 
