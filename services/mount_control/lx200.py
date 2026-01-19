@@ -8,6 +8,8 @@ with the OnStepX telescope controller running on Teensy 4.1.
 Reference: LX200 Command Set (Meade Telescope Serial Command Protocol)
 """
 
+import asyncio
+import logging
 import socket
 import serial
 import threading
@@ -15,7 +17,12 @@ import time
 import re
 from dataclasses import dataclass
 from enum import Enum
-from typing import Optional, Tuple
+from typing import Optional, Tuple, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from services.encoder.encoder_bridge import EncoderBridge
+
+logger = logging.getLogger(__name__)
 
 
 class ConnectionType(Enum):
@@ -58,6 +65,8 @@ class LX200Client:
     LX200 Protocol client for OnStepX mount control.
 
     Supports both serial (USB) and TCP/IP connections to the controller.
+    Optionally integrates with EncoderBridge for high-resolution position
+    feedback and periodic error correction.
     """
 
     TERMINATOR = "#"
@@ -69,13 +78,18 @@ class LX200Client:
         host: str = "192.168.1.100",
         port: int = 9999,
         serial_port: str = "/dev/ttyUSB0",
-        baudrate: int = 9600
+        baudrate: int = 9600,
+        encoder_bridge: Optional["EncoderBridge"] = None,
     ):
         self.connection_type = connection_type
         self.host = host
         self.port = port
         self.serial_port = serial_port
         self.baudrate = baudrate
+
+        # Optional encoder feedback for position correction
+        self.encoder = encoder_bridge
+        self._encoder_offset = (0.0, 0.0)  # Calibration offsets (RA, Dec) in degrees
 
         self._connection = None
         self._lock = threading.Lock()
@@ -215,6 +229,143 @@ class LX200Client:
             is_parked=self.is_parked(),
             pier_side=self.get_pier_side()
         )
+
+    async def get_corrected_position(self) -> Optional[MountStatus]:
+        """
+        Get position with encoder correction applied.
+
+        Uses the EncoderBridge to provide high-resolution absolute position
+        feedback, correcting for harmonic drive periodic error and backlash.
+        If no encoder is configured, returns the standard mount position.
+
+        Returns:
+            MountStatus with encoder-corrected coordinates, or None if read failed
+        """
+        mount_pos = self.get_status()
+        if not mount_pos or not self.encoder:
+            return mount_pos
+
+        encoder_pos = await self.encoder.get_position()
+        if not encoder_pos:
+            logger.warning("Encoder read failed, returning uncorrected position")
+            return mount_pos
+
+        # Get mount position in degrees for comparison
+        mount_ra_deg = self._mount_ra_to_degrees(mount_pos)
+        mount_dec_deg = self._mount_dec_to_degrees(mount_pos)
+
+        # Calculate pointing error for logging/analysis
+        # Encoder axis1 = RA (hour angle), axis2 = Dec
+        error_ra = encoder_pos.axis1_degrees - mount_ra_deg
+        error_dec = encoder_pos.axis2_degrees - mount_dec_deg
+
+        # Normalize errors to ±180 degrees
+        while error_ra > 180:
+            error_ra -= 360
+        while error_ra < -180:
+            error_ra += 360
+        while error_dec > 180:
+            error_dec -= 360
+        while error_dec < -180:
+            error_dec += 360
+
+        # Log periodic error for analysis
+        logger.debug(f"Mount pointing error: RA={error_ra:.4f}° Dec={error_dec:.4f}°")
+        logger.debug(f"Error in arcsec: RA={error_ra * 3600:.2f}\" Dec={error_dec * 3600:.2f}\"")
+
+        # Apply encoder offset calibration
+        corrected_ra_deg = encoder_pos.axis1_degrees + self._encoder_offset[0]
+        corrected_dec_deg = encoder_pos.axis2_degrees + self._encoder_offset[1]
+
+        # Convert encoder degrees back to RA/Dec components
+        ra_h, ra_m, ra_s = self._degrees_to_ra_components(corrected_ra_deg)
+        dec_d, dec_m, dec_s = self._degrees_to_dec_components(corrected_dec_deg)
+
+        # Return corrected position with original tracking/slewing/parked state
+        return MountStatus(
+            ra_hours=ra_h,
+            ra_minutes=ra_m,
+            ra_seconds=ra_s,
+            dec_degrees=dec_d,
+            dec_minutes=dec_m,
+            dec_seconds=dec_s,
+            is_tracking=mount_pos.is_tracking,
+            is_slewing=mount_pos.is_slewing,
+            is_parked=mount_pos.is_parked,
+            pier_side=mount_pos.pier_side,
+            altitude=mount_pos.altitude,
+            azimuth=mount_pos.azimuth,
+        )
+
+    async def get_pointing_error(self) -> Optional[Tuple[float, float]]:
+        """
+        Get the current pointing error between mount and encoder positions.
+
+        Returns:
+            Tuple of (ra_error_arcsec, dec_error_arcsec), or None if unavailable
+        """
+        if not self.encoder:
+            return None
+
+        mount_pos = self.get_status()
+        if not mount_pos:
+            return None
+
+        mount_ra_deg = self._mount_ra_to_degrees(mount_pos)
+        mount_dec_deg = self._mount_dec_to_degrees(mount_pos)
+
+        error = await self.encoder.get_position_error(mount_ra_deg, mount_dec_deg)
+        if not error:
+            return None
+
+        # Convert to arcseconds
+        return (error[0] * 3600, error[1] * 3600)
+
+    def calibrate_encoder_offset(self, ra_offset_deg: float, dec_offset_deg: float):
+        """
+        Set encoder calibration offsets.
+
+        Use after a plate solve to align encoder readings with true sky position.
+
+        Args:
+            ra_offset_deg: RA offset in degrees (added to encoder reading)
+            dec_offset_deg: Dec offset in degrees (added to encoder reading)
+        """
+        self._encoder_offset = (ra_offset_deg, dec_offset_deg)
+        logger.info(f"Encoder offset calibrated: RA={ra_offset_deg:.4f}° Dec={dec_offset_deg:.4f}°")
+
+    def _mount_ra_to_degrees(self, status: MountStatus) -> float:
+        """Convert MountStatus RA to degrees."""
+        ra_hours = status.ra_hours + status.ra_minutes / 60 + status.ra_seconds / 3600
+        return ra_hours * 15.0  # 1 hour = 15 degrees
+
+    def _mount_dec_to_degrees(self, status: MountStatus) -> float:
+        """Convert MountStatus Dec to degrees."""
+        sign = -1 if status.dec_degrees < 0 else 1
+        return sign * (abs(status.dec_degrees) + status.dec_minutes / 60 + status.dec_seconds / 3600)
+
+    def _degrees_to_ra_components(self, degrees: float) -> Tuple[float, float, float]:
+        """Convert degrees to RA components (hours, minutes, seconds)."""
+        # Normalize to 0-360 degrees
+        while degrees < 0:
+            degrees += 360
+        while degrees >= 360:
+            degrees -= 360
+
+        hours = degrees / 15.0  # Convert degrees to hours
+        h = int(hours)
+        m = int((hours - h) * 60)
+        s = ((hours - h) * 60 - m) * 60
+        return (float(h), float(m), s)
+
+    def _degrees_to_dec_components(self, degrees: float) -> Tuple[float, float, float]:
+        """Convert degrees to Dec components (degrees, minutes, seconds)."""
+        sign = -1 if degrees < 0 else 1
+        degrees = abs(degrees)
+        d = int(degrees)
+        m = int((degrees - d) * 60)
+        s = ((degrees - d) * 60 - m) * 60
+        return (float(sign * d), float(m), s)
 
     # =========================================================================
     # MOTION CONTROL
