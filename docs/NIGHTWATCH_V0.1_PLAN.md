@@ -631,10 +631,10 @@ Create installation scripts, hardware integration guides, and prepare for Nevada
 | 543 | Hardware-in-Loop Simulation | test_fixtures | Create mock_power.py fixture | 542 | 3 | 2 | Complete | Power mock |
 | 544 | Hardware-in-Loop Simulation | test_fixtures | Create mock_llm.py fixture | 543 | 3 | 2 | Complete | LLM mock |
 | 545 | Hardware-in-Loop Simulation | test_fixtures | Create mock_stt.py fixture | 544 | 3 | 2 | Complete | STT mock |
-| 546 | Hardware-in-Loop Simulation | test_fixtures | Create mock_tts.py fixture | 545 | 3 | 2 | Not Started | TTS mock |
-| 547 | Hardware-in-Loop Simulation | test_fixtures | Create conftest.py with shared fixtures | 546 | 3 | 2 | Not Started | pytest fixtures |
-| 548 | Hardware-in-Loop Simulation | test_fixtures | Write fixture documentation | 547 | 2 | 1 | Not Started | Usage guide |
-| 549 | Testing & Quality Assurance | unit_tests | Create tests/unit/test_config.py | 21 | 2 | 1 | Not Started | Config tests |
+| 546 | Hardware-in-Loop Simulation | test_fixtures | Create mock_tts.py fixture | 545 | 3 | 2 | Complete | TTS mock |
+| 547 | Hardware-in-Loop Simulation | test_fixtures | Create conftest.py with shared fixtures | 546 | 3 | 2 | Complete | pytest fixtures |
+| 548 | Hardware-in-Loop Simulation | test_fixtures | Write fixture documentation | 547 | 2 | 1 | Complete | Usage guide |
+| 549 | Testing & Quality Assurance | unit_tests | Create tests/unit/test_config.py | 21 | 2 | 1 | Complete | Config tests |
 | 550 | Testing & Quality Assurance | unit_tests | Create tests/unit/test_orchestrator.py | 255 | 3 | 2 | Not Started | Orchestrator tests |
 | 551 | Testing & Quality Assurance | unit_tests | Create tests/unit/test_tool_executor.py | 268 | 3 | 2 | Not Started | Tool exec tests |
 | 552 | Testing & Quality Assurance | unit_tests | Create tests/unit/test_response_formatter.py | 276 | 2 | 1 | Not Started | Formatter tests |

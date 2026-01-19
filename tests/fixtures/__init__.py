@@ -15,6 +15,7 @@ Available fixtures:
 - MockPower: Simulates UPS/PDU power monitoring
 - MockLLM: Simulates local LLM inference
 - MockSTT: Simulates speech-to-text (Whisper)
+- MockTTS: Simulates text-to-speech (Piper)
 
 Usage:
     from tests.fixtures import MockMount, MockWeather
@@ -35,6 +36,7 @@ from tests.fixtures.mock_enclosure import MockEnclosure, MockEnclosureState
 from tests.fixtures.mock_power import MockPower, PowerState
 from tests.fixtures.mock_llm import MockLLM, MockLLMState, LLMResponse, ToolCall
 from tests.fixtures.mock_stt import MockSTT, MockSTTState, TranscriptionResult
+from tests.fixtures.mock_tts import MockTTS, MockTTSState, SynthesisResult
 
 __all__ = [
     "MockMount",
@@ -58,4 +60,7 @@ __all__ = [
     "MockSTT",
     "MockSTTState",
     "TranscriptionResult",
+    "MockTTS",
+    "MockTTSState",
+    "SynthesisResult",
 ]
