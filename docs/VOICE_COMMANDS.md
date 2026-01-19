@@ -17,6 +17,8 @@ This document provides a comprehensive reference for voice commands supported by
 | **Power** | "Battery status" / "Emergency shutdown" |
 | **Encoder** | "What's the encoder position?" / "Check pointing error" |
 | **PEC** | "Start PEC playback" / "Record PEC" |
+| **INDI** | "List INDI devices" / "Set INDI filter to Ha" |
+| **Alpaca** | "Discover Alpaca devices" / "Alpaca focuser status" |
 
 ---
 
@@ -391,6 +393,73 @@ This document provides a comprehensive reference for voice commands supported by
 
 ---
 
+## INDI Device Control Commands (Phase 5.1)
+
+INDI provides Linux-native device control for cameras, filter wheels, focusers, and other astronomy equipment connected via INDI server (port 7624).
+
+### Device Discovery
+
+| Voice Command | Action |
+|--------------|--------|
+| "List INDI devices" | Show all connected INDI devices |
+| "What INDI devices are connected?" | Show device list |
+
+### Filter Wheel (INDI)
+
+| Voice Command | Action |
+|--------------|--------|
+| "INDI filter position" | Get current filter |
+| "Set INDI filter to [name/position]" | Change filter |
+| "Change INDI filter to Ha" | Set to hydrogen-alpha filter |
+| "INDI filter to position 3" | Set by position number (1-7) |
+
+**Filter names:** L, R, G, B, Ha, OIII, SII
+
+### Focuser (INDI)
+
+| Voice Command | Action |
+|--------------|--------|
+| "INDI focuser status" | Get position, temp, movement state |
+| "Move INDI focuser to [position]" | Absolute move |
+| "Move INDI focuser in [N] steps" | Relative move inward |
+| "Move INDI focuser out [N] steps" | Relative move outward |
+
+---
+
+## Alpaca Device Control Commands (Phase 5.1)
+
+ASCOM Alpaca provides network-based device control via REST API (port 11111), enabling cross-platform control of Windows ASCOM devices from Linux.
+
+### Device Discovery
+
+| Voice Command | Action |
+|--------------|--------|
+| "Discover Alpaca devices" | UDP broadcast discovery |
+| "Find Alpaca devices" | Search local network |
+| "What Alpaca devices are available?" | List discovered devices |
+
+### Filter Wheel (Alpaca)
+
+| Voice Command | Action |
+|--------------|--------|
+| "Alpaca filter position" | Get current filter |
+| "Set Alpaca filter to [name/position]" | Change filter |
+| "Alpaca filter to OIII" | Set to OIII filter |
+| "Alpaca filter position 2" | Set by position (0-6) |
+
+**Note:** Alpaca filter positions are 0-indexed (0=first filter), while INDI uses 1-indexed (1=first filter).
+
+### Focuser (Alpaca)
+
+| Voice Command | Action |
+|--------------|--------|
+| "Alpaca focuser status" | Get position, temp, temp compensation |
+| "Move Alpaca focuser to [position]" | Absolute move |
+| "Alpaca focuser in [N] steps" | Relative move inward |
+| "Alpaca focuser out [N] steps" | Relative move outward |
+
+---
+
 ## Command Confirmation
 
 For critical operations with low voice recognition confidence, NIGHTWATCH will ask for confirmation:
@@ -415,6 +484,7 @@ For critical operations with low voice recognition confidence, NIGHTWATCH will a
 
 ## Version History
 
+- **v3.3** - Added INDI and Alpaca cross-platform device control commands
 - **v3.1** - Added encoder, PEC, and voice style commands
 - **v3.0** - Added enclosure, power, focus, and astrometry commands
 - **v2.0** - Added guiding and camera commands
