@@ -550,13 +550,13 @@ Create installation scripts, hardware integration guides, and prepare for Nevada
 | 462 | Safety System Hardening | safety_monitor | Add temperature hysteresis | 461 | 2 | 1 | Complete | Dew point margin check implemented |
 | 463 | Safety System Hardening | safety_monitor | Implement cloud threshold calibration for altitude | 462 | 3 | 2 | Complete | SafetyThresholds with POS calibration |
 | 464 | Safety System Hardening | safety_monitor | Add immediate rain response (no delay) | 463 | 2 | 1 | Complete | Rain = EMERGENCY, no hysteresis |
-| 465 | Safety System Hardening | safety_monitor | Implement 30-minute rain holdoff | 464 | 2 | 1 | Not Started | Rain holdoff is in roof_controller |
+| 465 | Safety System Hardening | safety_monitor | Implement 30-minute rain holdoff | 464 | 2 | 1 | Complete | _evaluate_rain_holdoff(), configurable holdoff_minutes |
 | 466 | Safety System Hardening | safety_monitor | Add sun altitude safety check | 465 | 2 | 1 | Complete | _evaluate_daylight with hysteresis |
-| 467 | Safety System Hardening | safety_monitor | Implement horizon altitude limit check | 466 | 2 | 1 | Not Started | Below horizon |
+| 467 | Safety System Hardening | safety_monitor | Implement horizon altitude limit check | 466 | 2 | 1 | Complete | _evaluate_altitude_limit(), min_altitude_deg, buffer |
 | 468 | Safety System Hardening | safety_monitor | Add meridian safety zone | 467 | 3 | 2 | Not Started | Prevent collision |
-| 469 | Safety System Hardening | safety_monitor | Implement power level safety check | 468 | 2 | 1 | Not Started | UPS threshold |
-| 470 | Safety System Hardening | safety_monitor | Add enclosure safety integration | 469 | 2 | 1 | Not Started | Roof state |
-| 471 | Safety System Hardening | safety_monitor | Write unit tests for safety thresholds | 470 | 2 | 2 | Not Started | Test coverage |
+| 469 | Safety System Hardening | safety_monitor | Implement power level safety check | 468 | 2 | 1 | Complete | _evaluate_power(), warning/critical/emergency levels |
+| 470 | Safety System Hardening | safety_monitor | Add enclosure safety integration | 469 | 2 | 1 | Complete | _evaluate_enclosure(), require_enclosure_open |
+| 471 | Safety System Hardening | safety_monitor | Write unit tests for safety thresholds | 470 | 2 | 2 | Complete | 37 tests in test_safety_monitor.py |
 | 472 | Safety System Hardening | safety_interlock | Create nightwatch/safety_interlock.py module | 457 | 3 | 2 | Not Started | Interlock logic |
 | 473 | Safety System Hardening | safety_interlock | Implement pre-command safety check | 472 | 3 | 2 | Not Started | Block unsafe |
 | 474 | Safety System Hardening | safety_interlock | Add command-specific safety rules | 473 | 3 | 2 | Not Started | Per-command checks |

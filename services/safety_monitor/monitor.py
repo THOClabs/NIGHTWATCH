@@ -70,6 +70,9 @@ class SafetyStatus:
     clouds_ok: bool = True
     daylight_ok: bool = True
     mount_ok: bool = True
+    power_ok: bool = True          # Step 469
+    enclosure_ok: bool = True      # Step 470
+    altitude_ok: bool = True       # Step 467
 
     # Environmental readings
     temperature_f: Optional[float] = None
@@ -77,6 +80,20 @@ class SafetyStatus:
     wind_speed_mph: Optional[float] = None
     cloud_cover_percent: Optional[float] = None
     sun_altitude_deg: Optional[float] = None
+
+    # Step 465: Rain holdoff tracking
+    rain_holdoff_active: bool = False
+    rain_holdoff_remaining_min: Optional[float] = None
+
+    # Step 469: Power status
+    ups_battery_percent: Optional[float] = None
+    ups_on_battery: bool = False
+
+    # Step 470: Enclosure status
+    enclosure_open: Optional[bool] = None
+
+    # Step 467: Target altitude
+    target_altitude_deg: Optional[float] = None
 
 
 @dataclass
@@ -119,6 +136,21 @@ class SafetyThresholds:
     cloud_sensor_timeout: float = 180.0    # seconds - CloudWatcher slower updates
     ephemeris_timeout: float = 600.0       # seconds - ephemeris changes slowly
 
+    # Step 465: Rain holdoff (POS recommendation)
+    rain_holdoff_minutes: float = 30.0    # Minutes to wait after rain stops
+
+    # Step 467: Horizon altitude limit
+    min_altitude_deg: float = 10.0        # Minimum allowed altitude
+    horizon_altitude_buffer: float = 2.0  # Buffer zone for warning
+
+    # Step 469: Power level safety
+    ups_warning_percent: float = 50.0     # UPS battery warning level
+    ups_critical_percent: float = 25.0    # UPS battery critical level (park)
+    ups_emergency_percent: float = 15.0   # UPS battery emergency level (immediate shutdown)
+
+    # Step 470: Enclosure safety
+    require_enclosure_open: bool = True   # Require enclosure open to observe
+
 
 @dataclass
 class SensorInput:
@@ -143,12 +175,16 @@ class SafetyMonitor:
         thresholds: Optional[SafetyThresholds] = None,
         mount_controller=None,
         weather_client=None,
-        cloud_sensor=None
+        cloud_sensor=None,
+        power_monitor=None,      # Step 469
+        enclosure_controller=None  # Step 470
     ):
         self.thresholds = thresholds or SafetyThresholds()
         self.mount = mount_controller
         self.weather = weather_client
         self.cloud_sensor = cloud_sensor
+        self.power_monitor = power_monitor        # Step 469
+        self.enclosure = enclosure_controller     # Step 470
 
         self._state = ObservatoryState.UNKNOWN
         self._last_status: Optional[SafetyStatus] = None
@@ -162,6 +198,21 @@ class SafetyMonitor:
         self._cloud_data: Optional[SensorInput] = None
         self._sun_altitude: Optional[float] = None
         self._sun_altitude_time: Optional[datetime] = None
+
+        # Step 465: Rain holdoff tracking
+        self._last_rain_time: Optional[datetime] = None
+
+        # Step 467: Target altitude tracking
+        self._target_altitude: Optional[float] = None
+
+        # Step 469: Power status cache
+        self._ups_battery_percent: Optional[float] = None
+        self._ups_on_battery: bool = False
+        self._ups_update_time: Optional[datetime] = None
+
+        # Step 470: Enclosure status cache
+        self._enclosure_open: Optional[bool] = None
+        self._enclosure_update_time: Optional[datetime] = None
 
         # POS: Hysteresis state tracking
         # Tracks whether each condition is currently in "triggered" state
@@ -205,6 +256,37 @@ class SafetyMonitor:
         self._sun_altitude = altitude
         self._sun_altitude_time = datetime.now()
 
+    async def update_target_altitude(self, altitude: float):
+        """
+        Update target altitude for horizon limit check (Step 467).
+
+        Args:
+            altitude: Target altitude in degrees
+        """
+        self._target_altitude = altitude
+
+    async def update_power_status(self, battery_percent: float, on_battery: bool = False):
+        """
+        Update UPS power status (Step 469).
+
+        Args:
+            battery_percent: Battery charge level (0-100)
+            on_battery: True if running on battery power
+        """
+        self._ups_battery_percent = battery_percent
+        self._ups_on_battery = on_battery
+        self._ups_update_time = datetime.now()
+
+    async def update_enclosure_status(self, is_open: bool):
+        """
+        Update enclosure status (Step 470).
+
+        Args:
+            is_open: True if enclosure/roof is open
+        """
+        self._enclosure_open = is_open
+        self._enclosure_update_time = datetime.now()
+
     def _is_sensor_stale(self, sensor: Optional[SensorInput], timeout: float) -> bool:
         """
         Check if sensor data is stale (POS recommendation).
@@ -242,10 +324,16 @@ class SafetyMonitor:
             return False, ["Weather data unavailable"]
 
         # Check rain (no hysteresis - immediate response)
+        # Step 465: Track rain time for holdoff
+        is_raining = False
         if hasattr(data, 'is_raining') and data.is_raining:
+            is_raining = True
+            self._last_rain_time = datetime.now()
             return False, ["Rain detected - EMERGENCY"]
 
         if hasattr(data, 'rain_rate_in_hr') and data.rain_rate_in_hr > 0:
+            is_raining = True
+            self._last_rain_time = datetime.now()
             return False, [f"Rain rate: {data.rain_rate_in_hr} in/hr - EMERGENCY"]
 
         # Check wind with hysteresis (POS recommendation)
@@ -373,6 +461,117 @@ class SafetyMonitor:
 
         return True, []
 
+    def _evaluate_rain_holdoff(self) -> tuple[bool, List[str], Optional[float]]:
+        """
+        Check rain holdoff period (Step 465).
+
+        After rain stops, wait for holdoff period before resuming operations.
+        This allows equipment to dry and conditions to stabilize.
+
+        Returns:
+            (is_ok, reasons, remaining_minutes)
+        """
+        if self._last_rain_time is None:
+            return True, [], None
+
+        elapsed = datetime.now() - self._last_rain_time
+        elapsed_minutes = elapsed.total_seconds() / 60.0
+        holdoff_minutes = self.thresholds.rain_holdoff_minutes
+
+        if elapsed_minutes < holdoff_minutes:
+            remaining = holdoff_minutes - elapsed_minutes
+            return False, [f"Rain holdoff: {remaining:.0f} minutes remaining"], remaining
+
+        return True, [], None
+
+    def _evaluate_altitude_limit(self) -> tuple[bool, List[str]]:
+        """
+        Check target altitude against horizon limit (Step 467).
+
+        Prevents slewing to objects below the minimum safe altitude.
+
+        Returns:
+            (is_ok, reasons)
+        """
+        if self._target_altitude is None:
+            # No target set - OK
+            return True, []
+
+        min_alt = self.thresholds.min_altitude_deg
+        buffer = self.thresholds.horizon_altitude_buffer
+
+        if self._target_altitude < min_alt:
+            return False, [f"Target altitude {self._target_altitude:.1f}° below minimum {min_alt}°"]
+
+        if self._target_altitude < (min_alt + buffer):
+            # Warning zone but still OK
+            return True, [f"Target altitude {self._target_altitude:.1f}° near horizon limit"]
+
+        return True, []
+
+    def _evaluate_power(self) -> tuple[bool, List[str], bool]:
+        """
+        Evaluate UPS power status (Step 469).
+
+        Checks battery level and triggers safety actions:
+        - Warning at 50%
+        - Park at 25%
+        - Emergency at 15%
+
+        Returns:
+            (is_ok, reasons, is_emergency)
+        """
+        reasons = []
+        is_emergency = False
+
+        if self._ups_battery_percent is None:
+            # No UPS data - assume OK but log
+            return True, [], False
+
+        battery = self._ups_battery_percent
+        thresholds = self.thresholds
+
+        # Check for emergency level
+        if battery < thresholds.ups_emergency_percent:
+            is_emergency = True
+            return False, [f"UPS battery CRITICAL: {battery:.0f}% - EMERGENCY SHUTDOWN"], is_emergency
+
+        # Check for critical level
+        if battery < thresholds.ups_critical_percent:
+            return False, [f"UPS battery low: {battery:.0f}% - parking telescope"], is_emergency
+
+        # Check for warning level
+        if battery < thresholds.ups_warning_percent:
+            reasons.append(f"UPS battery warning: {battery:.0f}%")
+
+        # Additional warning if on battery power
+        if self._ups_on_battery:
+            reasons.append("Running on battery power")
+
+        return True, reasons, is_emergency
+
+    def _evaluate_enclosure(self) -> tuple[bool, List[str]]:
+        """
+        Evaluate enclosure/roof status (Step 470).
+
+        Ensures roof is open before allowing observations.
+
+        Returns:
+            (is_ok, reasons)
+        """
+        if not self.thresholds.require_enclosure_open:
+            # Enclosure check disabled
+            return True, []
+
+        if self._enclosure_open is None:
+            # No enclosure data - warn but allow
+            return True, ["Enclosure status unknown"]
+
+        if not self._enclosure_open:
+            return False, ["Enclosure closed - cannot observe"]
+
+        return True, []
+
     def evaluate(self) -> SafetyStatus:
         """
         Perform comprehensive safety evaluation.
@@ -387,15 +586,32 @@ class SafetyMonitor:
         clouds_ok, cloud_reasons = self._evaluate_clouds()
         daylight_ok, daylight_reasons = self._evaluate_daylight()
 
+        # Step 465: Rain holdoff
+        rain_holdoff_ok, rain_holdoff_reasons, rain_holdoff_remaining = self._evaluate_rain_holdoff()
+
+        # Step 467: Altitude limit
+        altitude_ok, altitude_reasons = self._evaluate_altitude_limit()
+
+        # Step 469: Power status
+        power_ok, power_reasons, power_emergency = self._evaluate_power()
+
+        # Step 470: Enclosure status
+        enclosure_ok, enclosure_reasons = self._evaluate_enclosure()
+
         reasons.extend(weather_reasons)
         reasons.extend(cloud_reasons)
         reasons.extend(daylight_reasons)
+        reasons.extend(rain_holdoff_reasons)
+        reasons.extend(altitude_reasons)
+        reasons.extend(power_reasons)
+        reasons.extend(enclosure_reasons)
 
         # Determine overall safety and action
-        is_safe = weather_ok and clouds_ok and daylight_ok
+        is_safe = (weather_ok and clouds_ok and daylight_ok and
+                   rain_holdoff_ok and altitude_ok and power_ok and enclosure_ok)
 
-        # Check for emergency conditions (rain)
-        is_emergency = False
+        # Check for emergency conditions (rain or power)
+        is_emergency = power_emergency  # Step 469: Include power emergency
         if self._weather_data and self._weather_data.is_valid:
             data = self._weather_data.value
             if hasattr(data, 'is_raining') and data.is_raining:
@@ -410,7 +626,16 @@ class SafetyMonitor:
         elif not daylight_ok:
             action = SafetyAction.PARK_FOR_DAYLIGHT
             alert_level = AlertLevel.INFO
-        elif not weather_ok or not clouds_ok:
+        elif not weather_ok or not clouds_ok or not rain_holdoff_ok:
+            action = SafetyAction.PARK_AND_WAIT
+            alert_level = AlertLevel.WARNING
+        elif not power_ok:
+            action = SafetyAction.PARK_AND_WAIT
+            alert_level = AlertLevel.CRITICAL
+        elif not altitude_ok:
+            action = SafetyAction.PARK_AND_WAIT
+            alert_level = AlertLevel.WARNING
+        elif not enclosure_ok:
             action = SafetyAction.PARK_AND_WAIT
             alert_level = AlertLevel.WARNING
         else:
@@ -448,11 +673,24 @@ class SafetyMonitor:
             clouds_ok=clouds_ok,
             daylight_ok=daylight_ok,
             mount_ok=True,  # Would check mount status here
+            power_ok=power_ok,
+            enclosure_ok=enclosure_ok,
+            altitude_ok=altitude_ok,
             temperature_f=temp,
             humidity_percent=humidity,
             wind_speed_mph=wind,
             cloud_cover_percent=cloud_cover,
-            sun_altitude_deg=self._sun_altitude
+            sun_altitude_deg=self._sun_altitude,
+            # Step 465: Rain holdoff
+            rain_holdoff_active=not rain_holdoff_ok,
+            rain_holdoff_remaining_min=rain_holdoff_remaining,
+            # Step 469: Power status
+            ups_battery_percent=self._ups_battery_percent,
+            ups_on_battery=self._ups_on_battery,
+            # Step 470: Enclosure status
+            enclosure_open=self._enclosure_open,
+            # Step 467: Target altitude
+            target_altitude_deg=self._target_altitude,
         )
 
         self._last_status = status
