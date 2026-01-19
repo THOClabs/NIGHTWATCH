@@ -915,6 +915,69 @@ TELESCOPE_TOOLS: List[Tool] = [
         category=ToolCategory.FOCUS,
         parameters=[]
     ),
+
+    # -------------------------------------------------------------------------
+    # ALPACA DEVICE TOOLS (Phase 5.1 - Alpaca Integration)
+    # -------------------------------------------------------------------------
+    # ASCOM Alpaca device control for network-based cross-platform device layer
+
+    Tool(
+        name="alpaca_discover_devices",
+        description="Discover all ASCOM Alpaca devices on the local network. "
+                    "Uses UDP broadcast to find Alpaca servers and their devices.",
+        category=ToolCategory.CAMERA,
+        parameters=[]
+    ),
+
+    Tool(
+        name="alpaca_set_filter",
+        description="Change Alpaca filter wheel position. Accepts filter name "
+                    "(L, R, G, B, Ha, OIII, SII) or position number (0-6).",
+        category=ToolCategory.CAMERA,
+        parameters=[
+            ToolParameter(
+                name="filter_name",
+                type="string",
+                description="Filter name (L, R, G, B, Ha, OIII, SII) or position number (0-6)",
+                required=True
+            )
+        ]
+    ),
+
+    Tool(
+        name="alpaca_get_filter",
+        description="Get the current Alpaca filter wheel position and filter name.",
+        category=ToolCategory.CAMERA,
+        parameters=[]
+    ),
+
+    Tool(
+        name="alpaca_move_focuser",
+        description="Move Alpaca focuser to absolute position or by relative steps.",
+        category=ToolCategory.FOCUS,
+        parameters=[
+            ToolParameter(
+                name="position",
+                type="number",
+                description="Target position (absolute) or steps to move (if relative=true)"
+            ),
+            ToolParameter(
+                name="relative",
+                type="boolean",
+                description="If true, move by relative steps instead of absolute position",
+                required=False,
+                default=False
+            )
+        ]
+    ),
+
+    Tool(
+        name="alpaca_get_focuser_status",
+        description="Get Alpaca focuser status including position, temperature, "
+                    "movement state, and temperature compensation status.",
+        category=ToolCategory.FOCUS,
+        parameters=[]
+    ),
 ]
 
 
@@ -1019,6 +1082,9 @@ def create_default_handlers(
     indi_client=None,
     indi_filter_wheel=None,
     indi_focuser=None,
+    alpaca_discovery=None,
+    alpaca_filter_wheel=None,
+    alpaca_focuser=None,
 ) -> Dict[str, Callable]:
     """
     Create default handler functions connected to services.
@@ -1035,6 +1101,9 @@ def create_default_handlers(
         indi_client: NightwatchINDIClient instance for INDI device communication
         indi_filter_wheel: INDIFilterWheel adapter instance
         indi_focuser: INDIFocuser adapter instance
+        alpaca_discovery: AlpacaDiscovery instance for network device discovery
+        alpaca_filter_wheel: AlpacaFilterWheel adapter instance
+        alpaca_focuser: AlpacaFocuser adapter instance
 
     Returns:
         Dictionary of handler functions
@@ -1584,6 +1653,130 @@ def create_default_handlers(
 
     handlers["indi_get_focuser_status"] = indi_get_focuser_status
 
+    # -------------------------------------------------------------------------
+    # ALPACA DEVICE HANDLERS (Phase 5.1)
+    # -------------------------------------------------------------------------
+
+    async def alpaca_discover_devices() -> str:
+        """Discover Alpaca devices on the network."""
+        if not alpaca_discovery:
+            # Try to use AlpacaDiscovery directly
+            try:
+                from services.alpaca.alpaca_client import AlpacaDiscovery
+                devices = AlpacaDiscovery.discover(timeout=2.0)
+            except ImportError:
+                return "Alpaca discovery not available. Ensure alpyca is installed."
+            except Exception as e:
+                return f"Alpaca discovery failed: {e}"
+        else:
+            devices = alpaca_discovery.discover(timeout=2.0)
+
+        if not devices:
+            return "No Alpaca devices found on network. Check that Alpaca servers are running."
+
+        # Group devices by type
+        by_type = {}
+        for dev in devices:
+            dev_type = dev.device_type
+            if dev_type not in by_type:
+                by_type[dev_type] = []
+            by_type[dev_type].append(dev)
+
+        lines = [f"Found {len(devices)} Alpaca device(s):"]
+        for dev_type, devs in sorted(by_type.items()):
+            lines.append(f"\n  {dev_type}:")
+            for dev in devs:
+                lines.append(f"    - {dev.name} at {dev.address}:{dev.port} (#{dev.device_number})")
+
+        return "\n".join(lines)
+
+    handlers["alpaca_discover_devices"] = alpaca_discover_devices
+
+    async def alpaca_set_filter(filter_name: str) -> str:
+        """Set Alpaca filter wheel position by name or number."""
+        if not alpaca_filter_wheel:
+            return "Alpaca filter wheel not available"
+
+        # Check if it's a number (0-indexed for Alpaca)
+        try:
+            position = int(filter_name)
+            success = alpaca_filter_wheel.set_position(position)
+            if success:
+                return f"Moving Alpaca filter wheel to position {position}"
+            return f"Failed to move Alpaca filter wheel to position {position}"
+        except ValueError:
+            pass
+
+        # It's a filter name - try to set by name
+        filter_name_upper = filter_name.upper()
+        success = alpaca_filter_wheel.set_filter_by_name(filter_name_upper)
+        if success:
+            return f"Moving Alpaca filter wheel to {filter_name_upper} filter"
+        available = alpaca_filter_wheel.filter_names
+        return f"Failed to move to filter '{filter_name}'. Available: {', '.join(available) if available else 'unknown'}"
+
+    handlers["alpaca_set_filter"] = alpaca_set_filter
+
+    async def alpaca_get_filter() -> str:
+        """Get current Alpaca filter wheel position."""
+        if not alpaca_filter_wheel:
+            return "Alpaca filter wheel not available"
+
+        position = alpaca_filter_wheel.position
+        if position < 0:
+            return "Could not read Alpaca filter position"
+
+        filter_name = alpaca_filter_wheel.current_filter
+
+        if filter_name and filter_name != "Unknown":
+            return f"Current Alpaca filter: {filter_name} (position {position})"
+        return f"Current Alpaca filter position: {position}"
+
+    handlers["alpaca_get_filter"] = alpaca_get_filter
+
+    async def alpaca_move_focuser(position: int, relative: bool = False) -> str:
+        """Move Alpaca focuser to position."""
+        if not alpaca_focuser:
+            return "Alpaca focuser not available"
+
+        if relative:
+            success = alpaca_focuser.move_relative(position)
+            direction = "out" if position > 0 else "in"
+            if success:
+                return f"Moving Alpaca focuser {abs(position)} steps {direction}"
+            return "Failed to move Alpaca focuser"
+        else:
+            success = alpaca_focuser.move_absolute(position)
+            if success:
+                return f"Moving Alpaca focuser to position {position}"
+            return f"Failed to move Alpaca focuser to position {position}"
+
+    handlers["alpaca_move_focuser"] = alpaca_move_focuser
+
+    async def alpaca_get_focuser_status() -> str:
+        """Get Alpaca focuser status."""
+        if not alpaca_focuser:
+            return "Alpaca focuser not available"
+
+        status = alpaca_focuser.get_status()
+
+        status_parts = []
+        if status.get("position") is not None:
+            status_parts.append(f"Position: {status['position']} / {status.get('max_position', '?')} steps")
+        if status.get("is_moving") is not None:
+            status_parts.append(f"Moving: {'Yes' if status['is_moving'] else 'No'}")
+        if status.get("temperature") is not None:
+            status_parts.append(f"Temperature: {status['temperature']:.1f}°C")
+        if status.get("temp_comp") is not None:
+            status_parts.append(f"Temp compensation: {'Enabled' if status['temp_comp'] else 'Disabled'}")
+
+        if not status_parts:
+            return "Could not read Alpaca focuser status"
+
+        return "Alpaca Focuser status:\n  " + "\n  ".join(status_parts)
+
+    handlers["alpaca_get_focuser_status"] = alpaca_get_focuser_status
+
     return handlers
 
 
@@ -1601,7 +1794,7 @@ Guide Camera: ASI120MM-S with PHD2 autoguiding.
 Focuser: ZWO EAF with temperature compensation.
 Enclosure: Roll-off roof with weather interlocks.
 Power: APC Smart-UPS with NUT monitoring.
-Version: 3.2 (POS Panel certified - Full Automation + INDI Support)
+Version: 3.3 (POS Panel certified - Full Automation + Cross-Platform Device Support)
 
 You help the user observe and image celestial objects by:
 1. Managing the complete observatory (roof, power, safety)
@@ -1693,6 +1886,16 @@ INDI DEVICE CONTROL (v3.2 - Cross-Platform Device Layer):
 - indi_get_focuser_status: Get focuser position, temperature, and movement state
 - INDI provides cross-platform device control via standard Linux drivers
 - Use these tools when controlling devices through INDI server (port 7624)
+
+ALPACA DEVICE CONTROL (v3.3 - Network Device Layer):
+- alpaca_discover_devices: Discover all ASCOM Alpaca devices on local network
+- alpaca_set_filter: Change filter by name (L, R, G, B, Ha, OIII, SII) or position (0-6)
+- alpaca_get_filter: Get current Alpaca filter wheel position and name
+- alpaca_move_focuser: Move Alpaca focuser to position (absolute or relative)
+- alpaca_get_focuser_status: Get focuser position, temperature, and temp compensation status
+- Alpaca provides network-based device control via REST API (port 11111)
+- Use these tools when controlling devices through Alpaca servers (Windows/cross-platform)
+- Alpaca positions are 0-indexed (vs INDI 1-indexed)
 
 Camera settings (Damian Peach recommendations):
 - Mars: gain 280, exposure 8ms
