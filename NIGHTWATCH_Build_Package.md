@@ -114,7 +114,7 @@ The MN76/MN78 is a **rare vintage optic** that appears on the used market infreq
 | Cloudy Nights Classifieds | Active community, good prices |
 | eBay (worldwide) | Use saved searches with alerts |
 | APM Telescopes Germany | May have old stock or leads |
-| Teleskop-Service Germany | European dealer network |
+	| Teleskop-Service Germany | European dealer network |
 | European Markets (general) | Higher availability in EU/UK due to proximity to original production |
 
 **European Considerations:** Factor in shipping (~$150-300 USD) and potential import duties (2.5% for optical instruments) when budgeting European purchases.
@@ -1225,6 +1225,7 @@ NIGHTWATCH/
 │   ├── install.sh                   # Pending
 │   └── calibration/                 # Pending - Encoder/PEC routines
 └── docs/
+    ├── SCIENTIFIC_FOUNDATIONS.md   # CREATED - PhD-level optical/atmospheric theory
     ├── assembly/                    # Pending - Build instructions
     ├── operation/                   # Pending - User manual
     └── research/
@@ -1240,6 +1241,8 @@ NIGHTWATCH/
 | 1.0 | 2026-01-17 | Claude | Initial combined build package |
 | 1.1 | 2026-01-18 | Claude | Component sourcing research completed, Appendix A populated |
 | 1.2 | 2026-01-18 | Claude | Core Python services implemented |
+| 1.3 | 2026-01-19 | Claude | Expanded optics section with detailed MN76 Mak-Newtonian rationale; corrected model designation to MN76 (sometimes called MN78) |
+| 1.4 | 2026-01-19 | Claude | Added SCIENTIFIC_FOUNDATIONS.md with PhD-level optical theory, atmospheric physics, and peer-reviewed references |
 
 ---
 
