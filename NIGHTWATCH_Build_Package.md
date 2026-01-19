@@ -104,6 +104,8 @@ The Intes Micro MN76 (sometimes called MN78) represents an optimal intersection 
 - *Barlow flexibility:* Adding a quality 2× Barlow (e.g., Tele Vue Powermate) yields f/12 at 2136mm, providing additional image scale for smaller targets while maintaining manageable exposure times
 - *Camera sensor compatibility:* Modern high-speed planetary cameras (ZWO ASI462MC, Player One Mars-C II) perform optimally in the f/5–f/8 range where pixel sampling matches typical seeing conditions
 
+> **Scientific Reference:** For rigorous derivations of the optical theory underlying these design choices—including Maksutov aberration correction, MTF analysis with central obstruction, Strehl ratio calculations, Kolmogorov turbulence theory, and lucky imaging probability—see [docs/SCIENTIFIC_FOUNDATIONS.md](docs/SCIENTIFIC_FOUNDATIONS.md). This companion document provides PhD-level treatment with peer-reviewed citations from Born & Wolf, Fried (1978), Mahajan (1983), Schroeder (2000), and other foundational sources.
+
 ### Sourcing Research Tasks
 
 ```
@@ -1201,6 +1203,7 @@ NIGHTWATCH/
 │   ├── install.sh                   # Pending
 │   └── calibration/                 # Pending - Encoder/PEC routines
 └── docs/
+    ├── SCIENTIFIC_FOUNDATIONS.md   # CREATED - PhD-level optical/atmospheric theory
     ├── assembly/                    # Pending - Build instructions
     ├── operation/                   # Pending - User manual
     └── research/
@@ -1217,6 +1220,7 @@ NIGHTWATCH/
 | 1.1 | 2026-01-18 | Claude | Component sourcing research completed, Appendix A populated |
 | 1.2 | 2026-01-18 | Claude | Core Python services implemented |
 | 1.3 | 2026-01-19 | Claude | Expanded optics section with detailed MN76 Mak-Newtonian rationale; corrected model designation to MN76 (sometimes called MN78) |
+| 1.4 | 2026-01-19 | Claude | Added SCIENTIFIC_FOUNDATIONS.md with PhD-level optical theory, atmospheric physics, and peer-reviewed references |
 
 ---
 
