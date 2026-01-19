@@ -1,0 +1,80 @@
+# NIGHTWATCH Development Infrastructure
+#
+# Docker Compose configuration for hardware simulation and testing.
+# Enables full system testing without physical equipment.
+#
+# Usage:
+#   docker-compose -f docker/docker-compose.dev.yml up -d
+#
+# Services:
+#   - alpaca-simulators: ASCOM Alpaca device simulators (telescope, camera, focuser)
+#   - indi-server: INDI device simulators for Linux-native device control
+#
+# See docs/INTEGRATION_PLAN.md Phase 4 for details.
+
+version: '3.8'
+
+services:
+  # ASCOM Alpaca Simulators
+  # Provides network-accessible simulated astronomy devices
+  # API documentation: http://localhost:11111/swagger
+  alpaca-simulators:
+    image: ghcr.io/ascominitiative/alpaca-simulators:latest
+    container_name: nightwatch-alpaca-sim
+    ports:
+      - "11111:11111"
+    environment:
+      - ASPNETCORE_URLS=http://+:11111
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11111/management/apiversions"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+    networks:
+      - nightwatch-dev
+
+  # INDI Server with Simulators
+  # Provides Linux-native device simulation via INDI protocol
+  # Connect with: indi_getprop -h localhost -p 7624
+  indi-server:
+    image: indilib/indi-full:latest
+    container_name: nightwatch-indi-sim
+    ports:
+      - "7624:7624"
+    command: >
+      indiserver
+      -v
+      indi_simulator_telescope
+      indi_simulator_ccd
+      indi_simulator_focus
+      indi_simulator_wheel
+      indi_simulator_dome
+    healthcheck:
+      test: ["CMD-SHELL", "echo ':' | nc -w 1 localhost 7624 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+    networks:
+      - nightwatch-dev
+
+  # PHD2 Guiding Simulator (optional)
+  # Uncomment to enable PHD2 server simulation for guiding tests
+  # phd2-simulator:
+  #   image: nightwatch/phd2-sim:latest
+  #   container_name: nightwatch-phd2-sim
+  #   ports:
+  #     - "4400:4400"
+  #   networks:
+  #     - nightwatch-dev
+
+networks:
+  nightwatch-dev:
+    driver: bridge
+    name: nightwatch-dev
+
+# Persistent volumes for configuration data
+volumes:
+  alpaca-config:
+  indi-config:
