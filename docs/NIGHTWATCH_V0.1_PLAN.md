@@ -519,10 +519,10 @@ Create installation scripts, hardware integration guides, and prepare for Nevada
 | 431 | Tool Handler Implementation | enclosure_tools | Add position percentage | 430 | 2 | 1 | Complete | get_position_percent() in status |
 | 432 | Tool Handler Implementation | enclosure_tools | Implement stop_roof handler | 431 | 2 | 1 | Complete | stop_roof() emergency stop |
 | 433 | Tool Handler Implementation | enclosure_tools | Write unit tests for enclosure tool handlers | 432 | 2 | 2 | Not Started | Test coverage |
-| 434 | Tool Handler Implementation | power_tools | Implement get_power_status handler | 257 | 2 | 1 | Not Started | UPS status |
-| 435 | Tool Handler Implementation | power_tools | Add battery percentage and runtime | 434 | 2 | 1 | Not Started | Power info |
-| 436 | Tool Handler Implementation | power_tools | Implement get_power_events handler | 435 | 2 | 1 | Not Started | Power history |
-| 437 | Tool Handler Implementation | power_tools | Add filtering by event type | 436 | 2 | 1 | Not Started | Query options |
+| 434 | Tool Handler Implementation | power_tools | Implement get_power_status handler | 257 | 2 | 1 | Complete | get_power_status() with UPS data |
+| 435 | Tool Handler Implementation | power_tools | Add battery percentage and runtime | 434 | 2 | 1 | Complete | Battery %, runtime, load in status |
+| 436 | Tool Handler Implementation | power_tools | Implement get_power_events handler | 435 | 2 | 1 | Complete | get_power_events() with history |
+| 437 | Tool Handler Implementation | power_tools | Add filtering by event type | 436 | 2 | 1 | Complete | event_type parameter for filtering |
 | 438 | Tool Handler Implementation | power_tools | Implement emergency_shutdown handler | 437 | 3 | 2 | Not Started | Critical action |
 | 439 | Tool Handler Implementation | power_tools | Add confirmation requirement | 438 | 2 | 1 | Not Started | Safety |
 | 440 | Tool Handler Implementation | power_tools | Write unit tests for power tool handlers | 439 | 2 | 2 | Not Started | Test coverage |
@@ -535,12 +535,12 @@ Create installation scripts, hardware integration guides, and prepare for Nevada
 | 447 | Tool Handler Implementation | alpaca_tools | Implement alpaca_connect_device handler | 446 | 2 | 1 | Not Started | Connect device |
 | 448 | Tool Handler Implementation | alpaca_tools | Implement alpaca_get_status handler | 447 | 2 | 1 | Not Started | Device status |
 | 449 | Tool Handler Implementation | alpaca_tools | Write unit tests for Alpaca tool handlers | 448 | 2 | 2 | Not Started | Test coverage |
-| 450 | Tool Handler Implementation | encoder_tools | Implement get_encoder_position handler | 257 | 2 | 1 | Not Started | Encoder read |
-| 451 | Tool Handler Implementation | encoder_tools | Add formatted position (degrees) | 450 | 2 | 1 | Not Started | Human-readable |
-| 452 | Tool Handler Implementation | encoder_tools | Implement pec_status handler | 451 | 2 | 1 | Not Started | PEC state |
-| 453 | Tool Handler Implementation | encoder_tools | Implement pec_record handler | 452 | 3 | 2 | Not Started | Start recording |
-| 454 | Tool Handler Implementation | encoder_tools | Implement get_driver_status handler | 453 | 2 | 1 | Not Started | TMC status |
-| 455 | Tool Handler Implementation | encoder_tools | Add StallGuard and current info | 454 | 2 | 1 | Not Started | Driver details |
+| 450 | Tool Handler Implementation | encoder_tools | Implement get_encoder_position handler | 257 | 2 | 1 | Complete | get_encoder_position() with counts |
+| 451 | Tool Handler Implementation | encoder_tools | Add formatted position (degrees) | 450 | 2 | 1 | Complete | Degrees and counts in output |
+| 452 | Tool Handler Implementation | encoder_tools | Implement pec_status handler | 451 | 2 | 1 | Complete | pec_status() recording/playback state |
+| 453 | Tool Handler Implementation | encoder_tools | Implement pec_record handler | 452 | 3 | 2 | Complete | pec_record() starts recording |
+| 454 | Tool Handler Implementation | encoder_tools | Implement get_driver_status handler | 453 | 2 | 1 | Complete | get_driver_status() TMC diagnostics |
+| 455 | Tool Handler Implementation | encoder_tools | Add StallGuard and current info | 454 | 2 | 1 | Complete | Stall, overtemp, load in diagnostics |
 | 456 | Tool Handler Implementation | encoder_tools | Write unit tests for encoder tool handlers | 455 | 2 | 2 | Not Started | Test coverage |
 | 457 | Safety System Hardening | safety_monitor | Review safety_monitor.py current implementation | None | 2 | 1 | Complete | Full hysteresis, sensor timeouts, priority actions |
 | 458 | Safety System Hardening | safety_monitor | Add sensor timeout detection (120s) | 457 | 3 | 2 | Complete | _is_sensor_stale with configurable timeouts |

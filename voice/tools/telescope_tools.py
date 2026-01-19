@@ -1956,6 +1956,100 @@ def create_default_handlers(
     handlers["stop_roof"] = stop_roof
 
     # -------------------------------------------------------------------------
+    # POWER HANDLERS (Steps 434-437)
+    # -------------------------------------------------------------------------
+
+    async def get_power_status() -> str:
+        """Get UPS and power status (Steps 434-435)."""
+        # Check if we have a UPS monitor available
+        if not safety_monitor:
+            return "Power monitoring not available"
+
+        parts = []
+
+        # Get power data from safety monitor if available
+        if hasattr(safety_monitor, '_power_data') and safety_monitor._power_data:
+            pd = safety_monitor._power_data
+
+            # Step 435: Battery percentage and runtime
+            if hasattr(pd, 'on_battery'):
+                if pd.on_battery:
+                    parts.append("Power source: BATTERY (mains power lost)")
+                else:
+                    parts.append("Power source: Mains AC")
+
+            if hasattr(pd, 'battery_percent') and pd.battery_percent is not None:
+                parts.append(f"Battery level: {pd.battery_percent:.0f}%")
+
+                # Warning levels
+                if pd.battery_percent < 20:
+                    parts.append("WARNING: Battery critically low")
+                elif pd.battery_percent < 50:
+                    parts.append("Caution: Battery below 50%")
+
+            if hasattr(pd, 'runtime_minutes') and pd.runtime_minutes is not None:
+                hours = int(pd.runtime_minutes // 60)
+                mins = int(pd.runtime_minutes % 60)
+                if hours > 0:
+                    parts.append(f"Estimated runtime: {hours}h {mins}m")
+                else:
+                    parts.append(f"Estimated runtime: {mins} minutes")
+
+            if hasattr(pd, 'load_percent') and pd.load_percent is not None:
+                parts.append(f"UPS load: {pd.load_percent:.0f}%")
+
+            if hasattr(pd, 'input_voltage') and pd.input_voltage is not None:
+                parts.append(f"Input voltage: {pd.input_voltage:.1f}V")
+
+        else:
+            parts.append("No UPS data available - UPS may not be configured")
+
+        if not parts:
+            return "Power status unknown"
+
+        return ". ".join(parts)
+
+    handlers["get_power_status"] = get_power_status
+
+    async def get_power_events(event_type: str = None, limit: int = 10) -> str:
+        """Get recent power events (Steps 436-437)."""
+        if not safety_monitor:
+            return "Power monitoring not available"
+
+        # Check for power event history
+        if not hasattr(safety_monitor, '_power_events') or not safety_monitor._power_events:
+            return "No power events recorded"
+
+        events = safety_monitor._power_events
+
+        # Step 437: Filter by event type if specified
+        if event_type:
+            event_type_lower = event_type.lower()
+            filtered = [e for e in events if event_type_lower in e.get('type', '').lower()]
+            events = filtered
+
+        # Limit results
+        events = events[-limit:] if len(events) > limit else events
+
+        if not events:
+            if event_type:
+                return f"No {event_type} events found"
+            return "No power events recorded"
+
+        parts = [f"Power events (last {len(events)}):"]
+        for event in reversed(events):  # Most recent first
+            timestamp = event.get('timestamp', 'unknown')
+            if hasattr(timestamp, 'strftime'):
+                timestamp = timestamp.strftime('%Y-%m-%d %H:%M:%S')
+            event_type_str = event.get('type', 'unknown')
+            description = event.get('description', '')
+            parts.append(f"  [{timestamp}] {event_type_str}: {description}")
+
+        return "\n".join(parts)
+
+    handlers["get_power_events"] = get_power_events
+
+    # -------------------------------------------------------------------------
     # ENCODER HANDLERS (Phase 5.1)
     # -------------------------------------------------------------------------
 
