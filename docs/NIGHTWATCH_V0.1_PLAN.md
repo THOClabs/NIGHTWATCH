@@ -105,8 +105,8 @@ Create installation scripts, hardware integration guides, and prepare for Nevada
 | 17 | Infrastructure & Configuration | config | Add config file discovery (./nightwatch.yaml, ~/.nightwatch/config.yaml) | 16 | 2 | 1 | Complete | Standard paths |
 | 18 | Infrastructure & Configuration | config | Implement config validation with helpful error messages | 17 | 3 | 2 | Complete | User-friendly errors |
 | 19 | Infrastructure & Configuration | config | Add environment variable override support (NIGHTWATCH_MOUNT_HOST, etc.) | 18 | 2 | 2 | Complete | Flexibility for containers |
-| 20 | Infrastructure & Configuration | config | Create sample nightwatch.yaml with documented options | 19 | 2 | 2 | Not Started | User template |
-| 21 | Infrastructure & Configuration | config | Write unit tests for config loading and validation | 20 | 2 | 2 | Not Started | Test coverage |
+| 20 | Infrastructure & Configuration | config | Create sample nightwatch.yaml with documented options | 19 | 2 | 2 | Complete | User template |
+| 21 | Infrastructure & Configuration | config | Write unit tests for config loading and validation | 20 | 2 | 2 | Complete | Test coverage |
 | 22 | Infrastructure & Configuration | logging | Create nightwatch/logging_config.py module | None | 2 | 1 | Complete | Centralized logging |
 | 23 | Infrastructure & Configuration | logging | Implement structured JSON logging format | 22 | 2 | 2 | Complete | Machine-parseable logs |
 | 24 | Infrastructure & Configuration | logging | Add rotating file handler (10MB, 5 backups) | 23 | 2 | 1 | Complete | Prevent disk fill |
@@ -128,15 +128,15 @@ Create installation scripts, hardware integration guides, and prepare for Nevada
 | 40 | Infrastructure & Configuration | dependencies | Configure pytest in pyproject.toml | 37 | 2 | 1 | Complete | Test configuration |
 | 41 | Infrastructure & Configuration | dependencies | Create .pre-commit-config.yaml | 36 | 2 | 1 | Complete | Pre-commit hooks |
 | 42 | Infrastructure & Configuration | dependencies | Document dependency installation in README | 41 | 2 | 1 | Complete | User guidance |
-| 43 | Infrastructure & Configuration | startup | Create nightwatch/main.py entry point | 21,29 | 3 | 2 | Not Started | Application entry |
-| 44 | Infrastructure & Configuration | startup | Implement argument parser (--config, --log-level, --dry-run) | 43 | 2 | 1 | Not Started | CLI options |
-| 45 | Infrastructure & Configuration | startup | Add signal handlers (SIGINT, SIGTERM) for graceful shutdown | 44 | 3 | 2 | Not Started | Clean shutdown |
+| 43 | Infrastructure & Configuration | startup | Create nightwatch/main.py entry point | 21,29 | 3 | 2 | Complete | Application entry |
+| 44 | Infrastructure & Configuration | startup | Implement argument parser (--config, --log-level, --dry-run) | 43 | 2 | 1 | Complete | CLI options |
+| 45 | Infrastructure & Configuration | startup | Add signal handlers (SIGINT, SIGTERM) for graceful shutdown | 44 | 3 | 2 | Complete | Clean shutdown |
 | 46 | Infrastructure & Configuration | startup | Implement service health check framework | 45 | 3 | 2 | Not Started | Startup validation |
 | 47 | Infrastructure & Configuration | startup | Add mount connection health check | 46 | 2 | 1 | Not Started | Verify mount reachable |
 | 48 | Infrastructure & Configuration | startup | Add weather service health check | 46 | 2 | 1 | Not Started | Verify weather data |
 | 49 | Infrastructure & Configuration | startup | Add voice pipeline health check | 46 | 2 | 1 | Not Started | Verify STT/TTS ready |
 | 50 | Infrastructure & Configuration | startup | Implement startup sequence with dependency ordering | 47,48,49 | 3 | 2 | Not Started | Ordered initialization |
-| 51 | Infrastructure & Configuration | startup | Add startup banner with version and config summary | 50 | 1 | 1 | Not Started | User feedback |
+| 51 | Infrastructure & Configuration | startup | Add startup banner with version and config summary | 50 | 1 | 1 | Complete | User feedback |
 | 52 | Infrastructure & Configuration | startup | Implement graceful degradation (continue without optional services) | 50 | 3 | 2 | Not Started | Robustness |
 | 53 | Infrastructure & Configuration | startup | Create bin/nightwatch shell script launcher | 52 | 2 | 1 | Not Started | Unix launcher |
 | 54 | Infrastructure & Configuration | startup | Create bin/nightwatch.bat Windows launcher | 52 | 2 | 1 | Not Started | Windows support |

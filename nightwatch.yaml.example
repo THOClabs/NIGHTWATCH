@@ -1,0 +1,253 @@
+# =============================================================================
+# NIGHTWATCH Configuration File
+# =============================================================================
+# Copy this file to one of these locations:
+#   - ./nightwatch.yaml (current directory - highest priority)
+#   - ~/.nightwatch/config.yaml (user home directory)
+#   - /etc/nightwatch/config.yaml (system-wide)
+#
+# Environment variables can override any setting using the format:
+#   NIGHTWATCH_<SECTION>_<KEY>=value
+# Example: NIGHTWATCH_MOUNT_HOST=192.168.1.100
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Site Configuration
+# -----------------------------------------------------------------------------
+# Observatory location for ephemeris calculations and timezone handling.
+# Defaults are set for central Nevada dark sky site.
+
+site:
+  # Geographic coordinates (decimal degrees)
+  latitude: 38.9                    # Positive = North, Negative = South
+  longitude: -117.4                 # Positive = East, Negative = West
+  elevation: 1800.0                 # Meters above sea level
+
+  # IANA timezone identifier (see: https://en.wikipedia.org/wiki/List_of_tz_database_time_zones)
+  timezone: "America/Los_Angeles"
+
+  # Human-readable site name (for logging and display)
+  name: "NIGHTWATCH Observatory"
+
+# -----------------------------------------------------------------------------
+# Mount Configuration
+# -----------------------------------------------------------------------------
+# Telescope mount connection settings. Supports OnStepX via TCP or serial.
+
+mount:
+  # Mount controller type: onstepx, lx200, indi, alpaca, simulator
+  type: "onstepx"
+
+  # Network connection (primary)
+  host: "onstep.local"              # Hostname or IP address
+  port: 9999                        # TCP port (OnStepX default: 9999)
+
+  # Serial connection (alternative - uncomment to use)
+  # serial_port: "/dev/ttyUSB0"     # Serial device path
+  # baudrate: 115200                # Baud rate
+
+  # Connection settings
+  timeout: 5.0                      # Connection timeout (seconds)
+  retry_count: 3                    # Number of retry attempts
+
+# -----------------------------------------------------------------------------
+# Weather Configuration
+# -----------------------------------------------------------------------------
+# Weather station for environmental monitoring and safety interlocks.
+
+weather:
+  enabled: true
+  type: "ecowitt"                   # ecowitt, aag, simulator, none
+
+  # Ecowitt WS90 settings
+  host: "ecowitt.local"             # Weather station hostname/IP
+  port: 80                          # HTTP port
+
+  # Polling settings
+  poll_interval: 30.0               # Seconds between weather updates
+  stale_threshold: 120.0            # Seconds before data considered stale
+
+# -----------------------------------------------------------------------------
+# Voice Pipeline Configuration
+# -----------------------------------------------------------------------------
+# Speech-to-text settings using faster-whisper.
+# Optimized for NVIDIA DGX Spark local inference.
+
+voice:
+  enabled: true
+
+  # Whisper model: tiny, base, small, medium, large-v3
+  model: "large-v3"
+
+  # Compute settings
+  device: "auto"                    # cuda, cpu, or auto
+  compute_type: "int8_float16"      # Optimal for DGX Spark
+
+  # Recognition settings
+  language: "en"                    # Primary language code
+  vad_enabled: true                 # Voice activity detection
+
+# -----------------------------------------------------------------------------
+# Text-to-Speech Configuration
+# -----------------------------------------------------------------------------
+# Piper TTS for voice responses.
+
+tts:
+  enabled: true
+  model: "en_US-lessac-medium"      # Piper voice model
+
+  # Performance
+  use_cuda: true                    # GPU acceleration
+  cache_enabled: true               # Cache common phrases
+  cache_dir: "~/.nightwatch/tts_cache"
+
+  # Voice parameters
+  speaking_rate: 1.0                # Speech rate multiplier (0.5-2.0)
+
+# -----------------------------------------------------------------------------
+# LLM Configuration
+# -----------------------------------------------------------------------------
+# Local language model for intent detection and tool selection.
+# Uses llama-cpp-python for local inference.
+
+llm:
+  enabled: true
+  model: "llama-3.2-3b-instruct"    # Model name or path
+
+  # Inference settings
+  max_tokens: 512                   # Maximum response tokens
+  temperature: 0.1                  # Lower = more deterministic
+
+  # Performance
+  gpu_layers: -1                    # GPU layers to offload (-1 = all)
+  context_length: 4096              # Context window size
+
+# -----------------------------------------------------------------------------
+# Safety Configuration
+# -----------------------------------------------------------------------------
+# Safety thresholds per POS Day 4 deliberations.
+# These values trigger warnings, auto-park, and emergency responses.
+
+safety:
+  # Wind thresholds (mph)
+  wind_limit_warning: 20.0          # Warning notification
+  wind_limit_park: 25.0             # Auto-park telescope
+  wind_limit_emergency: 30.0        # Emergency close
+
+  # Humidity thresholds (%)
+  humidity_limit_warning: 75.0
+  humidity_limit_park: 80.0
+  humidity_limit_emergency: 85.0
+
+  # Temperature thresholds (Celsius)
+  temp_min: -20.0                   # Minimum operating temperature
+  temp_max: 40.0                    # Maximum operating temperature
+
+  # Sensor monitoring
+  sensor_timeout: 120.0             # Seconds - treat as unsafe if exceeded
+
+  # Rain response
+  rain_holdoff_minutes: 30.0        # Wait time after rain stops
+
+# -----------------------------------------------------------------------------
+# Camera Configuration
+# -----------------------------------------------------------------------------
+# ZWO ASI camera settings for imaging.
+
+camera:
+  enabled: true
+  type: "zwo"                       # zwo, indi, alpaca, simulator
+
+  # Default capture settings
+  default_gain: 100                 # Camera gain (0-600)
+  default_exposure: 1.0             # Exposure time (seconds)
+  default_binning: 1                # Binning (1, 2, or 4)
+
+  # Cooling
+  cooling_enabled: true
+  target_temperature: -10.0         # Target sensor temp (Celsius)
+
+# -----------------------------------------------------------------------------
+# Autoguiding Configuration
+# -----------------------------------------------------------------------------
+# PHD2 connection for autoguiding.
+
+guider:
+  enabled: true
+  phd2_host: "localhost"            # PHD2 server hostname
+  phd2_port: 4400                   # PHD2 JSON-RPC port
+
+  # Dithering
+  dither_pixels: 5.0                # Dither amount (pixels)
+  settle_time: 10.0                 # Settle time after dither (seconds)
+
+# -----------------------------------------------------------------------------
+# Encoder Configuration
+# -----------------------------------------------------------------------------
+# Absolute position encoders for mount feedback.
+
+encoder:
+  enabled: false                    # Enable encoder feedback
+  port: "/dev/ttyUSB1"              # Serial port
+  baudrate: 115200
+  resolution: 8192                  # Counts per revolution
+
+# -----------------------------------------------------------------------------
+# Alert Configuration
+# -----------------------------------------------------------------------------
+# Notification channels for alerts and warnings.
+
+alerts:
+  # Enable notification channels
+  email_enabled: false
+  sms_enabled: false
+  push_enabled: false               # ntfy.sh compatible
+  webhook_enabled: false
+
+  # Email settings (if enabled)
+  smtp_host: "smtp.gmail.com"
+  smtp_port: 587
+  email_to: ""                      # Recipient address
+
+  # Webhook URL (if enabled)
+  webhook_url: ""
+
+# -----------------------------------------------------------------------------
+# Power Configuration
+# -----------------------------------------------------------------------------
+# UPS monitoring via NUT (Network UPS Tools).
+
+power:
+  enabled: true
+  ups_host: "localhost"             # NUT server hostname
+  ups_port: 3493                    # NUT server port
+  ups_name: "ups"                   # UPS name in NUT
+
+  # Battery thresholds (%)
+  park_threshold: 50.0              # Park telescope at this level
+  shutdown_threshold: 20.0          # Shutdown system at this level
+
+# -----------------------------------------------------------------------------
+# Enclosure Configuration
+# -----------------------------------------------------------------------------
+# Roll-off roof control via GPIO (Raspberry Pi).
+
+enclosure:
+  enabled: false                    # Enable enclosure control
+
+  # GPIO pins (BCM numbering)
+  gpio_open_relay: 17               # Open relay control
+  gpio_close_relay: 18              # Close relay control
+  gpio_open_limit: 22               # Open limit switch input
+  gpio_closed_limit: 23             # Closed limit switch input
+  gpio_rain_sensor: 24              # Rain sensor input
+
+  # Motor protection
+  motor_timeout: 60.0               # Maximum motor run time (seconds)
+
+# -----------------------------------------------------------------------------
+# Logging
+# -----------------------------------------------------------------------------
+# Global logging level override.
+
+log_level: "INFO"                   # DEBUG, INFO, WARNING, ERROR, CRITICAL
