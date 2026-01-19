@@ -221,12 +221,12 @@ Create installation scripts, hardware integration guides, and prepare for Nevada
 | 133 | Core Service Completion | alerts | Implement alert escalation logic | 132 | 3 | 2 | Complete | Severity routing |
 | 134 | Core Service Completion | alerts | Add alert acknowledgment tracking | 133 | 2 | 2 | Complete | Operator response |
 | 135 | Core Service Completion | alerts | Implement alert history database (SQLite) | 134 | 3 | 2 | Not Started | Audit trail |
-| 136 | Core Service Completion | alerts | Add alert deduplication | 135 | 2 | 2 | Not Started | Prevent duplicates |
-| 137 | Core Service Completion | alerts | Implement quiet hours configuration | 136 | 2 | 1 | Not Started | Night mode |
-| 138 | Core Service Completion | alerts | Create mock notifier for testing | 137 | 2 | 1 | Not Started | Simulation mode |
-| 139 | Core Service Completion | alerts | Write unit tests for alert channels | 138 | 2 | 2 | Not Started | Test coverage |
+| 136 | Core Service Completion | alerts | Add alert deduplication | 135 | 2 | 2 | Complete | _is_duplicate method with dedup_window_seconds |
+| 137 | Core Service Completion | alerts | Implement quiet hours configuration | 136 | 2 | 1 | Complete | _is_quiet_hours, quiet_hours_start/end config |
+| 138 | Core Service Completion | alerts | Create mock notifier for testing | 137 | 2 | 1 | Complete | MockNotifier class records all sends |
+| 139 | Core Service Completion | alerts | Write unit tests for alert channels | 138 | 2 | 2 | Complete | 29 tests in test_alerts.py |
 | 140 | Core Service Completion | alerts | Write integration test for escalation | 139 | 2 | 2 | Not Started | End-to-end test |
-| 141 | Core Service Completion | power | Review power_manager.py current implementation | None | 2 | 1 | Not Started | Understand gaps |
+| 141 | Core Service Completion | power | Review power_manager.py current implementation | None | 2 | 1 | Complete | Good structure, NUT placeholder, thresholds configured |
 | 142 | Core Service Completion | power | Implement NUT (Network UPS Tools) client | 141 | 4 | 3 | Not Started | UPS monitoring |
 | 143 | Core Service Completion | power | Add NUT protocol message parsing | 142 | 3 | 2 | Not Started | UPS data extraction |
 | 144 | Core Service Completion | power | Implement battery percentage monitoring | 143 | 2 | 1 | Not Started | Power level |

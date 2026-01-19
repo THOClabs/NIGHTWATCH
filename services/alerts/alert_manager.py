@@ -88,6 +88,15 @@ class AlertConfig:
     # Escalation
     escalation_timeout_sec: float = 300.0  # Time before escalation
 
+    # Quiet hours (suppress non-critical notifications)
+    quiet_hours_enabled: bool = False
+    quiet_hours_start: int = 22  # 10 PM (24-hour format)
+    quiet_hours_end: int = 7     # 7 AM
+    quiet_hours_min_level: AlertLevel = AlertLevel.CRITICAL  # Only this and above during quiet
+
+    # Deduplication
+    dedup_window_seconds: float = 300.0  # 5 minute window for dedup
+
 
 @dataclass
 class Alert:
@@ -218,6 +227,41 @@ class AlertManager:
 
         return False
 
+    def _is_duplicate(self, alert: Alert) -> bool:
+        """
+        Check if alert is a duplicate within the dedup window.
+
+        Uses source + message hash to identify duplicates.
+        """
+        key = f"{alert.source}:{alert.message}"
+        if key in self._recent_alerts:
+            elapsed = (datetime.now() - self._recent_alerts[key]).total_seconds()
+            return elapsed < self.config.dedup_window_seconds
+        return False
+
+    def _is_quiet_hours(self) -> bool:
+        """Check if currently in quiet hours."""
+        if not self.config.quiet_hours_enabled:
+            return False
+
+        current_hour = datetime.now().hour
+        start = self.config.quiet_hours_start
+        end = self.config.quiet_hours_end
+
+        # Handle overnight quiet hours (e.g., 22:00 to 07:00)
+        if start > end:
+            return current_hour >= start or current_hour < end
+        else:
+            return start <= current_hour < end
+
+    def _should_suppress_for_quiet_hours(self, alert: Alert) -> bool:
+        """Check if alert should be suppressed due to quiet hours."""
+        if not self._is_quiet_hours():
+            return False
+
+        # Allow alerts at or above the minimum quiet hours level
+        return alert.level.value < self.config.quiet_hours_min_level.value
+
     async def raise_alert(self, alert: Alert) -> bool:
         """
         Raise an alert through appropriate channels.
@@ -231,6 +275,18 @@ class AlertManager:
         # Rate limiting
         if self._should_rate_limit(alert):
             logger.debug(f"Alert rate limited: {alert.message}")
+            return False
+
+        # Deduplication check
+        if self._is_duplicate(alert):
+            logger.debug(f"Alert deduplicated: {alert.message}")
+            return False
+
+        # Quiet hours check
+        if self._should_suppress_for_quiet_hours(alert):
+            logger.debug(f"Alert suppressed (quiet hours): {alert.message}")
+            # Still log it, just don't send notifications
+            self._history.append(alert)
             return False
 
         # Update tracking
@@ -762,6 +818,93 @@ class AlertManager:
                     callback(alert)
             except Exception as e:
                 logger.error(f"Callback error: {e}")
+
+
+# =============================================================================
+# MOCK NOTIFIER FOR TESTING
+# =============================================================================
+
+class MockNotifier(AlertManager):
+    """
+    Mock alert manager for testing.
+
+    Records all alerts and channel sends without actually sending.
+    Useful for unit tests and simulation mode.
+    """
+
+    def __init__(self, config: Optional[AlertConfig] = None):
+        super().__init__(config)
+        self.sent_alerts: List[Alert] = []
+        self.sent_channels: Dict[str, List[AlertChannel]] = {}
+        self.email_sends: List[dict] = []
+        self.push_sends: List[dict] = []
+        self.sms_sends: List[dict] = []
+        self.webhook_sends: List[dict] = []
+
+    async def _send_email(self, alert: Alert):
+        """Record email send instead of actually sending."""
+        self.email_sends.append({
+            "alert_id": alert.id,
+            "level": alert.level.name,
+            "source": alert.source,
+            "message": alert.message,
+            "recipients": list(self.config.email_recipients),
+        })
+        logger.debug(f"[MOCK] Email recorded: {alert.message[:50]}")
+
+    async def _send_push(self, alert: Alert):
+        """Record push send instead of actually sending."""
+        self.push_sends.append({
+            "alert_id": alert.id,
+            "level": alert.level.name,
+            "source": alert.source,
+            "message": alert.message,
+        })
+        logger.debug(f"[MOCK] Push recorded: {alert.message[:50]}")
+
+    async def _send_sms(self, alert: Alert):
+        """Record SMS send instead of actually sending."""
+        self.sms_sends.append({
+            "alert_id": alert.id,
+            "level": alert.level.name,
+            "source": alert.source,
+            "message": alert.message,
+            "to_numbers": list(self.config.sms_to_numbers),
+        })
+        logger.debug(f"[MOCK] SMS recorded: {alert.message[:50]}")
+
+    async def _send_webhook(self, alert: Alert):
+        """Record webhook send instead of actually sending."""
+        self.webhook_sends.append({
+            "alert_id": alert.id,
+            "level": alert.level.name,
+            "source": alert.source,
+            "message": alert.message,
+            "urls": list(self.config.webhook_urls),
+        })
+        logger.debug(f"[MOCK] Webhook recorded: {alert.message[:50]}")
+
+    async def _send_call(self, alert: Alert):
+        """Record call instead of actually calling."""
+        logger.debug(f"[MOCK] Call recorded: {alert.message[:50]}")
+
+    def clear_records(self):
+        """Clear all recorded sends."""
+        self.sent_alerts.clear()
+        self.sent_channels.clear()
+        self.email_sends.clear()
+        self.push_sends.clear()
+        self.sms_sends.clear()
+        self.webhook_sends.clear()
+
+    def get_sends_for_alert(self, alert_id: str) -> dict:
+        """Get all sends for a specific alert."""
+        return {
+            "emails": [e for e in self.email_sends if e["alert_id"] == alert_id],
+            "pushes": [p for p in self.push_sends if p["alert_id"] == alert_id],
+            "sms": [s for s in self.sms_sends if s["alert_id"] == alert_id],
+            "webhooks": [w for w in self.webhook_sends if w["alert_id"] == alert_id],
+        }
 
 
 # =============================================================================
