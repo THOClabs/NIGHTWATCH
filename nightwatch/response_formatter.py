@@ -37,6 +37,7 @@ __all__ = [
     "format_temperature",
     "format_wind",
     "format_time",
+    "format_duration",
 ]
 
 
@@ -533,3 +534,115 @@ class ResponseFormatter:
         if context:
             return f"Sorry, I couldn't {context}. {error}"
         return f"An error occurred: {error}"
+
+    # =========================================================================
+    # Voice Style Adaptation (Step 275)
+    # =========================================================================
+
+    def adapt_for_style(self, text: str, style: str = "normal") -> str:
+        """
+        Adapt response text for different voice styles (Step 275).
+
+        Styles:
+        - normal: Standard conversational responses
+        - alert: Faster, more urgent responses with emphasis
+        - calm: Slower, relaxed responses for visual observation
+        - technical: Detailed responses with precise values
+
+        Args:
+            text: The response text to adapt
+            style: Voice style (normal, alert, calm, technical)
+
+        Returns:
+            Adapted response text
+        """
+        style = style.lower()
+
+        if style == "alert":
+            return self._adapt_alert_style(text)
+        elif style == "calm":
+            return self._adapt_calm_style(text)
+        elif style == "technical":
+            return self._adapt_technical_style(text)
+        else:  # normal
+            return text
+
+    def _adapt_alert_style(self, text: str) -> str:
+        """
+        Adapt text for alert/urgent style.
+
+        - Shorter sentences
+        - Remove pleasantries
+        - Add urgency markers
+        """
+        # Remove conversational phrases
+        text = text.replace("Please ", "")
+        text = text.replace("please ", "")
+        text = text.replace("Let me ", "")
+        text = text.replace("I'm now ", "")
+
+        # Shorten common phrases
+        text = text.replace("The telescope is ", "Telescope ")
+        text = text.replace("conditions are ", "conditions: ")
+        text = text.replace("currently ", "")
+
+        return text
+
+    def _adapt_calm_style(self, text: str) -> str:
+        """
+        Adapt text for calm/relaxed style.
+
+        - Softer language
+        - More complete sentences
+        - Conversational tone
+        """
+        # Add softer phrasing for status messages
+        if text.startswith("Telescope "):
+            text = "The " + text.lower()
+
+        # Soften negative messages
+        text = text.replace("Cannot ", "I'm unable to ")
+        text = text.replace("Failed to ", "I wasn't able to ")
+        text = text.replace("Error:", "There seems to be an issue:")
+
+        # Add gentle transitions
+        if "unsafe" in text.lower():
+            text = text.replace("unsafe", "not quite safe")
+
+        return text
+
+    def _adapt_technical_style(self, text: str) -> str:
+        """
+        Adapt text for technical/diagnostic style.
+
+        - Include more precision
+        - Use technical terminology
+        - Add status details
+        """
+        # Expand abbreviations
+        text = text.replace(" RA ", " Right Ascension ")
+        text = text.replace(" Dec ", " Declination ")
+        text = text.replace(" alt ", " altitude ")
+        text = text.replace(" az ", " azimuth ")
+
+        # Keep numerical precision (don't round)
+        # Technical style preserves decimal places
+
+        return text
+
+    def format_with_style(self, result, style: str = "normal") -> str:
+        """
+        Format a tool result with voice style adaptation.
+
+        Args:
+            result: ToolResult from tool_executor
+            style: Voice style (normal, alert, calm, technical)
+
+        Returns:
+            Styled natural language response
+        """
+        # First format normally
+        text = self.format(result)
+
+        # Then adapt for style
+        return self.adapt_for_style(text, style)

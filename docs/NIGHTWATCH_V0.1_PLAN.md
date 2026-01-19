@@ -360,7 +360,7 @@ Create installation scripts, hardware integration guides, and prepare for Nevada
 | 272 | Orchestrator Development | response_formatter | Implement coordinate formatting (RA/Dec, Alt/Az) | 271 | 2 | 1 | Complete | format_ra(), format_dec(), format_alt_az() |
 | 273 | Orchestrator Development | response_formatter | Add weather formatting (temperature, wind) | 272 | 2 | 1 | Complete | format_temperature(), format_wind() |
 | 274 | Orchestrator Development | response_formatter | Implement error message formatting | 273 | 2 | 1 | Complete | format_error() method |
-| 275 | Orchestrator Development | response_formatter | Add voice style adaptation (normal, alert, calm) | 274 | 3 | 2 | Not Started | Per POS Day 5 |
+| 275 | Orchestrator Development | response_formatter | Add voice style adaptation (normal, alert, calm) | 274 | 3 | 2 | Complete | adapt_for_style(), format_with_style() |
 | 276 | Orchestrator Development | response_formatter | Write unit tests for response formatter | 275 | 2 | 2 | Complete | 31 tests in test_response_formatter.py |
 | 277 | Voice Pipeline Integration | llm | Create nightwatch/llm_client.py module | 21 | 3 | 2 | Complete | LLM integration |
 | 278 | Voice Pipeline Integration | llm | Implement local Llama 3.2 client using llama-cpp-python | 277 | 4 | 3 | Complete | Local inference |
@@ -421,15 +421,15 @@ Create installation scripts, hardware integration guides, and prepare for Nevada
 | 333 | Tool Handler Implementation | mount_tools | Add safety check before slew | 332 | 2 | 1 | Complete | safety_monitor.evaluate() in goto_object/goto_coordinates |
 | 334 | Tool Handler Implementation | mount_tools | Add altitude limit check | 333 | 2 | 1 | Complete | 10° minimum altitude check in goto handlers |
 | 335 | Tool Handler Implementation | mount_tools | Implement goto_coordinates handler | 334 | 2 | 1 | Complete | goto_coordinates() with safety and altitude checks |
-| 336 | Tool Handler Implementation | mount_tools | Add coordinate validation (0-24h, -90 to +90) | 335 | 2 | 1 | Not Started | Input check |
-| 337 | Tool Handler Implementation | mount_tools | Implement park_telescope handler | 336 | 2 | 1 | Not Started | Park command |
+| 336 | Tool Handler Implementation | mount_tools | Add coordinate validation (0-24h, -90 to +90) | 335 | 2 | 1 | Complete | Range and format validation in goto_coordinates |
+| 337 | Tool Handler Implementation | mount_tools | Implement park_telescope handler | 336 | 2 | 1 | Complete | park_telescope() with status check |
 | 338 | Tool Handler Implementation | mount_tools | Add confirmation requirement for park | 337 | 2 | 1 | Not Started | Safety |
-| 339 | Tool Handler Implementation | mount_tools | Implement unpark_telescope handler | 338 | 2 | 1 | Not Started | Unpark command |
-| 340 | Tool Handler Implementation | mount_tools | Add safety check before unpark | 339 | 2 | 1 | Not Started | Weather check |
-| 341 | Tool Handler Implementation | mount_tools | Implement stop_telescope handler | 340 | 2 | 1 | Not Started | Emergency stop |
-| 342 | Tool Handler Implementation | mount_tools | Add immediate execution for stop (bypass queue) | 341 | 2 | 1 | Not Started | Priority command |
-| 343 | Tool Handler Implementation | mount_tools | Implement start_tracking handler | 342 | 2 | 1 | Not Started | Tracking on |
-| 344 | Tool Handler Implementation | mount_tools | Implement stop_tracking handler | 343 | 2 | 1 | Not Started | Tracking off |
+| 339 | Tool Handler Implementation | mount_tools | Implement unpark_telescope handler | 338 | 2 | 1 | Complete | unpark_telescope() with safety check |
+| 340 | Tool Handler Implementation | mount_tools | Add safety check before unpark | 339 | 2 | 1 | Complete | safety_monitor.evaluate() in unpark_telescope |
+| 341 | Tool Handler Implementation | mount_tools | Implement stop_telescope handler | 340 | 2 | 1 | Complete | stop_telescope() emergency stop |
+| 342 | Tool Handler Implementation | mount_tools | Add immediate execution for stop (bypass queue) | 341 | 2 | 1 | Complete | Direct call in stop_telescope handler |
+| 343 | Tool Handler Implementation | mount_tools | Implement start_tracking handler | 342 | 2 | 1 | Complete | start_tracking() with park check |
+| 344 | Tool Handler Implementation | mount_tools | Implement stop_tracking handler | 343 | 2 | 1 | Complete | stop_tracking() handler |
 | 345 | Tool Handler Implementation | mount_tools | Implement get_mount_status handler | 344 | 2 | 1 | Not Started | Status query |
 | 346 | Tool Handler Implementation | mount_tools | Add formatted position in status response | 345 | 2 | 1 | Not Started | Human-readable |
 | 347 | Tool Handler Implementation | mount_tools | Implement sync_position handler | 346 | 2 | 1 | Not Started | Pointing sync |

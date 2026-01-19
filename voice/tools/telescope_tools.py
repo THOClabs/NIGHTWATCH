@@ -1200,25 +1200,50 @@ def create_default_handlers(
                 reasons = "; ".join(status.reasons) if status.reasons else "unknown"
                 return f"Cannot slew - unsafe conditions: {reasons}"
 
+        # Step 336: Coordinate validation and parsing
+        try:
+            # Parse RA string (HH:MM:SS or HH:MM.M)
+            ra_parts = ra.replace("h", ":").replace("m", ":").replace("s", "").split(":")
+            ra_hours = float(ra_parts[0])
+            ra_minutes = float(ra_parts[1]) if len(ra_parts) > 1 else 0
+            ra_seconds = float(ra_parts[2]) if len(ra_parts) > 2 else 0
+
+            # Validate RA range (0-24 hours)
+            total_ra_hours = ra_hours + ra_minutes / 60 + ra_seconds / 3600
+            if total_ra_hours < 0 or total_ra_hours >= 24:
+                return f"Invalid RA: {ra}. Must be between 0h and 24h."
+            if ra_minutes < 0 or ra_minutes >= 60:
+                return f"Invalid RA minutes: {ra_minutes}. Must be between 0 and 59."
+            if ra_seconds < 0 or ra_seconds >= 60:
+                return f"Invalid RA seconds: {ra_seconds}. Must be between 0 and 59."
+
+            ra_deg = total_ra_hours * 15.0
+
+            # Parse DEC string (sDD:MM:SS)
+            dec_clean = dec.replace("°", ":").replace("'", ":").replace('"', "")
+            dec_parts = dec_clean.split(":")
+            dec_sign = -1 if dec_clean.startswith("-") else 1
+            dec_degrees = abs(float(dec_parts[0]))
+            dec_minutes = float(dec_parts[1]) if len(dec_parts) > 1 else 0
+            dec_seconds = float(dec_parts[2]) if len(dec_parts) > 2 else 0
+
+            # Validate DEC range (-90 to +90 degrees)
+            total_dec_deg = dec_sign * (dec_degrees + dec_minutes / 60 + dec_seconds / 3600)
+            if total_dec_deg < -90 or total_dec_deg > 90:
+                return f"Invalid DEC: {dec}. Must be between -90° and +90°."
+            if dec_minutes < 0 or dec_minutes >= 60:
+                return f"Invalid DEC minutes: {dec_minutes}. Must be between 0 and 59."
+            if dec_seconds < 0 or dec_seconds >= 60:
+                return f"Invalid DEC seconds: {dec_seconds}. Must be between 0 and 59."
+
+            dec_deg = total_dec_deg
+
+        except (ValueError, IndexError) as e:
+            return f"Invalid coordinate format: {e}. Use HH:MM:SS for RA and sDD:MM:SS for DEC."
+
         # Step 334: Altitude limit check
         if ephemeris_service:
             try:
-                # Parse RA string (HH:MM:SS or HH:MM.M)
-                ra_parts = ra.replace("h", ":").replace("m", ":").replace("s", "").split(":")
-                ra_hours = float(ra_parts[0])
-                ra_minutes = float(ra_parts[1]) if len(ra_parts) > 1 else 0
-                ra_seconds = float(ra_parts[2]) if len(ra_parts) > 2 else 0
-                ra_deg = (ra_hours + ra_minutes / 60 + ra_seconds / 3600) * 15.0
-
-                # Parse DEC string (sDD:MM:SS)
-                dec_clean = dec.replace("°", ":").replace("'", ":").replace('"', "")
-                dec_parts = dec_clean.split(":")
-                dec_sign = -1 if dec_clean.startswith("-") else 1
-                dec_degrees = abs(float(dec_parts[0]))
-                dec_minutes = float(dec_parts[1]) if len(dec_parts) > 1 else 0
-                dec_seconds = float(dec_parts[2]) if len(dec_parts) > 2 else 0
-                dec_deg = dec_sign * (dec_degrees + dec_minutes / 60 + dec_seconds / 3600)
-
                 alt = ephemeris_service.get_altitude_for_coords(ra_deg, dec_deg)
                 if alt is not None and alt < 10.0:
                     return f"Cannot slew - coordinates below minimum altitude ({alt:.1f}° < 10°)"
@@ -1233,20 +1258,92 @@ def create_default_handlers(
     handlers["goto_coordinates"] = goto_coordinates
 
     async def park_telescope() -> str:
+        """Park telescope at home position (Step 337)."""
         if not mount_client:
             return "Mount not available"
+
+        # Check if already parked
+        status = mount_client.get_status()
+        if status and status.is_parked:
+            return "Telescope is already parked"
+
         success = mount_client.park()
-        return "Parking telescope" if success else "Failed to park"
+        if success:
+            return "Parking telescope. Please wait for park to complete."
+        return "Failed to park telescope"
 
     handlers["park_telescope"] = park_telescope
 
-    async def stop_telescope() -> str:
+    async def unpark_telescope() -> str:
+        """Unpark telescope to resume observations (Step 339)."""
         if not mount_client:
             return "Mount not available"
+
+        # Step 340: Safety check before unpark
+        if safety_monitor:
+            status = safety_monitor.evaluate()
+            if not status.is_safe:
+                reasons = "; ".join(status.reasons) if status.reasons else "unknown"
+                return f"Cannot unpark - unsafe conditions: {reasons}"
+
+        # Check if already unparked
+        mount_status = mount_client.get_status()
+        if mount_status and not mount_status.is_parked:
+            return "Telescope is already unparked"
+
+        success = mount_client.unpark()
+        if success:
+            return "Telescope unparked and ready for observation"
+        return "Failed to unpark telescope"
+
+    handlers["unpark_telescope"] = unpark_telescope
+
+    async def stop_telescope() -> str:
+        """Emergency stop - immediately halt all telescope motion (Step 341)."""
+        if not mount_client:
+            return "Mount not available"
+
+        # Step 342: Immediate execution - stop is always high priority
         mount_client.stop()
-        return "Telescope stopped"
+        return "STOP - All telescope motion halted"
 
     handlers["stop_telescope"] = stop_telescope
+
+    async def start_tracking() -> str:
+        """Start sidereal tracking (Step 343)."""
+        if not mount_client:
+            return "Mount not available"
+
+        # Check if parked
+        status = mount_client.get_status()
+        if status and status.is_parked:
+            return "Cannot start tracking - telescope is parked. Unpark first."
+
+        if status and status.is_tracking:
+            return "Tracking is already enabled"
+
+        success = mount_client.set_tracking(True)
+        if success:
+            return "Sidereal tracking started"
+        return "Failed to start tracking"
+
+    handlers["start_tracking"] = start_tracking
+
+    async def stop_tracking() -> str:
+        """Stop tracking (Step 344)."""
+        if not mount_client:
+            return "Mount not available"
+
+        status = mount_client.get_status()
+        if status and not status.is_tracking:
+            return "Tracking is already disabled"
+
+        success = mount_client.set_tracking(False)
+        if success:
+            return "Tracking stopped. Telescope will remain stationary."
+        return "Failed to stop tracking"
+
+    handlers["stop_tracking"] = stop_tracking
 
     async def get_mount_status() -> dict:
         if not mount_client:
