@@ -3,24 +3,26 @@
 
 ---
 
-## 1. Intes-Micro MN78 Telescope Sourcing
+## 1. Intes Micro MN76 Telescope Sourcing
 
 ### Status: ACTIVE RESEARCH REQUIRED
 
+> **Nomenclature Note:** The 7-inch (178 mm) f/6 Maksutov-Newtonian is officially designated **MN76** by Intes Micro. However, some dealers and Cloudy Nights forum threads refer to it as "MN78." Both designations refer to the same optical tube assembly. Search for both terms when sourcing. (Sources: Cloudy Nights discussions, Stellar Optical listings)
+
 #### Current Availability
 
-The Intes-Micro MN78 (7" f/6 Maksutov-Newtonian) remains a sought-after planetary telescope. Key findings:
+The Intes Micro MN76 (7" f/6 Maksutov-Newtonian, sometimes listed as MN78) remains a sought-after planetary telescope. Key findings:
 
 **Primary Sources:**
-- **ENS Optical UK** (https://ensoptical.co.uk) - Lists MN78 7" F/8 with Crayford focuser
-- **APM Telescopes Germany** (https://www.apm-telescopes.net) - Official Intes-Micro distributor
+- **ENS Optical UK** (https://ensoptical.co.uk) - Lists MN76/MN78 7" with Crayford focuser
+- **APM Telescopes Germany** (https://www.apm-telescopes.net) - Official Intes Micro distributor
   - APM offers premium versions with Matthias Wirth tubes and Starlight Feather Touch focusers
-  - Also sells raw Intes-Micro optics in custom configurations
-- **Astromart Classifieds** (https://astromart.com) - Active used market listings
+  - Also sells raw Intes Micro optics in custom configurations
+- **Astromart Classifieds** (https://astromart.com) - Active used market listings (search both MN76 and MN78)
 
 **Production Status:**
-- As of March 2025, Intes-Micro still produces MN56 (127mm, 760mm FL) and MN76 (178mm, 1050mm FL)
-- MN78 specific availability requires direct inquiry to distributors
+- As of March 2025, Intes Micro still produces MN56 (127mm, 760mm FL) and MN76 (178mm, ~1068mm FL)
+- MN76/MN78 availability requires direct inquiry to distributors
 - Factory located in Russia; export logistics may be complicated
 
 **Pricing Estimates:**
@@ -32,14 +34,14 @@ The Intes-Micro MN78 (7" f/6 Maksutov-Newtonian) remains a sought-after planetar
 
 #### Backup Options
 
-1. **Intes-Micro MN66** (6" f/6) - $1,295 historical price, lighter, easier to source
+1. **Intes Micro MN66** (6" f/6) - $1,295 historical price, lighter, easier to source
 2. **APM 8" f/6 Mak-Newt** - Larger aperture, uses Intes optics, premium tube
 3. **Explore Scientific MN-152** (6" Mak-Newt) - More readily available commercial option
 
 #### Action Items
 
-- [ ] Email APM Telescopes (info@apm-telescopes.net) for MN78 pricing and lead time
-- [ ] Check Astromart and Cloudy Nights classifieds weekly
+- [ ] Email APM Telescopes (info@apm-telescopes.net) for MN76 pricing and lead time (note: may be listed as MN78)
+- [ ] Check Astromart and Cloudy Nights classifieds weekly (search both MN76 and MN78)
 - [ ] Contact ENS Optical UK for availability
 - [ ] Investigate direct Russia purchase if needed
 
@@ -278,10 +280,11 @@ For comparison with DIY approach:
 
 ## Sources
 
-### MN78 Research
-- [ENS Optical UK - Intes MN78](https://ensoptical.co.uk)
+### MN76/MN78 Research
+- [ENS Optical UK - Intes MN76/MN78](https://ensoptical.co.uk)
 - [APM Telescopes - Maksutov Newton](https://www.apm-telescopes.net/en/maksutov-newton)
-- [Cloudy Nights - Intes-Micro Discussions](https://www.cloudynights.com/topic/168496-intes-micro-maksutov-newton/)
+- [Cloudy Nights - Intes Micro Discussions](https://www.cloudynights.com/topic/168496-intes-micro-maksutov-newton/)
+- [Stellar Optical - Intes Telescopes](https://stellaroptical.com) (historical reference for naming)
 - [Astromart Classifieds](https://www.astromart.com)
 
 ### Harmonic Drive Research
