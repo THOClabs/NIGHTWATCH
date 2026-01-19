@@ -98,6 +98,16 @@ The complete 30-day retreat simulation is documented in:
 
 **[POS_RETREAT_SIMULATION.md](POS_RETREAT_SIMULATION.md)** — Day-by-day deliberations, decisions, code snippets, and architecture diagrams.
 
+## Panel Resources & GitHub Profiles
+
+Several panel members maintain open-source projects directly relevant to NIGHTWATCH:
+
+**[PANEL_RESOURCES.md](PANEL_RESOURCES.md)** — GitHub profiles, key repositories, and integration opportunities for:
+- Howard Dutton (OnStepX, SmartWebServer, OCS)
+- Michael Hansen (Piper TTS, Rhasspy, Wyoming)
+- Craig Stark / OpenPHDGuiding (PHD2)
+- Alec Radford (Whisper-related work)
+
 ## Using POS for Your Own Projects
 
 This framework can be adapted for any complex technical project:
