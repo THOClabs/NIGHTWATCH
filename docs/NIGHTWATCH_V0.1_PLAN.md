@@ -242,8 +242,8 @@ Create installation scripts, hardware integration guides, and prepare for Nevada
 | 154 | Core Service Completion | power | Implement sequenced power-on order | 153 | 3 | 2 | Not Started | Safe startup |
 | 155 | Core Service Completion | power | Implement sequenced power-off order | 154 | 3 | 2 | Not Started | Safe shutdown |
 | 156 | Core Service Completion | power | Create mock UPS for testing | 155 | 2 | 2 | Complete | _use_simulation mode in PowerManager |
-| 157 | Core Service Completion | power | Write unit tests for NUT client | 156 | 2 | 2 | Not Started | Test coverage |
-| 158 | Core Service Completion | power | Write integration test for thresholds | 157 | 2 | 2 | Not Started | End-to-end test |
+| 157 | Core Service Completion | power | Write unit tests for NUT client | 156 | 2 | 2 | Complete | tests/unit/test_power_manager.py (29 tests) |
+| 158 | Core Service Completion | power | Write integration test for thresholds | 157 | 2 | 2 | Complete | Threshold tests in test_power_manager.py |
 | 159 | Core Service Completion | enclosure | Review roof_controller.py current implementation | None | 2 | 1 | Complete | Full ROR control, safety interlocks, rain holdoff |
 | 160 | Core Service Completion | enclosure | Implement GPIO interface abstraction | 159 | 3 | 2 | Not Started | Hardware access |
 | 161 | Core Service Completion | enclosure | Add RPi.GPIO support for Raspberry Pi | 160 | 3 | 2 | Not Started | Pi compatibility |
@@ -262,8 +262,8 @@ Create installation scripts, hardware integration guides, and prepare for Nevada
 | 174 | Core Service Completion | enclosure | Implement 30-minute rain holdoff timer | 173 | 2 | 2 | Not Started | Per POS Day 4 |
 | 175 | Core Service Completion | enclosure | Add power loss brake engagement | 174 | 3 | 2 | Not Started | Failsafe |
 | 176 | Core Service Completion | enclosure | Implement status callbacks (opening, open, closing, closed) | 175 | 2 | 1 | Not Started | State notifications |
-| 177 | Core Service Completion | enclosure | Create mock GPIO for testing | 176 | 2 | 2 | Not Started | Simulation mode |
-| 178 | Core Service Completion | enclosure | Write unit tests for roof controller | 177 | 2 | 2 | Not Started | Test coverage |
+| 177 | Core Service Completion | enclosure | Create mock GPIO for testing | 176 | 2 | 2 | Complete | tests/mocks/mock_gpio.py |
+| 178 | Core Service Completion | enclosure | Write unit tests for roof controller | 177 | 2 | 2 | Complete | tests/unit/test_roof_controller.py (45 tests) |
 | 179 | Core Service Completion | enclosure | Write integration test with safety monitor | 178 | 3 | 2 | Not Started | End-to-end test |
 | 180 | Core Service Completion | focus | Review focuser_service.py current implementation | None | 2 | 1 | Complete | Full autofocus, V-curve/HFD, temp compensation |
 | 181 | Core Service Completion | focus | Complete V-curve autofocus algorithm | 180 | 4 | 3 | Not Started | Parabolic fit |
