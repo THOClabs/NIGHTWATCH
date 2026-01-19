@@ -342,26 +342,26 @@ Create installation scripts, hardware integration guides, and prepare for Nevada
 | 254 | Orchestrator Development | orchestrator | Add save session log on shutdown | 253 | 2 | 1 | Not Started | Data preservation |
 | 255 | Orchestrator Development | orchestrator | Write unit tests for orchestrator | 254 | 3 | 3 | Not Started | Test coverage |
 | 256 | Orchestrator Development | orchestrator | Write integration test with mock services | 255 | 3 | 2 | Not Started | End-to-end test |
-| 257 | Orchestrator Development | tool_executor | Create nightwatch/tool_executor.py module | 212 | 3 | 2 | Not Started | Tool dispatch |
-| 258 | Orchestrator Development | tool_executor | Define ToolExecutor class with orchestrator reference | 257 | 2 | 1 | Not Started | Constructor |
-| 259 | Orchestrator Development | tool_executor | Implement tool registration from telescope_tools.py | 258 | 3 | 2 | Not Started | Load tool definitions |
-| 260 | Orchestrator Development | tool_executor | Add tool parameter validation | 259 | 3 | 2 | Not Started | Input checking |
-| 261 | Orchestrator Development | tool_executor | Implement async tool execution | 260 | 3 | 2 | Not Started | Non-blocking calls |
-| 262 | Orchestrator Development | tool_executor | Add tool result formatting | 261 | 2 | 2 | Not Started | Structured responses |
-| 263 | Orchestrator Development | tool_executor | Implement tool timeout handling | 262 | 2 | 1 | Not Started | Prevent hangs |
-| 264 | Orchestrator Development | tool_executor | Add tool execution logging | 263 | 2 | 1 | Not Started | Audit trail |
-| 265 | Orchestrator Development | tool_executor | Implement safety veto check before execution | 264 | 3 | 2 | Not Started | Pre-flight check |
+| 257 | Orchestrator Development | tool_executor | Create nightwatch/tool_executor.py module | 212 | 3 | 2 | Complete | Full tool executor with handlers |
+| 258 | Orchestrator Development | tool_executor | Define ToolExecutor class with orchestrator reference | 257 | 2 | 1 | Complete | Constructor with DI |
+| 259 | Orchestrator Development | tool_executor | Implement tool registration from telescope_tools.py | 258 | 3 | 2 | Complete | register_handler() method |
+| 260 | Orchestrator Development | tool_executor | Add tool parameter validation | 259 | 3 | 2 | Complete | Parameter checking in handlers |
+| 261 | Orchestrator Development | tool_executor | Implement async tool execution | 260 | 3 | 2 | Complete | execute() with asyncio |
+| 262 | Orchestrator Development | tool_executor | Add tool result formatting | 261 | 2 | 2 | Complete | ToolResult dataclass |
+| 263 | Orchestrator Development | tool_executor | Implement tool timeout handling | 262 | 2 | 1 | Complete | asyncio.timeout() |
+| 264 | Orchestrator Development | tool_executor | Add tool execution logging | 263 | 2 | 1 | Complete | _log_execution(), get_execution_log() |
+| 265 | Orchestrator Development | tool_executor | Implement safety veto check before execution | 264 | 3 | 2 | Complete | VETOED status in handlers |
 | 266 | Orchestrator Development | tool_executor | Add confirmation requirement for critical tools | 265 | 3 | 2 | Not Started | Sync, park, etc. |
 | 267 | Orchestrator Development | tool_executor | Implement tool chaining for complex commands | 266 | 4 | 3 | Not Started | Multi-step operations |
-| 268 | Orchestrator Development | tool_executor | Write unit tests for tool executor | 267 | 2 | 2 | Not Started | Test coverage |
-| 269 | Orchestrator Development | response_formatter | Create nightwatch/response_formatter.py module | 212 | 2 | 1 | Not Started | Response generation |
-| 270 | Orchestrator Development | response_formatter | Implement tool result to natural language conversion | 269 | 4 | 3 | Not Started | Human-readable output |
-| 271 | Orchestrator Development | response_formatter | Add response templates for common results | 270 | 2 | 2 | Not Started | Consistent phrasing |
-| 272 | Orchestrator Development | response_formatter | Implement coordinate formatting (RA/Dec, Alt/Az) | 271 | 2 | 1 | Not Started | Readable coordinates |
-| 273 | Orchestrator Development | response_formatter | Add weather formatting (temperature, wind) | 272 | 2 | 1 | Not Started | Readable weather |
-| 274 | Orchestrator Development | response_formatter | Implement error message formatting | 273 | 2 | 1 | Not Started | Clear error messages |
+| 268 | Orchestrator Development | tool_executor | Write unit tests for tool executor | 267 | 2 | 2 | Complete | 35 tests in test_tool_executor.py |
+| 269 | Orchestrator Development | response_formatter | Create nightwatch/response_formatter.py module | 212 | 2 | 1 | Complete | Full formatter module |
+| 270 | Orchestrator Development | response_formatter | Implement tool result to natural language conversion | 269 | 4 | 3 | Complete | format() method |
+| 271 | Orchestrator Development | response_formatter | Add response templates for common results | 270 | 2 | 2 | Complete | RESPONSE_TEMPLATES dict |
+| 272 | Orchestrator Development | response_formatter | Implement coordinate formatting (RA/Dec, Alt/Az) | 271 | 2 | 1 | Complete | format_ra(), format_dec(), format_alt_az() |
+| 273 | Orchestrator Development | response_formatter | Add weather formatting (temperature, wind) | 272 | 2 | 1 | Complete | format_temperature(), format_wind() |
+| 274 | Orchestrator Development | response_formatter | Implement error message formatting | 273 | 2 | 1 | Complete | format_error() method |
 | 275 | Orchestrator Development | response_formatter | Add voice style adaptation (normal, alert, calm) | 274 | 3 | 2 | Not Started | Per POS Day 5 |
-| 276 | Orchestrator Development | response_formatter | Write unit tests for response formatter | 275 | 2 | 2 | Not Started | Test coverage |
+| 276 | Orchestrator Development | response_formatter | Write unit tests for response formatter | 275 | 2 | 2 | Complete | 31 tests in test_response_formatter.py |
 | 277 | Voice Pipeline Integration | llm | Create nightwatch/llm_client.py module | 21 | 3 | 2 | Not Started | LLM integration |
 | 278 | Voice Pipeline Integration | llm | Implement local Llama 3.2 client using llama-cpp-python | 277 | 4 | 3 | Not Started | Local inference |
 | 279 | Voice Pipeline Integration | llm | Add model loading with GPU offload | 278 | 3 | 2 | Not Started | CUDA acceleration |
