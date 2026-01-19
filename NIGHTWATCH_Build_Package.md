@@ -1118,6 +1118,8 @@ For weather protection when not observing:
 
 *Research conducted 2026-01-18 - See docs/research/SOURCING_RESEARCH.md for details*
 
+> **International Builders:** For vendors, forums, and search terms in multiple languages (German, French, Spanish, Russian, Japanese, Chinese, and 10+ more), see **[docs/research/INTERNATIONAL_SOURCING_GUIDE.md](docs/research/INTERNATIONAL_SOURCING_GUIDE.md)**
+
 ### Optical Tube Assembly
 
 | Component | Vendor | URL | Price Est. | Notes |

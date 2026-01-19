@@ -1,6 +1,8 @@
 # NIGHTWATCH Component Sourcing Research
 ## Research Date: 2026-01-18
 
+> **International Builders:** For vendors, forums, and search terms in multiple languages (German, French, Spanish, Russian, Japanese, Chinese, and more), see **[INTERNATIONAL_SOURCING_GUIDE.md](./INTERNATIONAL_SOURCING_GUIDE.md)**
+
 ---
 
 ## 1. Intes-Micro MN76 Telescope Sourcing
