@@ -28,3 +28,12 @@ from nightwatch.constants import (
     NIGHTWATCH_VERSION,
     NIGHTWATCH_NAME,
 )
+
+# Core types (import commonly used types for convenience)
+from nightwatch.types import (
+    Coordinates,
+    AltAz,
+    MountState,
+    SafetyState,
+    WeatherData,
+)
