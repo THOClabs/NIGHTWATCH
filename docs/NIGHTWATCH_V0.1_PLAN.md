@@ -577,15 +577,15 @@ Create installation scripts, hardware integration guides, and prepare for Nevada
 | 489 | Safety System Hardening | emergency_response | Implement network failure response | 488 | 3 | 2 | Not Started | Lose connectivity |
 | 490 | Safety System Hardening | emergency_response | Add alert escalation during emergency | 489 | 2 | 1 | Not Started | Notify operator |
 | 491 | Safety System Hardening | emergency_response | Write unit tests for emergency response | 490 | 2 | 2 | Not Started | Test coverage |
-| 492 | Safety System Hardening | watchdog | Create nightwatch/watchdog.py module | 457 | 3 | 2 | Not Started | System health |
-| 493 | Safety System Hardening | watchdog | Implement service heartbeat monitoring | 492 | 3 | 2 | Not Started | Detect hangs |
-| 494 | Safety System Hardening | watchdog | Add mount communication watchdog | 493 | 2 | 1 | Not Started | Mount health |
-| 495 | Safety System Hardening | watchdog | Add weather communication watchdog | 494 | 2 | 1 | Not Started | Weather health |
-| 496 | Safety System Hardening | watchdog | Add camera communication watchdog | 495 | 2 | 1 | Not Started | Camera health |
-| 497 | Safety System Hardening | watchdog | Implement automatic service restart | 496 | 3 | 2 | Not Started | Auto-recovery |
-| 498 | Safety System Hardening | watchdog | Add restart attempt limit | 497 | 2 | 1 | Not Started | Prevent loop |
+| 492 | Safety System Hardening | watchdog | Create nightwatch/watchdog.py module | 457 | 3 | 2 | Complete | System health |
+| 493 | Safety System Hardening | watchdog | Implement service heartbeat monitoring | 492 | 3 | 2 | Complete | Detect hangs |
+| 494 | Safety System Hardening | watchdog | Add mount communication watchdog | 493 | 2 | 1 | Complete | Mount health |
+| 495 | Safety System Hardening | watchdog | Add weather communication watchdog | 494 | 2 | 1 | Complete | Weather health |
+| 496 | Safety System Hardening | watchdog | Add camera communication watchdog | 495 | 2 | 1 | Complete | Camera health |
+| 497 | Safety System Hardening | watchdog | Implement automatic service restart | 496 | 3 | 2 | Complete | Auto-recovery |
+| 498 | Safety System Hardening | watchdog | Add restart attempt limit | 497 | 2 | 1 | Complete | Prevent loop |
 | 499 | Safety System Hardening | watchdog | Implement safe state on persistent failure | 498 | 3 | 2 | Not Started | Park and alert |
-| 500 | Safety System Hardening | watchdog | Write unit tests for watchdog | 499 | 2 | 2 | Not Started | Test coverage |
+| 500 | Safety System Hardening | watchdog | Write unit tests for watchdog | 499 | 2 | 2 | Complete | Test coverage |
 | 501 | Hardware-in-Loop Simulation | docker | Review docker-compose.dev.yml current state | None | 2 | 1 | Not Started | Understand setup |
 | 502 | Hardware-in-Loop Simulation | docker | Add mount simulator service | 501 | 3 | 2 | Not Started | OnStepX sim |
 | 503 | Hardware-in-Loop Simulation | docker | Configure mount simulator with LX200 protocol | 502 | 2 | 1 | Not Started | TCP port 9999 |
