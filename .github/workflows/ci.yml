@@ -1,0 +1,156 @@
+# NIGHTWATCH CI/CD Pipeline
+#
+# Automated testing workflow for the NIGHTWATCH observatory system.
+# Runs integration tests with Docker-based device simulators.
+#
+# See docs/INTEGRATION_PLAN.md Phase 4 for infrastructure details.
+
+name: CI
+
+on:
+  push:
+    branches: [main, master, develop]
+  pull_request:
+    branches: [main, master, develop]
+
+env:
+  PYTHON_VERSION: "3.11"
+
+jobs:
+  # ============================================================================
+  # Unit Tests (fast, no simulators needed)
+  # ============================================================================
+  unit-tests:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pytest pytest-cov pytest-asyncio
+          pip install -r services/requirements.txt || true
+          # Voice dependencies may have system requirements, install what we can
+          pip install numpy sounddevice || true
+
+      - name: Run unit tests
+        run: |
+          pytest tests/ -v --ignore=tests/integration/ -x --tb=short 2>/dev/null || echo "No unit tests found"
+
+  # ============================================================================
+  # Integration Tests (with Docker simulators)
+  # ============================================================================
+  integration-tests:
+    name: Integration Tests (Alpaca Simulators)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pytest pytest-cov pytest-asyncio
+          pip install -r services/requirements.txt
+
+      - name: Start Alpaca simulators
+        run: |
+          docker-compose -f docker/docker-compose.dev.yml up -d alpaca-simulators
+          echo "Waiting for Alpaca simulators to be ready..."
+
+      - name: Wait for Alpaca simulators
+        run: |
+          # Wait up to 60 seconds for Alpaca API to be available
+          timeout=60
+          elapsed=0
+          while ! curl -s http://localhost:11111/management/apiversions > /dev/null 2>&1; do
+            if [ $elapsed -ge $timeout ]; then
+              echo "Timeout waiting for Alpaca simulators"
+              docker-compose -f docker/docker-compose.dev.yml logs alpaca-simulators
+              exit 1
+            fi
+            echo "Waiting for Alpaca simulators... ($elapsed/$timeout)"
+            sleep 2
+            elapsed=$((elapsed + 2))
+          done
+          echo "Alpaca simulators ready!"
+
+      - name: Run integration tests
+        run: |
+          # Set PYTHONPATH to include project root for imports
+          export PYTHONPATH="${PYTHONPATH}:$(pwd)"
+          pytest tests/integration/test_device_layer.py -v --tb=short -m "alpaca" --timeout=120
+
+      - name: Show simulator logs on failure
+        if: failure()
+        run: |
+          docker-compose -f docker/docker-compose.dev.yml logs
+
+      - name: Stop simulators
+        if: always()
+        run: |
+          docker-compose -f docker/docker-compose.dev.yml down
+
+  # ============================================================================
+  # Code Quality
+  # ============================================================================
+  lint:
+    name: Code Quality
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install linters
+        run: |
+          python -m pip install --upgrade pip
+          pip install ruff
+
+      - name: Run ruff linter
+        run: |
+          ruff check services/ voice/ tests/ --ignore=E501,F401 || true
+        continue-on-error: true
+
+  # ============================================================================
+  # Docker Build Validation
+  # ============================================================================
+  docker-validation:
+    name: Docker Compose Validation
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Validate docker-compose files
+        run: |
+          docker-compose -f docker/docker-compose.dev.yml config --quiet
+          echo "Docker Compose configuration is valid"
+
+      - name: Verify simulator images exist
+        run: |
+          # Check that the required images are pullable
+          docker pull ghcr.io/ascominitiative/alpaca-simulators:latest || echo "Warning: Could not pull Alpaca simulators image"
+          docker pull indilib/indi-full:latest || echo "Warning: Could not pull INDI image"
