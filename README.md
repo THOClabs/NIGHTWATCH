@@ -7,7 +7,7 @@
 
 **Autonomous Maksutov-Newtonian Observatory System**
 
-Voice-controlled telescope observatory designed for central Nevada dark sky installation. Combines Russian optics excellence with modern automation and local AI inference — no cloud dependency, full local control.
+Voice-controlled telescope observatory designed for central Nevada dark sky installation. Combines optics excellence with modern automation and local AI inference — no cloud dependency, full local control.
 
 > **Project Status:** Early design phase — hardware build in progress. See the [Full Build Specification](NIGHTWATCH_Build_Package.md) for complete details.
 
