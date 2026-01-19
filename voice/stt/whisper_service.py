@@ -283,7 +283,9 @@ class WhisperSTT:
         device: str = "cuda",
         compute_type: str = "float16",
         language: str = "en",
-        use_enhanced_vad: bool = True
+        use_enhanced_vad: bool = True,
+        cpu_threads: int = 4,
+        num_workers: int = 1,
     ):
         """
         Initialize Whisper STT service.
@@ -291,17 +293,26 @@ class WhisperSTT:
         Args:
             model_size: Whisper model size
             device: "cuda" or "cpu"
-            compute_type: "float16", "int8", or "float32"
+            compute_type: Compute type for inference. Options:
+                - "float16": Standard GPU inference (default)
+                - "int8_float16": Optimized for DGX Spark, ~2x faster, lower memory
+                - "int8": CPU-optimized quantization
+                - "float32": Full precision (slowest)
             language: Language code for transcription
             use_enhanced_vad: Use neural VAD (pymicro-vad) if available
+            cpu_threads: Number of CPU threads for inference
+            num_workers: Number of parallel decoding workers (faster-whisper only)
         """
         self.model_size = model_size
         self.device = device
         self.compute_type = compute_type
         self.language = language
+        self.cpu_threads = cpu_threads
+        self.num_workers = num_workers
 
         self._model = None
         self._audio_config = AudioConfig()
+        self._warmed_up = False
 
         # Use EnhancedVAD (neural) by default, falls back to energy-threshold
         if use_enhanced_vad:
@@ -313,8 +324,14 @@ class WhisperSTT:
         self._audio_queue: queue.Queue = queue.Queue()
         self._callbacks: List[Callable[[TranscriptionResult], None]] = []
 
-    def initialize(self):
-        """Load Whisper model."""
+    def initialize(self, warm_up: bool = True):
+        """
+        Load Whisper model and optionally warm up GPU.
+
+        Args:
+            warm_up: If True, run a dummy transcription to pre-load
+                     model weights into GPU memory for faster first inference.
+        """
         if not WHISPER_AVAILABLE:
             raise RuntimeError(
                 "Whisper not available. Install with: "
@@ -322,18 +339,83 @@ class WhisperSTT:
             )
 
         print(f"Loading Whisper model: {self.model_size.value} ({WHISPER_BACKEND})")
+        print(f"  Device: {self.device}, Compute type: {self.compute_type}")
 
         if WHISPER_BACKEND == "faster-whisper":
             self._model = WhisperModel(
                 self.model_size.value,
                 device=self.device,
-                compute_type=self.compute_type
+                compute_type=self.compute_type,
+                cpu_threads=self.cpu_threads,
+                num_workers=self.num_workers,
             )
         else:
             import whisper
             self._model = whisper.load_model(self.model_size.value)
 
         print("Whisper model loaded")
+
+        # Pre-warm the model to ensure weights are in GPU memory
+        if warm_up:
+            self._warm_up()
+
+    def _warm_up(self):
+        """
+        Pre-load model weights into GPU memory.
+
+        Running a dummy transcription ensures all model weights are loaded
+        and CUDA kernels are compiled, reducing first-inference latency.
+        """
+        if self._warmed_up:
+            return
+
+        print("Warming up model...")
+        # Generate 1 second of silence at 16kHz
+        dummy_audio = np.zeros(16000, dtype=np.float32)
+
+        if WHISPER_BACKEND == "faster-whisper":
+            # Run transcription to trigger weight loading
+            list(self._model.transcribe(dummy_audio))
+        else:
+            # OpenAI Whisper
+            self._model.transcribe(dummy_audio)
+
+        self._warmed_up = True
+        print("Model warmed up and ready")
+
+    @property
+    def is_warmed_up(self) -> bool:
+        """Check if model has been warmed up."""
+        return self._warmed_up
+
+    @classmethod
+    def create_for_dgx_spark(
+        cls,
+        model_size: WhisperModelSize = WhisperModelSize.BASE,
+        language: str = "en",
+    ) -> "WhisperSTT":
+        """
+        Create WhisperSTT optimized for DGX Spark.
+
+        Uses int8_float16 quantization and parallel decoding for
+        best performance on NVIDIA DGX Spark hardware.
+
+        Args:
+            model_size: Whisper model size (base recommended for speed)
+            language: Language code for transcription
+
+        Returns:
+            Configured WhisperSTT instance (call initialize() to load model)
+        """
+        return cls(
+            model_size=model_size,
+            device="cuda",
+            compute_type="int8_float16",  # Optimized for DGX Spark
+            language=language,
+            use_enhanced_vad=True,
+            cpu_threads=4,
+            num_workers=2,  # Parallel decoding
+        )
 
     def transcribe(self, audio: np.ndarray) -> TranscriptionResult:
         """
@@ -580,13 +662,16 @@ if __name__ == "__main__":
     print(f"Neural VAD available: {NEURAL_VAD_AVAILABLE}")
     print()
 
-    # Test with a simple transcription
+    # Test with a simple transcription (CPU mode for testing)
+    # For production on DGX Spark, use: WhisperSTT.create_for_dgx_spark()
     stt = WhisperSTT(model_size=WhisperModelSize.TINY, device="cpu")
     print(f"VAD backend: {stt._vad.backend}")
+    print(f"Compute type: {stt.compute_type}")
+    print(f"Num workers: {stt.num_workers}")
 
-    print("Loading model (this may take a moment)...")
-    stt.initialize()
-    print("Model loaded!")
+    print("\nLoading model (this may take a moment)...")
+    stt.initialize()  # Includes warm-up by default
+    print(f"Model warmed up: {stt.is_warmed_up}")
     print()
 
     if SOUNDDEVICE_AVAILABLE:
