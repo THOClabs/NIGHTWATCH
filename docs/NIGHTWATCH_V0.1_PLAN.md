@@ -164,9 +164,9 @@ Create installation scripts, hardware integration guides, and prepare for Nevada
 | 76 | Core Service Completion | catalog | Add object metadata (size, surface brightness) | 75 | 2 | 2 | Complete | Additional data |
 | 77 | Core Service Completion | catalog | Implement get_object_details() method | 76 | 2 | 1 | Complete | Full object info |
 | 78 | Core Service Completion | catalog | Implement resolve_object() for name to coordinates | 77 | 2 | 1 | Complete | Critical for goto |
-| 79 | Core Service Completion | catalog | Add caching for frequently accessed objects | 78 | 2 | 2 | Not Started | Performance |
-| 80 | Core Service Completion | catalog | Write unit tests for catalog search | 79 | 2 | 2 | Not Started | Test coverage |
-| 81 | Core Service Completion | catalog | Write unit tests for coordinate resolution | 80 | 2 | 1 | Not Started | Test coverage |
+| 79 | Core Service Completion | catalog | Add caching for frequently accessed objects | 78 | 2 | 2 | Complete | Performance |
+| 80 | Core Service Completion | catalog | Write unit tests for catalog search | 79 | 2 | 2 | Complete | Test coverage |
+| 81 | Core Service Completion | catalog | Write unit tests for coordinate resolution | 80 | 2 | 1 | Complete | Test coverage |
 | 82 | Core Service Completion | camera | Review asi_camera.py current implementation | None | 2 | 1 | Not Started | Understand gaps |
 | 83 | Core Service Completion | camera | Add ZWO ASI SDK wrapper import handling | 82 | 3 | 2 | Not Started | Optional dependency |
 | 84 | Core Service Completion | camera | Implement camera detection and enumeration | 83 | 3 | 2 | Not Started | List connected cameras |
@@ -206,9 +206,9 @@ Create installation scripts, hardware integration guides, and prepare for Nevada
 | 118 | Core Service Completion | astrometry | Create mock solver for testing | 117 | 3 | 2 | Not Started | Simulation mode |
 | 119 | Core Service Completion | astrometry | Write unit tests for solver backends | 118 | 2 | 2 | Not Started | Test coverage |
 | 120 | Core Service Completion | astrometry | Write integration test with camera | 119 | 3 | 2 | Not Started | End-to-end test |
-| 121 | Core Service Completion | alerts | Review alert_manager.py current implementation | None | 2 | 1 | Not Started | Understand gaps |
-| 122 | Core Service Completion | alerts | Implement SMTP email notification channel | 121 | 3 | 2 | Not Started | Email alerts |
-| 123 | Core Service Completion | alerts | Add email template system (HTML + plain text) | 122 | 3 | 2 | Not Started | Formatted emails |
+| 121 | Core Service Completion | alerts | Review alert_manager.py current implementation | None | 2 | 1 | Complete | Understand gaps |
+| 122 | Core Service Completion | alerts | Implement SMTP email notification channel | 121 | 3 | 2 | Complete | Email alerts |
+| 123 | Core Service Completion | alerts | Add email template system (HTML + plain text) | 122 | 3 | 2 | Complete | Formatted emails |
 | 124 | Core Service Completion | alerts | Implement email rate limiting (max 1/hour per alert type) | 123 | 2 | 2 | Not Started | Prevent spam |
 | 125 | Core Service Completion | alerts | Implement Twilio SMS notification channel | 124 | 3 | 3 | Not Started | Local-first: optional |
 | 126 | Core Service Completion | alerts | Add SMS message formatting (160 char limit) | 125 | 2 | 1 | Not Started | Concise messages |

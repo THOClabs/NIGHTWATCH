@@ -15,10 +15,58 @@ Data stored in SQLite for fast local queries with voice control.
 
 import sqlite3
 import re
+from collections import OrderedDict
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
 from typing import Optional, List, Tuple
+
+
+class LRUCache:
+    """Simple LRU cache for catalog lookups."""
+
+    def __init__(self, maxsize: int = 100):
+        self.maxsize = maxsize
+        self._cache: OrderedDict = OrderedDict()
+        self._hits = 0
+        self._misses = 0
+
+    def get(self, key: str) -> Optional[any]:
+        """Get item from cache, returns None if not found."""
+        if key in self._cache:
+            self._cache.move_to_end(key)
+            self._hits += 1
+            return self._cache[key]
+        self._misses += 1
+        return None
+
+    def put(self, key: str, value: any) -> None:
+        """Put item in cache."""
+        if key in self._cache:
+            self._cache.move_to_end(key)
+        else:
+            if len(self._cache) >= self.maxsize:
+                self._cache.popitem(last=False)
+        self._cache[key] = value
+
+    def clear(self) -> None:
+        """Clear the cache."""
+        self._cache.clear()
+        self._hits = 0
+        self._misses = 0
+
+    @property
+    def stats(self) -> dict:
+        """Get cache statistics."""
+        total = self._hits + self._misses
+        hit_rate = self._hits / total if total > 0 else 0.0
+        return {
+            "size": len(self._cache),
+            "maxsize": self.maxsize,
+            "hits": self._hits,
+            "misses": self._misses,
+            "hit_rate": hit_rate,
+        }
 
 
 class ObjectType(Enum):
@@ -621,10 +669,12 @@ class CatalogService:
     High-level catalog service for NIGHTWATCH.
 
     Provides simple lookup interface for voice commands.
+    Includes LRU caching for frequently accessed objects.
     """
 
-    def __init__(self, db_path: str = "nightwatch_catalog.db"):
+    def __init__(self, db_path: str = "nightwatch_catalog.db", cache_size: int = 100):
         self.db = CatalogDatabase(db_path)
+        self._cache = LRUCache(maxsize=cache_size)
 
     def initialize(self):
         """Initialize database with all catalog data."""
@@ -643,16 +693,40 @@ class CatalogService:
         """Close database connection."""
         self.db.close()
 
+    def clear_cache(self):
+        """Clear the lookup cache."""
+        self._cache.clear()
+
+    def cache_stats(self) -> dict:
+        """Get cache statistics."""
+        return self._cache.stats
+
     def lookup(self, query: str) -> Optional[CatalogObject]:
         """
         Look up an object by name or catalog ID.
+
+        Results are cached for faster repeated lookups.
 
         Examples:
             lookup("M31") -> Andromeda Galaxy
             lookup("Andromeda") -> Andromeda Galaxy
             lookup("Orion Nebula") -> M42
         """
-        return self.db.lookup(query)
+        cache_key = query.strip().upper()
+
+        # Check cache first
+        cached = self._cache.get(cache_key)
+        if cached is not None:
+            return cached
+
+        # Query database
+        result = self.db.lookup(query)
+
+        # Cache the result (even None results to avoid repeated misses)
+        if result is not None:
+            self._cache.put(cache_key, result)
+
+        return result
 
     def what_is(self, query: str) -> str:
         """

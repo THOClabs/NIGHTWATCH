@@ -11,8 +11,12 @@ POS Panel v2.0 - Day 16 Recommendations (SRO Team + Bob Denny):
 
 import asyncio
 import logging
+import smtplib
+import ssl
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 from enum import Enum
 from typing import Optional, List, Dict, Callable, Any
 import json
@@ -43,11 +47,17 @@ class AlertChannel(Enum):
 @dataclass
 class AlertConfig:
     """Alert system configuration."""
-    # Channel configurations
+    # Email channel configuration
     email_enabled: bool = True
     email_recipients: List[str] = field(default_factory=list)
     email_smtp_host: str = ""
     email_smtp_port: int = 587
+    email_smtp_user: str = ""
+    email_smtp_password: str = ""
+    email_from_address: str = "nightwatch@observatory.local"
+    email_from_name: str = "NIGHTWATCH Observatory"
+    email_use_tls: bool = True
+    email_timeout: float = 30.0
 
     push_enabled: bool = True
     push_firebase_key: str = ""
@@ -274,9 +284,173 @@ class AlertManager:
                 await self._send_webhook(alert)
 
     async def _send_email(self, alert: Alert):
-        """Send email notification."""
-        # Would use smtplib or similar
-        logger.debug(f"Would send email: {alert.message}")
+        """
+        Send email notification via SMTP.
+
+        Creates HTML and plain text versions of the email.
+        """
+        if not self.config.email_smtp_host:
+            logger.warning("Email SMTP host not configured, skipping email")
+            return
+
+        # Build email content
+        subject = f"[NIGHTWATCH {alert.level.name}] {alert.source}: {alert.message[:50]}"
+
+        # Plain text version
+        text_body = self._format_email_plain(alert)
+
+        # HTML version
+        html_body = self._format_email_html(alert)
+
+        # Send to each recipient
+        for recipient in self.config.email_recipients:
+            try:
+                await self._send_smtp_email(recipient, subject, text_body, html_body)
+                logger.debug(f"Email sent to {recipient}")
+            except Exception as e:
+                logger.error(f"Failed to send email to {recipient}: {e}")
+
+    def _format_email_plain(self, alert: Alert) -> str:
+        """Format alert as plain text email."""
+        lines = [
+            f"NIGHTWATCH ALERT",
+            f"================",
+            f"",
+            f"Level: {alert.level.name}",
+            f"Source: {alert.source}",
+            f"Time: {alert.timestamp.strftime('%Y-%m-%d %H:%M:%S')}",
+            f"",
+            f"Message:",
+            f"{alert.message}",
+            f"",
+        ]
+
+        if alert.data:
+            lines.append("Additional Data:")
+            for key, value in alert.data.items():
+                lines.append(f"  {key}: {value}")
+            lines.append("")
+
+        lines.extend([
+            f"Alert ID: {alert.id}",
+            f"",
+            f"---",
+            f"This is an automated message from NIGHTWATCH Observatory System.",
+        ])
+
+        return "\n".join(lines)
+
+    def _format_email_html(self, alert: Alert) -> str:
+        """Format alert as HTML email."""
+        # Color coding based on level
+        level_colors = {
+            AlertLevel.DEBUG: "#6c757d",
+            AlertLevel.INFO: "#17a2b8",
+            AlertLevel.WARNING: "#ffc107",
+            AlertLevel.CRITICAL: "#dc3545",
+            AlertLevel.EMERGENCY: "#721c24",
+        }
+        level_color = level_colors.get(alert.level, "#333")
+
+        data_rows = ""
+        if alert.data:
+            for key, value in alert.data.items():
+                data_rows += f"<tr><td style='padding:4px 8px;'><strong>{key}</strong></td><td style='padding:4px 8px;'>{value}</td></tr>"
+
+        html = f"""
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"></head>
+<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0; padding: 20px; background: #f5f5f5;">
+  <div style="max-width: 600px; margin: 0 auto; background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+    <div style="background: {level_color}; color: white; padding: 20px;">
+      <h1 style="margin: 0; font-size: 24px;">NIGHTWATCH Alert</h1>
+      <p style="margin: 10px 0 0 0; opacity: 0.9;">{alert.level.name} - {alert.source}</p>
+    </div>
+    <div style="padding: 20px;">
+      <p style="font-size: 18px; margin: 0 0 20px 0;">{alert.message}</p>
+      <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">
+        <tr><td style="padding:4px 8px;"><strong>Time</strong></td><td style="padding:4px 8px;">{alert.timestamp.strftime('%Y-%m-%d %H:%M:%S')}</td></tr>
+        <tr><td style="padding:4px 8px;"><strong>Alert ID</strong></td><td style="padding:4px 8px;">{alert.id}</td></tr>
+        {data_rows}
+      </table>
+    </div>
+    <div style="background: #f8f9fa; padding: 15px 20px; font-size: 12px; color: #6c757d;">
+      Automated message from NIGHTWATCH Observatory System
+    </div>
+  </div>
+</body>
+</html>
+"""
+        return html
+
+    async def _send_smtp_email(
+        self,
+        recipient: str,
+        subject: str,
+        text_body: str,
+        html_body: str
+    ):
+        """Send email via SMTP (runs in executor to avoid blocking)."""
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(
+            None,
+            self._send_smtp_email_sync,
+            recipient, subject, text_body, html_body
+        )
+
+    def _send_smtp_email_sync(
+        self,
+        recipient: str,
+        subject: str,
+        text_body: str,
+        html_body: str
+    ):
+        """Synchronous SMTP send (called from executor)."""
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = subject
+        msg["From"] = f"{self.config.email_from_name} <{self.config.email_from_address}>"
+        msg["To"] = recipient
+
+        # Attach both plain and HTML versions
+        msg.attach(MIMEText(text_body, "plain"))
+        msg.attach(MIMEText(html_body, "html"))
+
+        # Connect and send
+        if self.config.email_use_tls:
+            context = ssl.create_default_context()
+            with smtplib.SMTP(
+                self.config.email_smtp_host,
+                self.config.email_smtp_port,
+                timeout=self.config.email_timeout
+            ) as server:
+                server.starttls(context=context)
+                if self.config.email_smtp_user:
+                    server.login(
+                        self.config.email_smtp_user,
+                        self.config.email_smtp_password
+                    )
+                server.sendmail(
+                    self.config.email_from_address,
+                    recipient,
+                    msg.as_string()
+                )
+        else:
+            with smtplib.SMTP(
+                self.config.email_smtp_host,
+                self.config.email_smtp_port,
+                timeout=self.config.email_timeout
+            ) as server:
+                if self.config.email_smtp_user:
+                    server.login(
+                        self.config.email_smtp_user,
+                        self.config.email_smtp_password
+                    )
+                server.sendmail(
+                    self.config.email_from_address,
+                    recipient,
+                    msg.as_string()
+                )
 
     async def _send_push(self, alert: Alert):
         """Send push notification."""
