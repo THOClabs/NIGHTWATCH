@@ -84,7 +84,19 @@ The MN76 is the flagship 7-inch planetary instrument from Intes Micro, a Russian
 | Weight | ~9 kg (19.8 lb) |
 | Dovetail | Losmandy-style recommended |
 
-### Why This OTA
+### Why This Optic Remains Ideal
+
+Despite Intes-Micro ceasing production (the company wound down following the founder's passing), the MN76/MN78 remains one of the finest planetary instruments ever produced for amateur astronomers. No current production Mak-Newt offers this combination of aperture, optical quality, and environmental resilience.
+
+**Optical Quality:** Intes-Micro hand-figured optics to 1/8 wave or better. The Mak-Newt design eliminates coma (the bane of fast Newtonians) while maintaining faster focal ratios than Mak-Cass designs. The 25% central obstruction is significantly smaller than typical SCTs (33-35%), yielding superior contrast transfer at medium spatial frequencies—exactly where planetary detail lives.
+
+**Thermal Behavior:** The closed tube design is critical for Nevada. Open-tube Newtonians suffer from thermal currents rising off the mirror when ambient temperature drops. The MN76's sealed tube dramatically reduces this effect. The corrector plate acts as a thermal buffer. While cooldown time exceeds open designs, a permanent installation can pre-equilibrate hours before observing.
+
+**Mechanical Robustness:** The closed tube protects optics from dust, insects, and the occasional curious wildlife. Nevada's alkaline dust is particularly damaging to exposed optical surfaces. The MN76 can remain on its pier under a cover for months without optical degradation.
+
+**Focal Ratio Sweet Spot:** At f/6, the MN76 is fast enough for efficient lucky imaging (good frame rates) while slow enough that the optical design remains manageable. Faster Mak-Newts exist but become significantly more expensive and thermally challenging.
+
+### Sourcing Strategy
 
 **Optical Quality:** Intes Micro hand-figures optics to 1/8 wave or better. The Mak-Newt design eliminates coma (the bane of fast Newtonians) while maintaining faster focal ratios than Mak-Cass designs. The 25% central obstruction is significantly smaller than typical SCTs (33-35%), yielding superior contrast transfer at medium spatial frequencies—exactly where planetary detail lives.
 
@@ -94,7 +106,7 @@ The MN76 is the flagship 7-inch planetary instrument from Intes Micro, a Russian
 
 **Focal Ratio Sweet Spot:** At f/6, the MN76 is fast enough for efficient lucky imaging (good frame rates) while slow enough that the optical design remains manageable. Faster Mak-Newts exist but become significantly more expensive and thermally challenging.
 
-### Sourcing Research Tasks
+**European Considerations:** Factor in shipping (~$150-300 USD) and potential import duties (2.5% for optical instruments) when budgeting European purchases.
 
 ```
 RESEARCH_TASK: MN76_SOURCING
@@ -124,6 +136,17 @@ Data to collect:
 
 Expected price range: $2,200 - $3,000 new, $1,500 - $2,200 used
 ```
+
+### Alternative OTAs (If MN76 Unavailable)
+
+If extended searching fails to locate an MN76/MN78, consider these alternatives in order of preference:
+
+| Alternative | Aperture | Notes | Est. Price |
+|-------------|----------|-------|------------|
+| Intes-Micro MN86 | 8" (203mm) f/6 | Larger, same design; heavier (~12 kg); even rarer | $2,500-3,500 used |
+| Intes-Micro MN66 | 6" (152mm) f/6 | Same optics, smaller; more available; lighter (~6 kg) | $800-1,200 used |
+| APM/LZOS 180mm f/8 | 7" (180mm) f/8 | Modern production; slower focal ratio; premium price | $4,000-5,000 new |
+| Explore Scientific MN-152 | 6" (152mm) | In production; mass-produced; budget option | $700-900 new |
 
 ### Optical Accessories
 
@@ -1093,6 +1116,8 @@ For weather protection when not observing:
 
 *Research conducted 2026-01-18 - See docs/research/SOURCING_RESEARCH.md for details*
 
+> **International Builders:** For vendors, forums, and search terms in multiple languages (German, French, Spanish, Russian, Japanese, Chinese, and 10+ more), see **[docs/research/INTERNATIONAL_SOURCING_GUIDE.md](docs/research/INTERNATIONAL_SOURCING_GUIDE.md)**
+
 ### Optical Tube Assembly
 
 | Component | Vendor | URL | Price Est. | Notes |
@@ -1195,6 +1220,7 @@ NIGHTWATCH/
 │   ├── install.sh                   # Pending
 │   └── calibration/                 # Pending - Encoder/PEC routines
 └── docs/
+    ├── SCIENTIFIC_FOUNDATIONS.md   # CREATED - PhD-level optical/atmospheric theory
     ├── assembly/                    # Pending - Build instructions
     ├── operation/                   # Pending - User manual
     └── research/
@@ -1210,6 +1236,8 @@ NIGHTWATCH/
 | 1.0 | 2026-01-17 | Claude | Initial combined build package |
 | 1.1 | 2026-01-18 | Claude | Component sourcing research completed, Appendix A populated |
 | 1.2 | 2026-01-18 | Claude | Core Python services implemented |
+| 1.3 | 2026-01-19 | Claude | Expanded optics section with detailed MN76 Mak-Newtonian rationale; corrected model designation to MN76 (sometimes called MN78) |
+| 1.4 | 2026-01-19 | Claude | Added SCIENTIFIC_FOUNDATIONS.md with PhD-level optical theory, atmospheric physics, and peer-reviewed references |
 
 ---
 

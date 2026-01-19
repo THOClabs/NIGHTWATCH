@@ -1,11 +1,13 @@
 # NIGHTWATCH Component Sourcing Research
 ## Research Date: 2026-01-18
 
+> **International Builders:** For vendors, forums, and search terms in multiple languages (German, French, Spanish, Russian, Japanese, Chinese, and more), see **[INTERNATIONAL_SOURCING_GUIDE.md](./INTERNATIONAL_SOURCING_GUIDE.md)**
+
 ---
 
 ## 1. Intes Micro MN76 Telescope Sourcing
 
-### Status: ACTIVE RESEARCH REQUIRED
+### Status: ACTIVE SEARCH REQUIRED — RARE VINTAGE OPTIC
 
 > **Nomenclature Note:** The 7-inch (178 mm) f/6 Maksutov-Newtonian is officially designated **MN76** by Intes Micro. However, some dealers and Cloudy Nights forum threads refer to it as "MN78." Both designations refer to the same optical tube assembly. Search for both terms when sourcing. (Sources: Cloudy Nights discussions, Stellar Optical listings)
 
@@ -25,14 +27,25 @@ The Intes Micro MN76 (7" f/6 Maksutov-Newtonian, sometimes listed as MN78) remai
 - MN76/MN78 availability requires direct inquiry to distributors
 - Factory located in Russia; export logistics may be complicated
 
-**Pricing Estimates:**
-| Condition | Price Range (USD) | Notes |
-|-----------|-------------------|-------|
-| New (standard) | $2,200 - $3,000 | Direct from distributor |
-| New (APM/Wirth premium) | $3,500 - $5,000 | German machined tube, premium focuser |
-| Used (excellent) | $1,500 - $2,200 | Check Astromart, Cloudy Nights |
+- **Exceptional optical quality:** Hand-figured Russian optics routinely tested at 1/8 wave or better. The Mak-Newt design eliminates coma while maintaining a fast f/6 focal ratio ideal for lucky imaging.
+- **Closed tube design:** Critical for harsh environments like Nevada's high desert. The sealed tube eliminates thermal currents from the primary mirror and protects optics from dust, insects, and moisture.
+- **Low central obstruction:** At ~25% by diameter, significantly smaller than SCTs (33-35%), yielding superior contrast transfer at planetary spatial frequencies.
+- **Thermal stability:** The full-aperture meniscus corrector acts as a thermal buffer, reducing tube currents even during rapid temperature swings.
 
-#### Backup Options
+No current production Mak-Newt offers this combination of aperture, optical quality, and environmental resilience at any price point.
+
+#### Rarity and Search Strategy
+
+The MN76/MN78 appears on the used market infrequently—expect to monitor listings for several months before a specimen surfaces. When one does appear, act quickly; these instruments typically sell within days.
+
+**Recommended Search Terms:**
+- "Intes Micro MN76"
+- "Intes Micro MN78"
+- "Intes MN76"
+- "Intes MN78"
+- "178mm Mak-Newt"
+- "178mm Maksutov-Newtonian"
+- "7 inch Maksutov Newtonian"
 
 1. **Intes Micro MN66** (6" f/6) - $1,295 historical price, lighter, easier to source
 2. **APM 8" f/6 Mak-Newt** - Larger aperture, uses Intes optics, premium tube
@@ -286,6 +299,8 @@ For comparison with DIY approach:
 - [Cloudy Nights - Intes Micro Discussions](https://www.cloudynights.com/topic/168496-intes-micro-maksutov-newton/)
 - [Stellar Optical - Intes Telescopes](https://stellaroptical.com) (historical reference for naming)
 - [Astromart Classifieds](https://www.astromart.com)
+- [Teleskop-Service Germany](https://www.teleskop-service.de)
+- [Stargazers Lounge - Intes Micro](https://stargazerslounge.com)
 
 ### Harmonic Drive Research
 - [Harmonic Drive LLC](https://www.harmonicdrive.net)
