@@ -152,11 +152,11 @@ Create installation scripts, hardware integration guides, and prepare for Nevada
 | 64 | Core Service Completion | catalog | Review catalog.py current implementation | None | 2 | 1 | Complete | Understand gaps |
 | 65 | Core Service Completion | catalog | Create catalog database schema (SQLite) | 64 | 3 | 2 | Complete | Tables for objects |
 | 66 | Core Service Completion | catalog | Add Messier catalog data (M1-M110) to database | 65 | 2 | 2 | Complete | 110 objects |
-| 67 | Core Service Completion | catalog | Add NGC catalog data (top 1000 objects) | 66 | 2 | 3 | Not Started | Popular NGC objects |
-| 68 | Core Service Completion | catalog | Add IC catalog data (top 500 objects) | 67 | 2 | 2 | Not Started | Popular IC objects |
-| 69 | Core Service Completion | catalog | Add named stars (100 brightest) | 68 | 2 | 2 | Not Started | Vega, Polaris, etc. |
-| 70 | Core Service Completion | catalog | Add double stars (50 showpiece doubles) | 69 | 2 | 1 | Not Started | Albireo, etc. |
-| 71 | Core Service Completion | catalog | Implement search by name (fuzzy matching) | 70 | 3 | 2 | Not Started | User-friendly search |
+| 67 | Core Service Completion | catalog | Add NGC catalog data (top 1000 objects) | 66 | 2 | 3 | Complete | Popular NGC objects |
+| 68 | Core Service Completion | catalog | Add IC catalog data (top 500 objects) | 67 | 2 | 2 | Complete | Popular IC objects |
+| 69 | Core Service Completion | catalog | Add named stars (100 brightest) | 68 | 2 | 2 | Complete | Vega, Polaris, etc. |
+| 70 | Core Service Completion | catalog | Add double stars (50 showpiece doubles) | 69 | 2 | 1 | Complete | Albireo, etc. |
+| 71 | Core Service Completion | catalog | Implement search by name (fuzzy matching) | 70 | 3 | 2 | Complete | User-friendly search |
 | 72 | Core Service Completion | catalog | Implement search by coordinates (cone search) | 71 | 3 | 2 | Not Started | RA/Dec range |
 | 73 | Core Service Completion | catalog | Implement search by object type | 72 | 2 | 1 | Not Started | Galaxy, nebula, etc. |
 | 74 | Core Service Completion | catalog | Implement search by magnitude range | 73 | 2 | 1 | Not Started | Brightness filter |

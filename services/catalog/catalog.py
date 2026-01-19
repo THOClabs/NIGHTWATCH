@@ -129,26 +129,53 @@ class CatalogDatabase:
         """Insert an object into the catalog."""
         cursor = self._conn.cursor()
 
-        cursor.execute("""
-            INSERT OR REPLACE INTO objects
-            (catalog_id, name, object_type, ra_hours, dec_degrees,
-             magnitude, size_arcmin, constellation, description)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (
-            obj.catalog_id,
-            obj.name,
-            obj.object_type.value,
-            obj.ra_hours,
-            obj.dec_degrees,
-            obj.magnitude,
-            obj.size_arcmin,
-            obj.constellation,
-            obj.description
-        ))
+        # Check if object already exists
+        cursor.execute(
+            "SELECT id FROM objects WHERE catalog_id = ?",
+            (obj.catalog_id,)
+        )
+        existing = cursor.fetchone()
 
-        object_id = cursor.lastrowid
+        if existing:
+            object_id = existing[0]
+            # Update existing object
+            cursor.execute("""
+                UPDATE objects SET
+                    name = ?, object_type = ?, ra_hours = ?, dec_degrees = ?,
+                    magnitude = ?, size_arcmin = ?, constellation = ?, description = ?
+                WHERE id = ?
+            """, (
+                obj.name,
+                obj.object_type.value,
+                obj.ra_hours,
+                obj.dec_degrees,
+                obj.magnitude,
+                obj.size_arcmin,
+                obj.constellation,
+                obj.description,
+                object_id
+            ))
+        else:
+            # Insert new object
+            cursor.execute("""
+                INSERT INTO objects
+                (catalog_id, name, object_type, ra_hours, dec_degrees,
+                 magnitude, size_arcmin, constellation, description)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                obj.catalog_id,
+                obj.name,
+                obj.object_type.value,
+                obj.ra_hours,
+                obj.dec_degrees,
+                obj.magnitude,
+                obj.size_arcmin,
+                obj.constellation,
+                obj.description
+            ))
+            object_id = cursor.lastrowid
 
-        # Insert aliases
+        # Insert aliases (ignore duplicates)
         for alias in obj.aliases:
             cursor.execute("""
                 INSERT OR IGNORE INTO aliases (object_id, alias)
@@ -303,7 +330,58 @@ class CatalogDatabase:
 
 
 # =============================================================================
-# SAMPLE DATA LOADER
+# FUZZY MATCHING
+# =============================================================================
+
+def _levenshtein_distance(s1: str, s2: str) -> int:
+    """Calculate Levenshtein edit distance between two strings."""
+    if len(s1) < len(s2):
+        return _levenshtein_distance(s2, s1)
+
+    if len(s2) == 0:
+        return len(s1)
+
+    previous_row = range(len(s2) + 1)
+    for i, c1 in enumerate(s1):
+        current_row = [i + 1]
+        for j, c2 in enumerate(s2):
+            insertions = previous_row[j + 1] + 1
+            deletions = current_row[j] + 1
+            substitutions = previous_row[j] + (c1 != c2)
+            current_row.append(min(insertions, deletions, substitutions))
+        previous_row = current_row
+
+    return previous_row[-1]
+
+
+def _similarity_score(query: str, target: str) -> float:
+    """Calculate similarity score (0-1) between query and target string."""
+    query = query.upper()
+    target = target.upper()
+
+    # Exact match
+    if query == target:
+        return 1.0
+
+    # Starts with bonus
+    if target.startswith(query):
+        return 0.95
+
+    # Contains bonus
+    if query in target:
+        return 0.85
+
+    # Levenshtein-based similarity
+    max_len = max(len(query), len(target))
+    if max_len == 0:
+        return 0.0
+
+    distance = _levenshtein_distance(query, target)
+    return max(0.0, 1.0 - (distance / max_len))
+
+
+# =============================================================================
+# CATALOG DATA LOADERS
 # =============================================================================
 
 def load_messier_catalog(db: CatalogDatabase):
@@ -312,117 +390,58 @@ def load_messier_catalog(db: CatalogDatabase):
         from services.catalog.messier_data import get_messier_catalog
         messier = get_messier_catalog()
     except ImportError:
-        # Fallback to minimal sample if data file not available
-        messier = [
-            CatalogObject(
-                catalog_id="M31",
-                name="Andromeda Galaxy",
-                object_type=ObjectType.GALAXY,
-                ra_hours=0.712,
-                dec_degrees=41.269,
-                magnitude=3.4,
-                size_arcmin=190.0,
-                constellation="Andromeda",
-                description="Nearest major galaxy to Milky Way",
-                aliases=["NGC 224", "ANDROMEDA"]
-            ),
-            CatalogObject(
-                catalog_id="M42",
-                name="Orion Nebula",
-                object_type=ObjectType.NEBULA,
-                ra_hours=5.588,
-                dec_degrees=-5.391,
-                magnitude=4.0,
-                size_arcmin=85.0,
-                constellation="Orion",
-                description="Great Orion Nebula",
-                aliases=["NGC 1976", "ORION NEBULA"]
-            ),
-        ]
+        messier = []
 
     for obj in messier:
         db.insert_object(obj)
 
 
+def load_ngc_catalog(db: CatalogDatabase):
+    """Load NGC catalog (popular objects)."""
+    try:
+        from services.catalog.catalog_data import get_ngc_catalog
+        ngc = get_ngc_catalog()
+    except ImportError:
+        ngc = []
+
+    for obj in ngc:
+        db.insert_object(obj)
+
+
+def load_ic_catalog(db: CatalogDatabase):
+    """Load IC catalog (popular objects)."""
+    try:
+        from services.catalog.catalog_data import get_ic_catalog
+        ic = get_ic_catalog()
+    except ImportError:
+        ic = []
+
+    for obj in ic:
+        db.insert_object(obj)
+
+
 def load_named_stars(db: CatalogDatabase):
     """Load bright named stars."""
-    stars = [
-        CatalogObject(
-            catalog_id="HIP 11767",
-            name="Polaris",
-            object_type=ObjectType.STAR,
-            ra_hours=2.530,
-            dec_degrees=89.264,
-            magnitude=2.02,
-            size_arcmin=None,
-            constellation="Ursa Minor",
-            description="North Star, pole star",
-            aliases=["ALPHA UMI", "NORTH STAR", "POLE STAR"]
-        ),
-        CatalogObject(
-            catalog_id="HIP 91262",
-            name="Vega",
-            object_type=ObjectType.STAR,
-            ra_hours=18.616,
-            dec_degrees=38.784,
-            magnitude=0.03,
-            size_arcmin=None,
-            constellation="Lyra",
-            description="Fifth brightest star",
-            aliases=["ALPHA LYR"]
-        ),
-        CatalogObject(
-            catalog_id="HIP 69673",
-            name="Arcturus",
-            object_type=ObjectType.STAR,
-            ra_hours=14.261,
-            dec_degrees=19.182,
-            magnitude=-0.05,
-            size_arcmin=None,
-            constellation="Bootes",
-            description="Fourth brightest star",
-            aliases=["ALPHA BOO"]
-        ),
-        CatalogObject(
-            catalog_id="HIP 24436",
-            name="Rigel",
-            object_type=ObjectType.STAR,
-            ra_hours=5.242,
-            dec_degrees=-8.202,
-            magnitude=0.13,
-            size_arcmin=None,
-            constellation="Orion",
-            description="Blue supergiant in Orion",
-            aliases=["BETA ORI"]
-        ),
-        CatalogObject(
-            catalog_id="HIP 27989",
-            name="Betelgeuse",
-            object_type=ObjectType.STAR,
-            ra_hours=5.920,
-            dec_degrees=7.407,
-            magnitude=0.42,
-            size_arcmin=None,
-            constellation="Orion",
-            description="Red supergiant in Orion",
-            aliases=["ALPHA ORI"]
-        ),
-        CatalogObject(
-            catalog_id="HIP 32349",
-            name="Sirius",
-            object_type=ObjectType.STAR,
-            ra_hours=6.752,
-            dec_degrees=-16.716,
-            magnitude=-1.46,
-            size_arcmin=None,
-            constellation="Canis Major",
-            description="Brightest star in the sky",
-            aliases=["ALPHA CMA", "DOG STAR"]
-        ),
-    ]
+    try:
+        from services.catalog.catalog_data import get_named_stars
+        stars = get_named_stars()
+    except ImportError:
+        stars = []
 
     for star in stars:
         db.insert_object(star)
+
+
+def load_double_stars(db: CatalogDatabase):
+    """Load showpiece double stars."""
+    try:
+        from services.catalog.catalog_data import get_double_stars
+        doubles = get_double_stars()
+    except ImportError:
+        doubles = []
+
+    for double in doubles:
+        db.insert_object(double)
 
 
 # =============================================================================
@@ -440,14 +459,17 @@ class CatalogService:
         self.db = CatalogDatabase(db_path)
 
     def initialize(self):
-        """Initialize database with sample data."""
+        """Initialize database with all catalog data."""
         self.db.connect()
 
-        # Load sample catalogs if database is empty
+        # Load catalogs if database is empty
         stats = self.db.get_stats()
         if stats["total"] == 0:
             load_messier_catalog(self.db)
+            load_ngc_catalog(self.db)
+            load_ic_catalog(self.db)
             load_named_stars(self.db)
+            load_double_stars(self.db)
 
     def close(self):
         """Close database connection."""
@@ -504,6 +526,78 @@ class CatalogService:
             return (obj.ra_hms, obj.dec_dms)
         return None
 
+    def fuzzy_search(
+        self,
+        query: str,
+        min_score: float = 0.6,
+        limit: int = 10
+    ) -> List[Tuple[CatalogObject, float]]:
+        """
+        Search for objects using fuzzy name matching.
+
+        Useful for voice control where names may be misheard or
+        partially spoken. Returns results sorted by match score.
+
+        Args:
+            query: Search string (can be partial or misspelled)
+            min_score: Minimum similarity score (0-1) to include
+            limit: Maximum results to return
+
+        Returns:
+            List of (CatalogObject, score) tuples sorted by score descending
+
+        Examples:
+            fuzzy_search("andromdea") -> [(Andromeda Galaxy, 0.91), ...]
+            fuzzy_search("orion") -> [(Orion Nebula, 0.95), ...]
+            fuzzy_search("betle") -> [(Betelgeuse, 0.75), ...]
+        """
+        cursor = self.db._conn.cursor()
+
+        # Get all objects with names
+        cursor.execute("SELECT * FROM objects WHERE name IS NOT NULL")
+        rows = cursor.fetchall()
+
+        results = []
+        for row in rows:
+            obj = self.db._row_to_object(row)
+            if obj.name:
+                score = _similarity_score(query, obj.name)
+                if score >= min_score:
+                    results.append((obj, score))
+
+            # Also check aliases
+            for alias in obj.aliases:
+                alias_score = _similarity_score(query, alias)
+                if alias_score >= min_score and alias_score > score:
+                    results.append((obj, alias_score))
+                    break
+
+        # Sort by score descending
+        results.sort(key=lambda x: x[1], reverse=True)
+        return results[:limit]
+
+    def suggest(self, query: str, limit: int = 5) -> List[str]:
+        """
+        Get name suggestions for partial input (autocomplete).
+
+        Useful for voice control confirmation.
+
+        Args:
+            query: Partial name input
+            limit: Maximum suggestions
+
+        Returns:
+            List of suggested object names
+        """
+        results = self.fuzzy_search(query, min_score=0.5, limit=limit)
+        suggestions = []
+        for obj, score in results:
+            if obj.name:
+                suggestions.append(obj.name)
+            else:
+                suggestions.append(obj.catalog_id)
+        return suggestions
+
 
 # =============================================================================
 # MAIN (for testing)
@@ -513,10 +607,16 @@ if __name__ == "__main__":
     service = CatalogService(":memory:")  # In-memory for testing
     service.initialize()
 
+    # Get stats
+    stats = service.db.get_stats()
+    print(f"Catalog loaded: {stats['total']} objects")
+    print(f"By type: {stats['by_type']}\n")
+
     # Test lookups
     print("Testing catalog lookups:\n")
 
-    queries = ["M31", "Andromeda", "Orion Nebula", "Polaris", "M13", "Sirius"]
+    queries = ["M31", "Andromeda", "Orion Nebula", "Polaris", "M13", "Sirius",
+               "NGC 7000", "Albireo", "Horsehead"]
 
     for q in queries:
         result = service.lookup(q)
@@ -530,5 +630,20 @@ if __name__ == "__main__":
     # Test what_is
     print("\nVoice response test:")
     print(service.what_is("Ring Nebula"))
+
+    # Test fuzzy search
+    print("\n\nFuzzy search tests:")
+    fuzzy_queries = ["andromdea", "orion", "betle", "pleiads", "horshead"]
+    for q in fuzzy_queries:
+        results = service.fuzzy_search(q, limit=3)
+        print(f"\n'{q}' matches:")
+        for obj, score in results:
+            print(f"  {score:.2f} - {obj.name or obj.catalog_id}")
+
+    # Test suggestions
+    print("\n\nSuggestion tests:")
+    for partial in ["and", "ori", "veg"]:
+        suggestions = service.suggest(partial)
+        print(f"'{partial}' -> {suggestions}")
 
     service.close()
