@@ -511,13 +511,13 @@ Create installation scripts, hardware integration guides, and prepare for Nevada
 | 423 | Tool Handler Implementation | astrometry_tools | Implement center_object handler | 422 | 3 | 2 | Not Started | Precise centering |
 | 424 | Tool Handler Implementation | astrometry_tools | Add iterative refinement | 423 | 3 | 2 | Not Started | Multi-solve |
 | 425 | Tool Handler Implementation | astrometry_tools | Write unit tests for astrometry tool handlers | 424 | 2 | 2 | Not Started | Test coverage |
-| 426 | Tool Handler Implementation | enclosure_tools | Implement open_roof handler | 257 | 2 | 1 | Not Started | Open enclosure |
-| 427 | Tool Handler Implementation | enclosure_tools | Add safety check before open | 426 | 2 | 1 | Not Started | Weather check |
-| 428 | Tool Handler Implementation | enclosure_tools | Implement close_roof handler | 427 | 2 | 1 | Not Started | Close enclosure |
-| 429 | Tool Handler Implementation | enclosure_tools | Add force option for emergency | 428 | 2 | 1 | Not Started | Override |
-| 430 | Tool Handler Implementation | enclosure_tools | Implement get_roof_status handler | 429 | 2 | 1 | Not Started | Enclosure state |
-| 431 | Tool Handler Implementation | enclosure_tools | Add position percentage | 430 | 2 | 1 | Not Started | Partial open |
-| 432 | Tool Handler Implementation | enclosure_tools | Implement stop_roof handler | 431 | 2 | 1 | Not Started | Emergency stop |
+| 426 | Tool Handler Implementation | enclosure_tools | Implement open_roof handler | 257 | 2 | 1 | Complete | open_roof() with park verification |
+| 427 | Tool Handler Implementation | enclosure_tools | Add safety check before open | 426 | 2 | 1 | Complete | safety_monitor.evaluate() in open_roof |
+| 428 | Tool Handler Implementation | enclosure_tools | Implement close_roof handler | 427 | 2 | 1 | Complete | close_roof() with state check |
+| 429 | Tool Handler Implementation | enclosure_tools | Add force option for emergency | 428 | 2 | 1 | Complete | emergency=True bypasses checks |
+| 430 | Tool Handler Implementation | enclosure_tools | Implement get_roof_status handler | 429 | 2 | 1 | Complete | get_roof_status() with blockers |
+| 431 | Tool Handler Implementation | enclosure_tools | Add position percentage | 430 | 2 | 1 | Complete | get_position_percent() in status |
+| 432 | Tool Handler Implementation | enclosure_tools | Implement stop_roof handler | 431 | 2 | 1 | Complete | stop_roof() emergency stop |
 | 433 | Tool Handler Implementation | enclosure_tools | Write unit tests for enclosure tool handlers | 432 | 2 | 2 | Not Started | Test coverage |
 | 434 | Tool Handler Implementation | power_tools | Implement get_power_status handler | 257 | 2 | 1 | Not Started | UPS status |
 | 435 | Tool Handler Implementation | power_tools | Add battery percentage and runtime | 434 | 2 | 1 | Not Started | Power info |

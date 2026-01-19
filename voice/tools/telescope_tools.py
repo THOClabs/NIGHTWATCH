@@ -1085,6 +1085,7 @@ def create_default_handlers(
     alpaca_discovery=None,
     alpaca_filter_wheel=None,
     alpaca_focuser=None,
+    roof_controller=None,
 ) -> Dict[str, Callable]:
     """
     Create default handler functions connected to services.
@@ -1104,6 +1105,7 @@ def create_default_handlers(
         alpaca_discovery: AlpacaDiscovery instance for network device discovery
         alpaca_filter_wheel: AlpacaFilterWheel adapter instance
         alpaca_focuser: AlpacaFocuser adapter instance
+        roof_controller: RoofController instance for enclosure control
 
     Returns:
         Dictionary of handler functions
@@ -1809,6 +1811,149 @@ def create_default_handlers(
         }
 
     handlers["get_hysteresis_status"] = get_hysteresis_status
+
+    # -------------------------------------------------------------------------
+    # ENCLOSURE HANDLERS (Steps 426-432)
+    # -------------------------------------------------------------------------
+
+    async def open_roof() -> str:
+        """Open the roll-off roof (Steps 426-427)."""
+        if not roof_controller:
+            return "Roof controller not available"
+
+        # Step 427: Safety check before open
+        if safety_monitor:
+            status = safety_monitor.evaluate()
+            if not status.is_safe:
+                reasons = "; ".join(status.reasons) if status.reasons else "unknown"
+                return f"Cannot open roof - unsafe conditions: {reasons}"
+
+        # Check if telescope is parked (safety requirement)
+        if mount_client:
+            mount_status = mount_client.get_status()
+            if mount_status and not mount_status.is_parked:
+                return "Cannot open roof - telescope must be parked first"
+
+        # Check current state
+        state = roof_controller.get_state()
+        if hasattr(state, 'value'):
+            state_str = state.value
+        else:
+            state_str = str(state)
+
+        if state_str == "open":
+            return "Roof is already open"
+        if state_str == "opening":
+            return "Roof is already opening"
+
+        # Check emergency stop
+        if hasattr(roof_controller, 'is_emergency_stopped') and roof_controller.is_emergency_stopped:
+            return "Cannot open roof - emergency stop is active. Clear emergency stop first."
+
+        success = await roof_controller.open()
+        if success:
+            return "Opening roof. Please wait for operation to complete."
+        return "Failed to open roof - check controller status"
+
+    handlers["open_roof"] = open_roof
+
+    async def close_roof(emergency: bool = False) -> str:
+        """Close the roll-off roof (Steps 428-429)."""
+        if not roof_controller:
+            return "Roof controller not available"
+
+        # Step 429: Force option for emergency - bypass safety checks
+        if not emergency:
+            # Normal close - check if safe to close
+            state = roof_controller.get_state()
+            if hasattr(state, 'value'):
+                state_str = state.value
+            else:
+                state_str = str(state)
+
+            if state_str == "closed":
+                return "Roof is already closed"
+            if state_str == "closing":
+                return "Roof is already closing"
+        else:
+            # Emergency close - log warning
+            pass  # Logger would log here in production
+
+        success = await roof_controller.close()
+        if success:
+            if emergency:
+                return "EMERGENCY CLOSE initiated - roof closing immediately"
+            return "Closing roof. Please wait for operation to complete."
+        return "Failed to close roof - check controller status"
+
+    handlers["close_roof"] = close_roof
+
+    async def get_roof_status() -> str:
+        """Get current roof status (Steps 430-431)."""
+        if not roof_controller:
+            return "Roof controller not available"
+
+        parts = []
+
+        # Get state
+        state = roof_controller.get_state()
+        if hasattr(state, 'value'):
+            state_str = state.value
+        else:
+            state_str = str(state)
+
+        parts.append(f"Roof state: {state_str}")
+
+        # Step 431: Add position percentage if available
+        if hasattr(roof_controller, 'get_position_percent'):
+            position = roof_controller.get_position_percent()
+            if position is not None:
+                parts.append(f"Position: {position:.0f}% open")
+
+        # Check emergency stop
+        if hasattr(roof_controller, 'is_emergency_stopped') and roof_controller.is_emergency_stopped:
+            parts.append("WARNING: Emergency stop is active")
+
+        # Check if can open
+        can_open = True
+        open_blockers = []
+
+        if safety_monitor:
+            status = safety_monitor.evaluate()
+            if not status.is_safe:
+                can_open = False
+                open_blockers.extend(status.reasons)
+
+        if mount_client:
+            mount_status = mount_client.get_status()
+            if mount_status and not mount_status.is_parked:
+                can_open = False
+                open_blockers.append("Telescope not parked")
+
+        if can_open:
+            parts.append("Safe to open")
+        else:
+            parts.append(f"Cannot open: {'; '.join(open_blockers)}")
+
+        return ". ".join(parts)
+
+    handlers["get_roof_status"] = get_roof_status
+
+    async def stop_roof() -> str:
+        """Emergency stop - immediately halt roof motion (Step 432)."""
+        if not roof_controller:
+            return "Roof controller not available"
+
+        # Use emergency stop if available
+        if hasattr(roof_controller, 'emergency_stop'):
+            await roof_controller.emergency_stop()
+            return "EMERGENCY STOP - Roof motion halted immediately"
+        else:
+            # Fallback to regular stop
+            await roof_controller.stop()
+            return "Roof motion stopped"
+
+    handlers["stop_roof"] = stop_roof
 
     # -------------------------------------------------------------------------
     # ENCODER HANDLERS (Phase 5.1)
