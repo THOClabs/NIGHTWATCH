@@ -77,6 +77,11 @@ class PiperTTS:
 
     Piper is optimized for low-latency on-device inference,
     making it ideal for interactive telescope control.
+
+    Features:
+    - GPU acceleration via CUDA for faster synthesis
+    - Phrase caching for instant playback of common responses
+    - Configurable synthesis parameters (length, noise scales)
     """
 
     # Default voice models (download from Piper releases)
@@ -86,24 +91,64 @@ class PiperTTS:
         "en_GB-alan-medium": "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_GB/alan/medium/",
     }
 
-    def __init__(self, config: Optional[TTSConfig] = None):
+    # Common phrases for telescope control - pre-synthesized for instant playback
+    COMMON_PHRASES = [
+        "Slewing to target",
+        "Tracking started",
+        "Tracking stopped",
+        "Weather alert",
+        "Guiding active",
+        "Guiding stopped",
+        "Exposure complete",
+        "Exposure started",
+        "Park position reached",
+        "Telescope parked",
+        "Unparking telescope",
+        "Ready for commands",
+        "Command acknowledged",
+        "Target acquired",
+        "Below horizon",
+        "Conditions unsafe",
+        "Focusing started",
+        "Focus complete",
+    ]
+
+    def __init__(
+        self,
+        config: Optional[TTSConfig] = None,
+        use_cuda: bool = False,
+        length_scale: float = 1.0,
+        noise_scale: float = 0.667,
+        noise_w: float = 0.8,
+    ):
         """
         Initialize Piper TTS.
 
         Args:
             config: TTS configuration
+            use_cuda: Enable GPU acceleration (requires CUDA-enabled piper)
+            length_scale: Speech speed (1.0 = normal, <1.0 = faster, >1.0 = slower)
+            noise_scale: Variation in speech (0.0-1.0, higher = more expressive)
+            noise_w: Phoneme duration variation (0.0-1.0)
         """
         self.config = config or TTSConfig()
+        self.use_cuda = use_cuda
+        self.length_scale = length_scale
+        self.noise_scale = noise_scale
+        self.noise_w = noise_w
+
         self._voice = None
         self._model_path: Optional[Path] = None
         self._initialized = False
+        self._cache: dict[str, bytes] = {}  # Phrase -> audio bytes cache
 
-    def initialize(self, model_path: Optional[str] = None):
+    def initialize(self, model_path: Optional[str] = None, build_cache: bool = True):
         """
         Initialize TTS engine with voice model.
 
         Args:
             model_path: Path to Piper voice model (.onnx file)
+            build_cache: Pre-synthesize common phrases for instant playback
         """
         if not PIPER_AVAILABLE:
             raise RuntimeError(
@@ -121,13 +166,102 @@ class PiperTTS:
             print("Download voices from: https://github.com/rhasspy/piper/releases")
             return
 
-        self._voice = PiperVoice.load(str(self._model_path))
+        # Load voice model with optional CUDA acceleration
+        try:
+            self._voice = PiperVoice.load(
+                str(self._model_path),
+                use_cuda=self.use_cuda,
+            )
+        except TypeError:
+            # Older piper versions may not support use_cuda parameter
+            self._voice = PiperVoice.load(str(self._model_path))
+            if self.use_cuda:
+                print("Warning: CUDA not supported by this piper version")
+
         self._initialized = True
-        print(f"Piper TTS initialized with voice: {self.config.voice}")
+        cuda_status = " (CUDA)" if self.use_cuda else ""
+        print(f"Piper TTS initialized with voice: {self.config.voice}{cuda_status}")
+
+        # Pre-synthesize common phrases for instant playback
+        if build_cache:
+            self._build_cache()
+
+    def _build_cache(self) -> dict[str, bytes]:
+        """
+        Pre-synthesize frequently used responses for instant playback.
+
+        This reduces latency for common telescope responses by caching
+        the audio data. First response of each phrase will be instant.
+
+        Returns:
+            Dictionary mapping phrases to audio bytes
+        """
+        if not self._initialized or not self._voice:
+            return {}
+
+        print(f"Pre-synthesizing {len(self.COMMON_PHRASES)} common phrases...")
+        cached_count = 0
+
+        for phrase in self.COMMON_PHRASES:
+            try:
+                audio_data = self._synthesize_raw(phrase)
+                if audio_data:
+                    self._cache[phrase] = audio_data
+                    cached_count += 1
+            except Exception as e:
+                print(f"Warning: Failed to cache phrase '{phrase}': {e}")
+
+        print(f"Cached {cached_count} phrases for instant playback")
+        return self._cache
+
+    def _synthesize_raw(self, text: str) -> Optional[bytes]:
+        """
+        Synthesize text to raw audio bytes (internal method).
+
+        Args:
+            text: Text to synthesize
+
+        Returns:
+            Raw audio bytes or None on failure
+        """
+        if not self._voice:
+            return None
+
+        audio_data = []
+        try:
+            for audio_bytes in self._voice.synthesize_stream_raw(
+                text,
+                length_scale=self.length_scale,
+                noise_scale=self.noise_scale,
+                noise_w=self.noise_w,
+            ):
+                audio_data.append(audio_bytes)
+        except TypeError:
+            # Older piper versions may not support synthesis parameters
+            for audio_bytes in self._voice.synthesize_stream_raw(text):
+                audio_data.append(audio_bytes)
+
+        if not audio_data:
+            return None
+
+        return b"".join(audio_data)
+
+    @property
+    def cached_phrases(self) -> list[str]:
+        """Return list of cached phrases available for instant playback."""
+        return list(self._cache.keys())
+
+    @property
+    def cache_size(self) -> int:
+        """Return number of cached phrases."""
+        return len(self._cache)
 
     def synthesize(self, text: str) -> Optional[SpeechOutput]:
         """
         Synthesize speech from text.
+
+        Uses cached audio for common phrases (instant playback),
+        otherwise synthesizes on-demand.
 
         Args:
             text: Text to speak
@@ -138,15 +272,14 @@ class PiperTTS:
         if not self._initialized or not self._voice:
             return None
 
-        # Generate audio
-        audio_data = []
-        for audio_bytes in self._voice.synthesize_stream_raw(text):
-            audio_data.append(audio_bytes)
-
-        if not audio_data:
-            return None
-
-        audio = b"".join(audio_data)
+        # Check cache first for instant playback
+        if text in self._cache:
+            audio = self._cache[text]
+        else:
+            # Synthesize on-demand
+            audio = self._synthesize_raw(text)
+            if not audio:
+                return None
 
         # Calculate duration
         sample_rate = self._voice.config.sample_rate
@@ -187,6 +320,57 @@ class PiperTTS:
         # Play audio
         sd.play(audio, output.sample_rate)
         sd.wait()
+
+    @classmethod
+    def create_for_dgx_spark(
+        cls,
+        config: Optional[TTSConfig] = None,
+    ) -> "PiperTTS":
+        """
+        Create PiperTTS optimized for DGX Spark.
+
+        Uses CUDA acceleration and phrase caching for minimum latency
+        on NVIDIA DGX Spark hardware.
+
+        Args:
+            config: Optional TTS configuration
+
+        Returns:
+            Configured PiperTTS instance (call initialize() to load model)
+        """
+        return cls(
+            config=config,
+            use_cuda=True,           # GPU acceleration
+            length_scale=0.95,       # Slightly faster speech
+            noise_scale=0.667,       # Natural variation
+            noise_w=0.8,             # Natural phoneme duration
+        )
+
+    def add_to_cache(self, phrase: str) -> bool:
+        """
+        Add a custom phrase to the cache.
+
+        Args:
+            phrase: Text to pre-synthesize and cache
+
+        Returns:
+            True if successfully cached, False otherwise
+        """
+        if not self._initialized:
+            return False
+
+        try:
+            audio = self._synthesize_raw(phrase)
+            if audio:
+                self._cache[phrase] = audio
+                return True
+        except Exception as e:
+            print(f"Failed to cache phrase: {e}")
+        return False
+
+    def clear_cache(self):
+        """Clear all cached phrases."""
+        self._cache.clear()
 
 
 class EspeakTTS:
@@ -417,6 +601,7 @@ if __name__ == "__main__":
         tts.initialize()
         print()
 
+        # Test basic phrases
         test_phrases = [
             "NIGHTWATCH telescope system ready.",
             "Slewing to Mars at 45 degrees altitude.",
@@ -428,4 +613,22 @@ if __name__ == "__main__":
             await tts.speak(phrase)
             await asyncio.sleep(0.5)
 
+        # Test cached phrase (should be instant if using PiperTTS)
+        if isinstance(tts._backend, PiperTTS):
+            print(f"\nCached phrases: {tts._backend.cache_size}")
+            cached_phrase = "Slewing to target"
+            if cached_phrase in tts._backend.cached_phrases:
+                print(f"Playing cached: {cached_phrase}")
+                await tts.speak(cached_phrase)
+
+    async def test_dgx_spark():
+        """Test DGX Spark optimized configuration."""
+        print("\n--- DGX Spark Configuration ---")
+        piper = PiperTTS.create_for_dgx_spark()
+        print(f"CUDA enabled: {piper.use_cuda}")
+        print(f"Length scale: {piper.length_scale}")
+        print(f"Noise scale: {piper.noise_scale}")
+        # Note: initialize() not called without model file
+
     asyncio.run(test())
+    asyncio.run(test_dgx_spark())
