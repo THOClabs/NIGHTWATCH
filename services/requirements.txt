@@ -11,3 +11,14 @@ pyserial>=3.5
 
 # Optional: ZWO camera support
 # zwoasi>=0.0.23
+
+# Device Communication (see docs/INTEGRATION_PLAN.md Phase 3)
+# INDI client for Linux device control
+pyindi-client>=2.0.0
+
+# ASCOM Alpaca client for network device control
+alpyca>=2.0.0
+
+# Testing infrastructure (see docs/INTEGRATION_PLAN.md Phase 4)
+pytest-asyncio>=0.21.0
+docker>=6.0.0
