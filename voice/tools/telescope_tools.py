@@ -830,6 +830,28 @@ TELESCOPE_TOOLS: List[Tool] = [
             )
         ]
     ),
+
+    # -------------------------------------------------------------------------
+    # VOICE PIPELINE TOOLS (Phase 5.1 - Voice Interface Enhancement)
+    # -------------------------------------------------------------------------
+    # Voice style and feedback controls
+
+    Tool(
+        name="set_voice_style",
+        description="Change the voice response style for different observing contexts. "
+                    "Use 'alert' for urgent notifications, 'calm' for relaxed sessions, "
+                    "'technical' for detailed diagnostic output, or 'normal' for default.",
+        category=ToolCategory.SESSION,
+        parameters=[
+            ToolParameter(
+                name="style",
+                type="string",
+                description="Voice style: normal, alert, calm, or technical",
+                required=True,
+                enum=["normal", "alert", "calm", "technical"]
+            )
+        ]
+    ),
 ]
 
 
@@ -930,6 +952,7 @@ def create_default_handlers(
     safety_monitor=None,
     encoder_bridge=None,
     onstepx_extended=None,
+    tts_service=None,
 ) -> Dict[str, Callable]:
     """
     Create default handler functions connected to services.
@@ -942,6 +965,7 @@ def create_default_handlers(
         safety_monitor: SafetyMonitor instance
         encoder_bridge: EncoderBridge instance for high-resolution position feedback
         onstepx_extended: OnStepXExtended instance for PEC and driver diagnostics
+        tts_service: TTSService instance for voice style control
 
     Returns:
         Dictionary of handler functions
@@ -1332,6 +1356,45 @@ def create_default_handlers(
 
     handlers["get_driver_status"] = get_driver_status
 
+    # -------------------------------------------------------------------------
+    # VOICE PIPELINE HANDLERS (Phase 5.1)
+    # -------------------------------------------------------------------------
+
+    # Track current voice style (module-level state for simplicity)
+    _voice_state = {"style": "normal"}
+
+    async def set_voice_style(style: str) -> str:
+        """Set voice response style."""
+        valid_styles = ["normal", "alert", "calm", "technical"]
+        style_lower = style.lower()
+
+        if style_lower not in valid_styles:
+            return f"Invalid style '{style}'. Valid options: {', '.join(valid_styles)}"
+
+        _voice_state["style"] = style_lower
+
+        # Apply style to TTS service if available
+        if tts_service and hasattr(tts_service, 'config'):
+            if style_lower == "alert":
+                tts_service.config.rate = 1.2  # Faster speech
+            elif style_lower == "calm":
+                tts_service.config.rate = 0.9  # Slower, relaxed
+            elif style_lower == "technical":
+                tts_service.config.rate = 1.0  # Normal speed, detailed output
+            else:  # normal
+                tts_service.config.rate = 1.0
+
+        style_descriptions = {
+            "normal": "Standard conversational responses",
+            "alert": "Faster, more urgent notifications",
+            "calm": "Slower, relaxed delivery for visual observation",
+            "technical": "Detailed diagnostic output with precise values"
+        }
+
+        return f"Voice style set to {style_lower}. {style_descriptions[style_lower]}."
+
+    handlers["set_voice_style"] = set_voice_style
+
     return handlers
 
 
@@ -1424,6 +1487,14 @@ PERIODIC ERROR CORRECTION (v3.1 - PEC):
 - pec_stop: Stop PEC recording or playback
 - get_driver_status: Check TMC5160 driver health for each axis
 - PEC can reduce tracking error by 50% or more on harmonic drive mounts
+
+VOICE INTERFACE (v3.1 - Voice Pipeline Enhancement):
+- set_voice_style: Adjust response delivery for different contexts:
+  - "normal": Standard conversational responses (default)
+  - "alert": Faster, urgent delivery for time-sensitive notifications
+  - "calm": Slower, relaxed delivery for visual observation sessions
+  - "technical": Detailed diagnostic output with precise numerical values
+- Switch to "calm" for relaxed visual observing, "alert" during imaging runs
 
 Camera settings (Damian Peach recommendations):
 - Mars: gain 280, exposure 8ms
