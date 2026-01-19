@@ -685,11 +685,11 @@ Create installation scripts, hardware integration guides, and prepare for Nevada
 | 597 | Documentation & POS | docs | Add voice command examples | 596 | 2 | 1 | Not Started | Usage examples |
 | 598 | Documentation & POS | docs | Create docs/QUICKSTART.md | 597 | 3 | 2 | Not Started | Fast setup |
 | 599 | Documentation & POS | docs | Create docs/CONFIGURATION.md | 598 | 3 | 2 | Not Started | Full config ref |
-| 600 | Documentation & POS | docs | Create docs/VOICE_COMMANDS.md | 599 | 2 | 2 | Not Started | Command reference |
+| 600 | Documentation & POS | docs | Create docs/VOICE_COMMANDS.md | 599 | 2 | 2 | Complete | Already exists, comprehensive |
 | 601 | Documentation & POS | docs | Create docs/API_REFERENCE.md | 600 | 4 | 3 | Not Started | Service APIs |
 | 602 | Documentation & POS | docs | Create docs/TROUBLESHOOTING.md | 601 | 3 | 2 | Not Started | Common issues |
-| 603 | Documentation & POS | docs | Create docs/HARDWARE_SETUP.md | 602 | 3 | 2 | Not Started | Hardware guide |
-| 604 | Documentation & POS | docs | Create docs/SIMULATOR_GUIDE.md | 603 | 2 | 2 | Not Started | Simulation guide |
+| 603 | Documentation & POS | docs | Create docs/HARDWARE_SETUP.md | 602 | 3 | 2 | Complete | OnStepX, Ecowitt, Audio, Network |
+| 604 | Documentation & POS | docs | Create docs/SIMULATOR_GUIDE.md | 603 | 2 | 2 | Complete | Alpaca, INDI, Mock fixtures |
 | 605 | Documentation & POS | docs | Update docs/INTEGRATION_PLAN.md for v0.1 | 604 | 2 | 1 | Not Started | Alignment |
 | 606 | Documentation & POS | docs | Add architecture diagrams (Mermaid) | 605 | 3 | 2 | Not Started | Visual docs |
 | 607 | Documentation & POS | docs | Add sequence diagrams for key flows | 606 | 3 | 2 | Not Started | Visual docs |
@@ -715,14 +715,14 @@ Create installation scripts, hardware integration guides, and prepare for Nevada
 | 627 | Deployment Preparation | systemd | Add watchdog integration | 626 | 2 | 1 | Complete | WatchdogSec=30, NotifyAccess=main |
 | 628 | Deployment Preparation | systemd | Create nightwatch-wyoming.service | 627 | 2 | 1 | Complete | STT/TTS on ports 10200/10300 |
 | 629 | Deployment Preparation | systemd | Write systemd documentation | 628 | 2 | 1 | Complete | Full README with install, manage, troubleshoot |
-| 630 | Deployment Preparation | hardware | Document OnStepX controller wiring | None | 3 | 2 | Not Started | Hardware guide |
-| 631 | Deployment Preparation | hardware | Document Teensy 4.1 pin assignments | 630 | 2 | 1 | Not Started | Wiring diagram |
-| 632 | Deployment Preparation | hardware | Document encoder wiring | 631 | 2 | 1 | Not Started | AMT103-V |
-| 633 | Deployment Preparation | hardware | Document Ecowitt WS90 network setup | 632 | 2 | 1 | Not Started | Weather station |
+| 630 | Deployment Preparation | hardware | Document OnStepX controller wiring | None | 3 | 2 | Complete | In HARDWARE_SETUP.md |
+| 631 | Deployment Preparation | hardware | Document Teensy 4.1 pin assignments | 630 | 2 | 1 | Complete | Pin table in HARDWARE_SETUP.md |
+| 632 | Deployment Preparation | hardware | Document encoder wiring | 631 | 2 | 1 | Complete | AMT103-V in HARDWARE_SETUP.md |
+| 633 | Deployment Preparation | hardware | Document Ecowitt WS90 network setup | 632 | 2 | 1 | Complete | Network config in HARDWARE_SETUP.md |
 | 634 | Deployment Preparation | hardware | Document AAG CloudWatcher serial setup | 633 | 2 | 1 | Not Started | Cloud sensor |
 | 635 | Deployment Preparation | hardware | Document DGX Spark setup | 634 | 3 | 2 | Not Started | AI compute |
-| 636 | Deployment Preparation | hardware | Document microphone selection and setup | 635 | 2 | 1 | Not Started | Audio input |
-| 637 | Deployment Preparation | hardware | Document speaker selection and setup | 636 | 2 | 1 | Not Started | Audio output |
+| 636 | Deployment Preparation | hardware | Document microphone selection and setup | 635 | 2 | 1 | Complete | Audio section in HARDWARE_SETUP.md |
+| 637 | Deployment Preparation | hardware | Document speaker selection and setup | 636 | 2 | 1 | Complete | Audio section in HARDWARE_SETUP.md |
 | 638 | Deployment Preparation | hardware | Create pre-flight checklist | 637 | 2 | 1 | Not Started | First light prep |
 | 639 | Deployment Preparation | testing | Write hardware integration test plan | 638 | 3 | 2 | Not Started | Real hardware |
 | 640 | Deployment Preparation | testing | Create mount communication test | 639 | 2 | 1 | Not Started | LX200 verify |
