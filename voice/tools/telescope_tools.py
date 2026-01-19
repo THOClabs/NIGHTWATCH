@@ -756,6 +756,80 @@ TELESCOPE_TOOLS: List[Tool] = [
             )
         ]
     ),
+
+    # -------------------------------------------------------------------------
+    # ENCODER TOOLS (Phase 5.1 - EncoderBridge Integration)
+    # -------------------------------------------------------------------------
+    # High-resolution encoder feedback tools (hjd1964/EncoderBridge)
+
+    Tool(
+        name="get_encoder_position",
+        description="Get high-resolution encoder position for both axes. "
+                    "Returns absolute encoder readings for RA and DEC.",
+        category=ToolCategory.MOUNT,
+        parameters=[]
+    ),
+
+    Tool(
+        name="get_pointing_correction",
+        description="Get the current mount pointing error based on encoder feedback. "
+                    "Compares encoder position to mount-reported position to detect "
+                    "periodic error and backlash.",
+        category=ToolCategory.MOUNT,
+        parameters=[]
+    ),
+
+    # -------------------------------------------------------------------------
+    # PEC TOOLS (Phase 5.1 - OnStepX Extended Commands)
+    # -------------------------------------------------------------------------
+    # Periodic Error Correction tools
+
+    Tool(
+        name="pec_status",
+        description="Get periodic error correction (PEC) status. Shows if PEC is "
+                    "recording, playing back, or ready for use.",
+        category=ToolCategory.MOUNT,
+        parameters=[]
+    ),
+
+    Tool(
+        name="pec_start",
+        description="Start periodic error correction playback. PEC must be trained "
+                    "before playback can begin.",
+        category=ToolCategory.MOUNT,
+        parameters=[]
+    ),
+
+    Tool(
+        name="pec_stop",
+        description="Stop periodic error correction recording or playback.",
+        category=ToolCategory.MOUNT,
+        parameters=[]
+    ),
+
+    Tool(
+        name="pec_record",
+        description="Start recording periodic error for one worm gear cycle. "
+                    "Run while autoguiding on a star for best results.",
+        category=ToolCategory.MOUNT,
+        parameters=[]
+    ),
+
+    Tool(
+        name="get_driver_status",
+        description="Get TMC stepper driver diagnostics for an axis. Reports "
+                    "faults like open loads, shorts, and overtemperature.",
+        category=ToolCategory.MOUNT,
+        parameters=[
+            ToolParameter(
+                name="axis",
+                type="number",
+                description="Axis number (1=RA, 2=DEC)",
+                required=False,
+                default=1
+            )
+        ]
+    ),
 ]
 
 
@@ -853,7 +927,9 @@ def create_default_handlers(
     catalog_service=None,
     ephemeris_service=None,
     weather_client=None,
-    safety_monitor=None
+    safety_monitor=None,
+    encoder_bridge=None,
+    onstepx_extended=None,
 ) -> Dict[str, Callable]:
     """
     Create default handler functions connected to services.
@@ -864,6 +940,8 @@ def create_default_handlers(
         ephemeris_service: EphemerisService instance
         weather_client: EcowittClient instance
         safety_monitor: SafetyMonitor instance
+        encoder_bridge: EncoderBridge instance for high-resolution position feedback
+        onstepx_extended: OnStepXExtended instance for PEC and driver diagnostics
 
     Returns:
         Dictionary of handler functions
@@ -1104,6 +1182,156 @@ def create_default_handlers(
 
     handlers["get_hysteresis_status"] = get_hysteresis_status
 
+    # -------------------------------------------------------------------------
+    # ENCODER HANDLERS (Phase 5.1)
+    # -------------------------------------------------------------------------
+
+    async def get_encoder_position() -> str:
+        """Get high-resolution encoder position."""
+        if not encoder_bridge:
+            return "Encoder bridge not available"
+
+        position = await encoder_bridge.get_position()
+        if not position:
+            return "Could not read encoder position"
+
+        return (
+            f"Encoder position:\n"
+            f"  Axis 1 (RA): {position.axis1_degrees:.4f}° ({position.axis1_counts} counts)\n"
+            f"  Axis 2 (DEC): {position.axis2_degrees:.4f}° ({position.axis2_counts} counts)"
+        )
+
+    handlers["get_encoder_position"] = get_encoder_position
+
+    async def get_pointing_correction() -> str:
+        """Get pointing error from encoder vs mount position."""
+        if not encoder_bridge or not mount_client:
+            return "Encoder bridge or mount not available"
+
+        # Get mount-reported position
+        status = mount_client.get_status()
+        if not status:
+            return "Could not get mount position"
+
+        # Convert mount position to degrees
+        mount_ra_deg = (
+            status.ra_hours + status.ra_minutes / 60 + status.ra_seconds / 3600
+        ) * 15.0  # Convert hours to degrees
+        mount_dec_deg = (
+            status.dec_degrees
+            + (status.dec_minutes / 60 if status.dec_degrees >= 0 else -status.dec_minutes / 60)
+            + (status.dec_seconds / 3600 if status.dec_degrees >= 0 else -status.dec_seconds / 3600)
+        )
+
+        # Get encoder error
+        error = await encoder_bridge.get_position_error(mount_ra_deg, mount_dec_deg)
+        if not error:
+            return "Could not calculate pointing error"
+
+        error_ra, error_dec = error
+        # Convert to arcseconds for readability
+        error_ra_arcsec = error_ra * 3600
+        error_dec_arcsec = error_dec * 3600
+
+        return (
+            f"Pointing error (encoder - mount):\n"
+            f"  RA: {error_ra_arcsec:.1f}\" ({error_ra:.4f}°)\n"
+            f"  DEC: {error_dec_arcsec:.1f}\" ({error_dec:.4f}°)"
+        )
+
+    handlers["get_pointing_correction"] = get_pointing_correction
+
+    # -------------------------------------------------------------------------
+    # PEC HANDLERS (Phase 5.1)
+    # -------------------------------------------------------------------------
+
+    async def pec_status() -> str:
+        """Get PEC recording/playback status."""
+        if not onstepx_extended:
+            return "OnStepX extended commands not available"
+
+        status = await onstepx_extended.pec_status()
+        if status.playing:
+            return "PEC is actively playing back corrections"
+        elif status.recording:
+            progress = f" ({status.record_progress * 100:.0f}% complete)" if status.record_progress > 0 else ""
+            return f"PEC is recording{progress}"
+        elif status.ready:
+            return "PEC is trained and ready for playback"
+        else:
+            return "PEC is not configured (no data recorded)"
+
+    handlers["pec_status"] = pec_status
+
+    async def pec_start() -> str:
+        """Start PEC playback."""
+        if not onstepx_extended:
+            return "OnStepX extended commands not available"
+
+        if await onstepx_extended.pec_start_playback():
+            return "PEC playback started - periodic error correction is now active"
+        return "Failed to start PEC playback. Is PEC data available?"
+
+    handlers["pec_start"] = pec_start
+
+    async def pec_stop() -> str:
+        """Stop PEC recording or playback."""
+        if not onstepx_extended:
+            return "OnStepX extended commands not available"
+
+        if await onstepx_extended.pec_stop():
+            return "PEC stopped"
+        return "Failed to stop PEC"
+
+    handlers["pec_stop"] = pec_stop
+
+    async def pec_record() -> str:
+        """Start PEC recording."""
+        if not onstepx_extended:
+            return "OnStepX extended commands not available"
+
+        if await onstepx_extended.pec_record():
+            return (
+                "PEC recording started. Recording will capture one complete worm gear cycle. "
+                "For best results, ensure autoguiding is active on a bright star."
+            )
+        return "Failed to start PEC recording"
+
+    handlers["pec_record"] = pec_record
+
+    async def get_driver_status(axis: int = 1) -> str:
+        """Get TMC driver diagnostics."""
+        if not onstepx_extended:
+            return "OnStepX extended commands not available"
+
+        status = await onstepx_extended.get_driver_status(axis)
+        axis_name = "RA" if axis == 1 else "DEC"
+
+        issues = []
+        if status.open_load_a:
+            issues.append("Open load on coil A")
+        if status.open_load_b:
+            issues.append("Open load on coil B")
+        if status.short_to_ground_a:
+            issues.append("Short to ground on coil A")
+        if status.short_to_ground_b:
+            issues.append("Short to ground on coil B")
+        if status.overtemperature:
+            issues.append("OVERTEMPERATURE WARNING")
+        if status.overtemperature_pre:
+            issues.append("Overtemperature pre-warning")
+        if status.stallguard:
+            issues.append("Stall detected")
+
+        if issues:
+            return f"Axis {axis} ({axis_name}) driver issues:\n  " + "\n  ".join(issues)
+        elif status.standstill:
+            return f"Axis {axis} ({axis_name}) driver: OK (motor at standstill)"
+        else:
+            return f"Axis {axis} ({axis_name}) driver: OK (motor running)"
+
+    handlers["get_driver_status"] = get_driver_status
+
     return handlers
 
 
@@ -1182,6 +1410,20 @@ POWER MANAGEMENT (v3.0):
 - At 20% battery: Emergency roof close and shutdown
 - get_power_events shows recent power outages
 - emergency_shutdown for manual safe shutdown
+
+ENCODER FEEDBACK (v3.1 - EncoderBridge):
+- get_encoder_position: Read high-resolution absolute encoder positions
+- get_pointing_correction: Compare encoder vs mount positions to detect error
+- Use for diagnosing periodic error and backlash
+- Encoder provides "truth" for sub-arcsecond positioning accuracy
+
+PERIODIC ERROR CORRECTION (v3.1 - PEC):
+- pec_status: Check if PEC is recording, playing, or ready
+- pec_record: Start recording PE for one worm gear cycle (use while guiding)
+- pec_start: Begin playback of trained PEC data
+- pec_stop: Stop PEC recording or playback
+- get_driver_status: Check TMC5160 driver health for each axis
+- PEC can reduce tracking error by 50% or more on harmonic drive mounts
 
 Camera settings (Damian Peach recommendations):
 - Mars: gain 280, exposure 8ms
