@@ -19,3 +19,6 @@ __license__ = "CC BY-NC-SA 4.0"
 
 # Version tuple for programmatic comparison
 VERSION_INFO = (0, 1, 0, "dev")
+
+# Core exceptions (import base class for convenience)
+from nightwatch.exceptions import NightwatchError
