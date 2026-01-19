@@ -119,14 +119,14 @@ Create installation scripts, hardware integration guides, and prepare for Nevada
 | 31 | Infrastructure & Configuration | dependencies | Audit voice/requirements.txt for version pinning | None | 2 | 2 | Complete | Reproducible builds |
 | 32 | Infrastructure & Configuration | dependencies | Create requirements-dev.txt for development tools | 30,31 | 2 | 1 | Complete | Dev dependencies |
 | 33 | Infrastructure & Configuration | dependencies | Add pytest-cov to dev requirements | 32 | 1 | 1 | Complete | Coverage reporting |
-| 34 | Infrastructure & Configuration | dependencies | Add ruff to dev requirements | 32 | 1 | 1 | Not Started | Linting |
-| 35 | Infrastructure & Configuration | dependencies | Add mypy to dev requirements | 32 | 1 | 1 | Not Started | Type checking |
-| 36 | Infrastructure & Configuration | dependencies | Add pre-commit to dev requirements | 32 | 1 | 1 | Not Started | Git hooks |
-| 37 | Infrastructure & Configuration | dependencies | Create pyproject.toml with project metadata | 30,31 | 2 | 2 | Not Started | Modern packaging |
-| 38 | Infrastructure & Configuration | dependencies | Configure ruff in pyproject.toml | 37 | 2 | 1 | Not Started | Linting rules |
-| 39 | Infrastructure & Configuration | dependencies | Configure mypy in pyproject.toml | 37 | 2 | 1 | Not Started | Type checking rules |
-| 40 | Infrastructure & Configuration | dependencies | Configure pytest in pyproject.toml | 37 | 2 | 1 | Not Started | Test configuration |
-| 41 | Infrastructure & Configuration | dependencies | Create .pre-commit-config.yaml | 36 | 2 | 1 | Not Started | Pre-commit hooks |
+| 34 | Infrastructure & Configuration | dependencies | Add ruff to dev requirements | 32 | 1 | 1 | Complete | Linting |
+| 35 | Infrastructure & Configuration | dependencies | Add mypy to dev requirements | 32 | 1 | 1 | Complete | Type checking |
+| 36 | Infrastructure & Configuration | dependencies | Add pre-commit to dev requirements | 32 | 1 | 1 | Complete | Git hooks |
+| 37 | Infrastructure & Configuration | dependencies | Create pyproject.toml with project metadata | 30,31 | 2 | 2 | Complete | Modern packaging |
+| 38 | Infrastructure & Configuration | dependencies | Configure ruff in pyproject.toml | 37 | 2 | 1 | Complete | Linting rules |
+| 39 | Infrastructure & Configuration | dependencies | Configure mypy in pyproject.toml | 37 | 2 | 1 | Complete | Type checking rules |
+| 40 | Infrastructure & Configuration | dependencies | Configure pytest in pyproject.toml | 37 | 2 | 1 | Complete | Test configuration |
+| 41 | Infrastructure & Configuration | dependencies | Create .pre-commit-config.yaml | 36 | 2 | 1 | Complete | Pre-commit hooks |
 | 42 | Infrastructure & Configuration | dependencies | Document dependency installation in README | 41 | 2 | 1 | Not Started | User guidance |
 | 43 | Infrastructure & Configuration | startup | Create nightwatch/main.py entry point | 21,29 | 3 | 2 | Not Started | Application entry |
 | 44 | Infrastructure & Configuration | startup | Implement argument parser (--config, --log-level, --dry-run) | 43 | 2 | 1 | Not Started | CLI options |
