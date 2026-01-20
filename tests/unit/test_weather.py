@@ -469,10 +469,140 @@ class TestSensorReadings:
         weather_client._latest_data = sample_weather_data
         assert weather_client.is_dew_risk() is True
 
-    def test_temperature_trend_not_implemented(self, weather_client):
-        """Test temperature trend returns None (Step 205)."""
+    def test_temperature_trend_insufficient_history(self, weather_client):
+        """Test temperature trend returns None with insufficient history (Step 205)."""
+        # With no history, should return None
         trend = weather_client.get_temperature_trend()
         assert trend is None
+
+
+# =============================================================================
+# Temperature History Tests (Step 205)
+# =============================================================================
+
+
+class TestTemperatureHistory:
+    """Tests for temperature history tracking (Step 205)."""
+
+    def test_initial_history_empty(self, weather_client):
+        """Test temperature history is initially empty."""
+        assert len(weather_client._temperature_history) == 0
+
+    def test_record_temperature(self, weather_client):
+        """Test recording temperature adds to history."""
+        from datetime import datetime
+        now = datetime.now()
+        weather_client._record_temperature(now, 72.5)
+        assert len(weather_client._temperature_history) == 1
+        assert weather_client._temperature_history[0] == (now, 72.5)
+
+    def test_record_multiple_temperatures(self, weather_client):
+        """Test recording multiple temperatures."""
+        from datetime import datetime, timedelta
+        base = datetime.now()
+        weather_client._record_temperature(base, 70.0)
+        weather_client._record_temperature(base + timedelta(seconds=30), 71.0)
+        weather_client._record_temperature(base + timedelta(seconds=60), 72.0)
+        assert len(weather_client._temperature_history) == 3
+
+    def test_history_max_size_limit(self, weather_client):
+        """Test history is trimmed when exceeding max size."""
+        from datetime import datetime, timedelta
+        weather_client._temperature_history_max_size = 5
+        base = datetime.now()
+        for i in range(10):
+            weather_client._record_temperature(base + timedelta(seconds=i * 30), 70.0 + i)
+        assert len(weather_client._temperature_history) == 5
+        # Should keep the most recent entries
+        assert weather_client._temperature_history[-1][1] == 79.0
+
+    def test_get_temperature_history_default_limit(self, weather_client):
+        """Test get_temperature_history with default limit."""
+        from datetime import datetime, timedelta
+        base = datetime.now()
+        for i in range(70):
+            weather_client._record_temperature(base + timedelta(seconds=i * 30), 70.0 + i * 0.1)
+        history = weather_client.get_temperature_history()
+        assert len(history) == 60  # Default limit is 60
+
+    def test_get_temperature_history_custom_limit(self, weather_client):
+        """Test get_temperature_history with custom limit."""
+        from datetime import datetime, timedelta
+        base = datetime.now()
+        for i in range(20):
+            weather_client._record_temperature(base + timedelta(seconds=i * 30), 70.0)
+        history = weather_client.get_temperature_history(limit=10)
+        assert len(history) == 10
+
+    def test_clear_temperature_history(self, weather_client):
+        """Test clearing temperature history."""
+        from datetime import datetime
+        weather_client._record_temperature(datetime.now(), 70.0)
+        weather_client._record_temperature(datetime.now(), 71.0)
+        count = weather_client.clear_temperature_history()
+        assert count == 2
+        assert len(weather_client._temperature_history) == 0
+
+    def test_temperature_trend_rising(self, weather_client):
+        """Test temperature trend detection - rising."""
+        from datetime import datetime, timedelta
+        now = datetime.now()
+        # Add older readings (40-70 minutes ago) - cooler
+        for i in range(4):
+            weather_client._record_temperature(now - timedelta(minutes=70 - i * 10), 65.0)
+        # Add recent readings (0-30 minutes ago) - warmer
+        for i in range(4):
+            weather_client._record_temperature(now - timedelta(minutes=30 - i * 10), 70.0)
+        trend = weather_client.get_temperature_trend(window_minutes=30)
+        assert trend == "rising"
+
+    def test_temperature_trend_falling(self, weather_client):
+        """Test temperature trend detection - falling."""
+        from datetime import datetime, timedelta
+        now = datetime.now()
+        # Add older readings (40-70 minutes ago) - warmer
+        for i in range(4):
+            weather_client._record_temperature(now - timedelta(minutes=70 - i * 10), 75.0)
+        # Add recent readings (0-30 minutes ago) - cooler
+        for i in range(4):
+            weather_client._record_temperature(now - timedelta(minutes=30 - i * 10), 70.0)
+        trend = weather_client.get_temperature_trend(window_minutes=30)
+        assert trend == "falling"
+
+    def test_temperature_trend_stable(self, weather_client):
+        """Test temperature trend detection - stable."""
+        from datetime import datetime, timedelta
+        now = datetime.now()
+        # Add older readings (40-70 minutes ago)
+        for i in range(4):
+            weather_client._record_temperature(now - timedelta(minutes=70 - i * 10), 70.0)
+        # Add recent readings (0-30 minutes ago) - same temp
+        for i in range(4):
+            weather_client._record_temperature(now - timedelta(minutes=30 - i * 10), 70.5)
+        trend = weather_client.get_temperature_trend(window_minutes=30)
+        assert trend == "stable"
+
+    def test_temperature_trend_needs_both_windows(self, weather_client):
+        """Test trend returns None if only one window has data."""
+        from datetime import datetime, timedelta
+        now = datetime.now()
+        # Only add recent readings
+        for i in range(4):
+            weather_client._record_temperature(now - timedelta(minutes=i * 5), 70.0)
+        trend = weather_client.get_temperature_trend(window_minutes=30)
+        assert trend is None
+
+    def test_temperature_trend_custom_window(self, weather_client):
+        """Test temperature trend with custom window size."""
+        from datetime import datetime, timedelta
+        now = datetime.now()
+        # Add readings for 20-minute windows
+        for i in range(4):
+            weather_client._record_temperature(now - timedelta(minutes=35 - i * 5), 65.0)
+        for i in range(4):
+            weather_client._record_temperature(now - timedelta(minutes=15 - i * 5), 70.0)
+        trend = weather_client.get_temperature_trend(window_minutes=15)
+        assert trend == "rising"
 
 
 # =============================================================================

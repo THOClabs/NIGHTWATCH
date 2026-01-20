@@ -16,9 +16,10 @@ The WS90 features:
 import aiohttp
 import asyncio
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from enum import Enum
-from typing import Optional
+import math
+from typing import List, Optional, Tuple
 import json
 
 
@@ -49,7 +50,6 @@ class WeatherData:
     temperature_c: float
     feels_like_f: float
     dew_point_f: float
-    ambient_temperature_c: float = 0.0  # Raw ambient sensor
 
     # Humidity
     humidity_percent: float
@@ -65,7 +65,6 @@ class WeatherData:
     rain_daily_in: float
     rain_event_in: float
     is_raining: bool
-    rain_sensor_status: str = "ok"  # Sensor health status
 
     # Solar
     solar_radiation_wm2: float
@@ -75,14 +74,16 @@ class WeatherData:
     pressure_inhg: float
     pressure_trend: str
 
-    # Sky Quality (Step 203)
-    sky_quality_mpsas: Optional[float] = None  # Mag per square arcsec
-    sky_brightness: Optional[str] = None  # "excellent", "good", "fair", "poor"
-
     # Derived
     condition: WeatherCondition
     wind_condition: WindCondition
     safe_to_observe: bool
+
+    # Optional fields with defaults (must come last in dataclass)
+    ambient_temperature_c: float = 0.0  # Raw ambient sensor
+    rain_sensor_status: str = "ok"  # Sensor health status
+    sky_quality_mpsas: Optional[float] = None  # Mag per square arcsec (Step 203)
+    sky_brightness: Optional[str] = None  # "excellent", "good", "fair", "poor"
 
 
 class EcowittClient:
@@ -120,6 +121,10 @@ class EcowittClient:
         self._base_url = f"http://{gateway_ip}:{gateway_port}"
         self._latest_data: Optional[WeatherData] = None
         self._callbacks = []
+
+        # Temperature history tracking (Step 205)
+        self._temperature_history: List[Tuple[datetime, float]] = []
+        self._temperature_history_max_size: int = 120  # 1 hour at 30s intervals
 
     async def fetch_data(self) -> Optional[WeatherData]:
         """
@@ -228,6 +233,10 @@ class EcowittClient:
         )
 
         self._latest_data = weather
+
+        # Record temperature in history (Step 205)
+        self._record_temperature(weather.timestamp, weather.temperature_f)
+
         return weather
 
     def _calculate_dew_point(self, temp_f: float, humidity: float) -> float:
@@ -235,7 +244,8 @@ class EcowittClient:
         temp_c = (temp_f - 32) * 5 / 9
         a = 17.27
         b = 237.7
-        alpha = ((a * temp_c) / (b + temp_c)) + (humidity / 100.0)
+        # Magnus formula: alpha = ln(RH/100) + (a*T)/(b+T)
+        alpha = math.log(humidity / 100.0) + ((a * temp_c) / (b + temp_c))
         dew_c = (b * alpha) / (a - alpha)
         return dew_c * 9 / 5 + 32
 
@@ -343,6 +353,47 @@ class EcowittClient:
         self._callbacks.append(callback)
 
     # =========================================================================
+    # Temperature History Tracking (Step 205)
+    # =========================================================================
+
+    def _record_temperature(self, timestamp: datetime, temp_f: float) -> None:
+        """
+        Record a temperature reading in the history.
+
+        Args:
+            timestamp: Time of the reading
+            temp_f: Temperature in Fahrenheit
+        """
+        self._temperature_history.append((timestamp, temp_f))
+
+        # Trim history if too large
+        if len(self._temperature_history) > self._temperature_history_max_size:
+            self._temperature_history = self._temperature_history[-self._temperature_history_max_size:]
+
+    def get_temperature_history(self, limit: int = 60) -> List[Tuple[datetime, float]]:
+        """
+        Get recent temperature history (Step 205).
+
+        Args:
+            limit: Maximum number of readings to return
+
+        Returns:
+            List of (timestamp, temperature_f) tuples, most recent last
+        """
+        return self._temperature_history[-limit:]
+
+    def clear_temperature_history(self) -> int:
+        """
+        Clear temperature history (Step 205).
+
+        Returns:
+            Number of records cleared
+        """
+        count = len(self._temperature_history)
+        self._temperature_history.clear()
+        return count
+
+    # =========================================================================
     # Individual Sensor Readings (Steps 203-205)
     # =========================================================================
 
@@ -443,19 +494,52 @@ class EcowittClient:
             return self._latest_data.temperature_f
         return None
 
-    def get_temperature_trend(self) -> Optional[str]:
+    def get_temperature_trend(self, window_minutes: int = 30) -> Optional[str]:
         """
         Get temperature trend (Step 205).
 
-        Returns:
-            "rising", "falling", "stable", or None
+        Compares average temperature from the recent window against
+        an older window to detect rising, falling, or stable trends.
 
-        Note:
-            Requires historical data; currently returns None.
-            Future: compare with data from 30 minutes ago.
+        Args:
+            window_minutes: Size of comparison window in minutes (default 30)
+
+        Returns:
+            "rising" if temp increased >1°F, "falling" if decreased >1°F,
+            "stable" if within 1°F, or None if insufficient history
         """
-        # TODO: Implement temperature history tracking
-        return None
+        if len(self._temperature_history) < 4:
+            return None
+
+        now = datetime.now()
+        window_delta = timedelta(minutes=window_minutes)
+
+        # Separate readings into recent (last window_minutes) and older
+        recent_readings = []
+        older_readings = []
+
+        for timestamp, temp in self._temperature_history:
+            age = now - timestamp
+            if age <= window_delta:
+                recent_readings.append(temp)
+            elif age <= window_delta * 2:
+                older_readings.append(temp)
+
+        # Need readings in both windows to determine trend
+        if not recent_readings or not older_readings:
+            return None
+
+        recent_avg = sum(recent_readings) / len(recent_readings)
+        older_avg = sum(older_readings) / len(older_readings)
+        delta = recent_avg - older_avg
+
+        # 1°F threshold for trend detection (same as focus compensation uses)
+        if delta > 1.0:
+            return "rising"
+        elif delta < -1.0:
+            return "falling"
+        else:
+            return "stable"
 
     def is_dew_risk(self) -> bool:
         """
