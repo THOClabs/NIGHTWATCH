@@ -184,7 +184,7 @@ Create installation scripts, hardware integration guides, and prepare for Nevada
 | 96 | Core Service Completion | camera | Add capture abort functionality | 95 | 2 | 1 | Complete | abort_capture(), get_capture_progress() in asi_camera.py |
 | 97 | Core Service Completion | camera | Implement capture progress callbacks | 96 | 3 | 2 | Not Started | Status updates |
 | 98 | Core Service Completion | camera | Add SER file recording for planetary | 97 | 4 | 3 | Not Started | Video format |
-| 99 | Core Service Completion | camera | Create mock camera for testing | 98 | 3 | 2 | Not Started | Simulation mode |
+| 99 | Core Service Completion | camera | Create mock camera for testing | 98 | 3 | 2 | Complete | tests/mocks/mock_camera.py with presets |
 | 100 | Core Service Completion | camera | Write unit tests for camera control | 99 | 2 | 2 | Complete | test_camera_service.py (26 tests) |
 | 101 | Core Service Completion | camera | Write integration test with simulator | 100 | 3 | 2 | Not Started | End-to-end test |
 | 102 | Core Service Completion | astrometry | Review plate_solver.py current implementation | None | 2 | 1 | Complete | Full astrometry.net/ASTAP, WCS parsing, mount sync |
@@ -203,7 +203,7 @@ Create installation scripts, hardware integration guides, and prepare for Nevada
 | 115 | Core Service Completion | astrometry | Add pixel scale estimation from image | 114 | 3 | 2 | Not Started | Auto-detect scale |
 | 116 | Core Service Completion | astrometry | Implement pointing error calculation | 115 | 3 | 2 | Not Started | Mount correction |
 | 117 | Core Service Completion | astrometry | Add center_on_object() sync method | 116 | 3 | 2 | Not Started | Pointing refinement |
-| 118 | Core Service Completion | astrometry | Create mock solver for testing | 117 | 3 | 2 | Not Started | Simulation mode |
+| 118 | Core Service Completion | astrometry | Create mock solver for testing | 117 | 3 | 2 | Complete | tests/mocks/mock_solver.py with error injection |
 | 119 | Core Service Completion | astrometry | Write unit tests for solver backends | 118 | 2 | 2 | Complete | test_plate_solver.py (21 tests) |
 | 120 | Core Service Completion | astrometry | Write integration test with camera | 119 | 3 | 2 | Not Started | End-to-end test |
 | 121 | Core Service Completion | alerts | Review alert_manager.py current implementation | None | 2 | 1 | Complete | Understand gaps |
@@ -247,11 +247,11 @@ Create installation scripts, hardware integration guides, and prepare for Nevada
 | 159 | Core Service Completion | enclosure | Review roof_controller.py current implementation | None | 2 | 1 | Complete | Full ROR control, safety interlocks, rain holdoff |
 | 160 | Core Service Completion | enclosure | Implement GPIO interface abstraction | 159 | 3 | 2 | Not Started | Hardware access |
 | 161 | Core Service Completion | enclosure | Add RPi.GPIO support for Raspberry Pi | 160 | 3 | 2 | Not Started | Pi compatibility |
-| 162 | Core Service Completion | enclosure | Add gpiozero support as alternative | 161 | 2 | 1 | Not Started | Simpler API |
+| 162 | Core Service Completion | enclosure | Add gpiozero support as alternative | 161 | 2 | 1 | Complete | GPIOInterface with gpiozero backend in roof_controller.py |
 | 163 | Core Service Completion | enclosure | Implement relay control for motor | 162 | 3 | 2 | Not Started | Motor drive |
-| 164 | Core Service Completion | enclosure | Add open/close relay wiring logic | 163 | 2 | 1 | Not Started | Directional control |
-| 165 | Core Service Completion | enclosure | Implement limit switch reading (open limit) | 164 | 2 | 2 | Not Started | Position sensing |
-| 166 | Core Service Completion | enclosure | Implement limit switch reading (closed limit) | 165 | 2 | 1 | Not Started | Position sensing |
+| 164 | Core Service Completion | enclosure | Add open/close relay wiring logic | 163 | 2 | 1 | Complete | set_motor_open_relay(), set_motor_close_relay() in GPIOInterface |
+| 165 | Core Service Completion | enclosure | Implement limit switch reading (open limit) | 164 | 2 | 2 | Complete | read_open_limit() in GPIOInterface |
+| 166 | Core Service Completion | enclosure | Implement limit switch reading (closed limit) | 165 | 2 | 1 | Complete | read_closed_limit() in GPIOInterface |
 | 167 | Core Service Completion | enclosure | Add hardware rain sensor input | 166 | 3 | 2 | Not Started | Failsafe interlock |
 | 168 | Core Service Completion | enclosure | Implement rain sensor interrupt handling | 167 | 3 | 2 | Not Started | Immediate response |
 | 169 | Core Service Completion | enclosure | Add motor current monitoring (optional) | 168 | 4 | 3 | Not Started | Over-current protection |
@@ -276,7 +276,7 @@ Create installation scripts, hardware integration guides, and prepare for Nevada
 | 188 | Core Service Completion | focus | Add focus position history tracking | 187 | 2 | 2 | Complete | FocusPositionRecord, get_position_history(), get_position_stats() in focuser_service.py |
 | 189 | Core Service Completion | focus | Implement focus run database | 188 | 3 | 2 | Not Started | Analysis data |
 | 190 | Core Service Completion | focus | Create mock focuser for testing | 189 | 2 | 2 | Complete | tests/mocks/mock_focuser.py with error injection |
-| 191 | Core Service Completion | focus | Write unit tests for autofocus algorithms | 190 | 3 | 2 | Not Started | Test coverage |
+| 191 | Core Service Completion | focus | Write unit tests for autofocus algorithms | 190 | 3 | 2 | Complete | tests/unit/test_focuser_service.py (35 tests) |
 | 192 | Core Service Completion | focus | Write integration test with camera | 191 | 3 | 2 | Not Started | End-to-end test |
 | 193 | Core Service Completion | guiding | Review phd2_client.py current implementation | None | 2 | 1 | Complete | Full JSON-RPC client, dither, calibration, events |
 | 194 | Core Service Completion | guiding | Complete dither implementation | 193 | 3 | 2 | Not Started | Imaging workflow |

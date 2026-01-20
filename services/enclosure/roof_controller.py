@@ -21,6 +21,281 @@ from typing import Optional, List, Callable, Dict, Any
 logger = logging.getLogger("NIGHTWATCH.Enclosure")
 
 
+# =============================================================================
+# GPIO ABSTRACTION (Steps 162, 164, 166)
+# =============================================================================
+
+class GPIOBackend(Enum):
+    """Available GPIO backends."""
+    MOCK = "mock"
+    RPIGPIO = "rpigpio"
+    GPIOZERO = "gpiozero"
+
+
+class GPIOInterface:
+    """
+    Abstract GPIO interface for roof control (Steps 162, 164, 166).
+
+    Provides unified interface for different GPIO backends:
+    - Mock (for testing)
+    - RPi.GPIO (traditional Raspberry Pi)
+    - gpiozero (simpler alternative)
+    """
+
+    def __init__(self, backend: GPIOBackend = GPIOBackend.MOCK):
+        """
+        Initialize GPIO interface.
+
+        Args:
+            backend: GPIO backend to use
+        """
+        self.backend = backend
+        self._gpio = None
+        self._initialized = False
+
+        # Pin configuration
+        self.pin_motor_open = 17      # Relay for open direction
+        self.pin_motor_close = 18     # Relay for close direction
+        self.pin_open_limit = 22      # Open limit switch (NC)
+        self.pin_closed_limit = 23    # Closed limit switch (NC)
+        self.pin_rain_sensor = 24     # Rain sensor (NC)
+
+    def initialize(self) -> bool:
+        """
+        Initialize GPIO backend.
+
+        Returns:
+            True if initialized successfully
+        """
+        if self._initialized:
+            return True
+
+        try:
+            if self.backend == GPIOBackend.GPIOZERO:
+                return self._init_gpiozero()
+            elif self.backend == GPIOBackend.RPIGPIO:
+                return self._init_rpigpio()
+            else:  # MOCK
+                return self._init_mock()
+        except Exception as e:
+            logger.error(f"GPIO initialization failed: {e}")
+            return False
+
+    def _init_gpiozero(self) -> bool:
+        """Initialize gpiozero backend (Step 162)."""
+        try:
+            from gpiozero import OutputDevice, Button
+            self._gpio = {
+                "motor_open": OutputDevice(self.pin_motor_open, active_high=True),
+                "motor_close": OutputDevice(self.pin_motor_close, active_high=True),
+                "open_limit": Button(self.pin_open_limit, pull_up=True),
+                "closed_limit": Button(self.pin_closed_limit, pull_up=True),
+                "rain_sensor": Button(self.pin_rain_sensor, pull_up=True),
+            }
+            self._initialized = True
+            logger.info("GPIO initialized with gpiozero backend")
+            return True
+        except ImportError:
+            logger.warning("gpiozero not available, falling back to mock")
+            return self._init_mock()
+        except Exception as e:
+            logger.error(f"gpiozero initialization failed: {e}")
+            return False
+
+    def _init_rpigpio(self) -> bool:
+        """Initialize RPi.GPIO backend."""
+        try:
+            import RPi.GPIO as GPIO
+            GPIO.setmode(GPIO.BCM)
+            GPIO.setwarnings(False)
+
+            # Setup outputs (relays)
+            GPIO.setup(self.pin_motor_open, GPIO.OUT, initial=GPIO.LOW)
+            GPIO.setup(self.pin_motor_close, GPIO.OUT, initial=GPIO.LOW)
+
+            # Setup inputs (limit switches) with pull-up for NC contacts
+            GPIO.setup(self.pin_open_limit, GPIO.IN, pull_up_down=GPIO.PUD_UP)
+            GPIO.setup(self.pin_closed_limit, GPIO.IN, pull_up_down=GPIO.PUD_UP)
+            GPIO.setup(self.pin_rain_sensor, GPIO.IN, pull_up_down=GPIO.PUD_UP)
+
+            self._gpio = GPIO
+            self._initialized = True
+            logger.info("GPIO initialized with RPi.GPIO backend")
+            return True
+        except ImportError:
+            logger.warning("RPi.GPIO not available, falling back to mock")
+            return self._init_mock()
+        except Exception as e:
+            logger.error(f"RPi.GPIO initialization failed: {e}")
+            return False
+
+    def _init_mock(self) -> bool:
+        """Initialize mock GPIO backend."""
+        self._gpio = {
+            "motor_open": False,
+            "motor_close": False,
+            "open_limit": False,
+            "closed_limit": True,  # Start closed
+            "rain_sensor": False,
+        }
+        self._initialized = True
+        logger.info("GPIO initialized with mock backend")
+        return True
+
+    def cleanup(self) -> None:
+        """Cleanup GPIO resources."""
+        if not self._initialized:
+            return
+
+        if self.backend == GPIOBackend.RPIGPIO and self._gpio:
+            try:
+                self._gpio.cleanup()
+            except Exception:
+                pass
+        elif self.backend == GPIOBackend.GPIOZERO and self._gpio:
+            try:
+                for device in self._gpio.values():
+                    device.close()
+            except Exception:
+                pass
+
+        self._initialized = False
+        logger.info("GPIO cleanup complete")
+
+    # =========================================================================
+    # RELAY CONTROL (Step 164)
+    # =========================================================================
+
+    def set_motor_open_relay(self, state: bool) -> None:
+        """
+        Control open direction motor relay (Step 164).
+
+        Args:
+            state: True to energize relay (motor runs open direction)
+        """
+        if not self._initialized:
+            return
+
+        if self.backend == GPIOBackend.GPIOZERO:
+            if state:
+                self._gpio["motor_open"].on()
+            else:
+                self._gpio["motor_open"].off()
+        elif self.backend == GPIOBackend.RPIGPIO:
+            self._gpio.output(self.pin_motor_open, state)
+        else:  # MOCK
+            self._gpio["motor_open"] = state
+
+        logger.debug(f"Motor open relay: {'ON' if state else 'OFF'}")
+
+    def set_motor_close_relay(self, state: bool) -> None:
+        """
+        Control close direction motor relay (Step 164).
+
+        Args:
+            state: True to energize relay (motor runs close direction)
+        """
+        if not self._initialized:
+            return
+
+        if self.backend == GPIOBackend.GPIOZERO:
+            if state:
+                self._gpio["motor_close"].on()
+            else:
+                self._gpio["motor_close"].off()
+        elif self.backend == GPIOBackend.RPIGPIO:
+            self._gpio.output(self.pin_motor_close, state)
+        else:  # MOCK
+            self._gpio["motor_close"] = state
+
+        logger.debug(f"Motor close relay: {'ON' if state else 'OFF'}")
+
+    def stop_motor(self) -> None:
+        """Stop motor by deactivating both relays."""
+        self.set_motor_open_relay(False)
+        self.set_motor_close_relay(False)
+
+    # =========================================================================
+    # LIMIT SWITCH READING (Step 166)
+    # =========================================================================
+
+    def read_open_limit(self) -> bool:
+        """
+        Read open limit switch state.
+
+        NC (normally closed) contacts: switch pressed = circuit open = True
+
+        Returns:
+            True if open limit switch is active (roof fully open)
+        """
+        if not self._initialized:
+            return False
+
+        if self.backend == GPIOBackend.GPIOZERO:
+            # gpiozero Button: is_pressed = True when circuit open (NC pressed)
+            return self._gpio["open_limit"].is_pressed
+        elif self.backend == GPIOBackend.RPIGPIO:
+            # NC switch with pull-up: LOW when pressed (open)
+            return not self._gpio.input(self.pin_open_limit)
+        else:  # MOCK
+            return self._gpio["open_limit"]
+
+    def read_closed_limit(self) -> bool:
+        """
+        Read closed limit switch state (Step 166).
+
+        NC (normally closed) contacts: switch pressed = circuit open = True
+
+        Returns:
+            True if closed limit switch is active (roof fully closed)
+        """
+        if not self._initialized:
+            return False
+
+        if self.backend == GPIOBackend.GPIOZERO:
+            return self._gpio["closed_limit"].is_pressed
+        elif self.backend == GPIOBackend.RPIGPIO:
+            return not self._gpio.input(self.pin_closed_limit)
+        else:  # MOCK
+            return self._gpio["closed_limit"]
+
+    def read_rain_sensor(self) -> bool:
+        """
+        Read rain sensor state.
+
+        Returns:
+            True if rain is detected
+        """
+        if not self._initialized:
+            return False
+
+        if self.backend == GPIOBackend.GPIOZERO:
+            return self._gpio["rain_sensor"].is_pressed
+        elif self.backend == GPIOBackend.RPIGPIO:
+            return not self._gpio.input(self.pin_rain_sensor)
+        else:  # MOCK
+            return self._gpio["rain_sensor"]
+
+    # =========================================================================
+    # MOCK CONTROL (for testing)
+    # =========================================================================
+
+    def mock_set_open_limit(self, state: bool) -> None:
+        """Set mock open limit switch state (for testing)."""
+        if self.backend == GPIOBackend.MOCK:
+            self._gpio["open_limit"] = state
+
+    def mock_set_closed_limit(self, state: bool) -> None:
+        """Set mock closed limit switch state (for testing)."""
+        if self.backend == GPIOBackend.MOCK:
+            self._gpio["closed_limit"] = state
+
+    def mock_set_rain_sensor(self, state: bool) -> None:
+        """Set mock rain sensor state (for testing)."""
+        if self.backend == GPIOBackend.MOCK:
+            self._gpio["rain_sensor"] = state
+
+
 class RoofState(Enum):
     """Roof position states."""
     OPEN = "open"
