@@ -663,17 +663,17 @@ Create installation scripts, hardware integration guides, and prepare for Nevada
 | 575 | Testing & Quality Assurance | e2e_tests | Create tests/e2e/test_park_unpark.py | 574 | 3 | 2 | Complete | Park/unpark cycle e2e with safety checks |
 | 576 | Testing & Quality Assurance | e2e_tests | Create tests/e2e/test_safety_veto.py | 575 | 3 | 2 | Complete | Safety veto e2e for wind, rain, horizon limits |
 | 577 | Testing & Quality Assurance | e2e_tests | Create tests/e2e/test_weather_response.py | 576 | 3 | 2 | Complete | Weather degradation, improvement, query e2e tests |
-| 578 | Testing & Quality Assurance | e2e_tests | Create tests/e2e/test_session_flow.py | 577 | 4 | 3 | Not Started | Full session |
-| 579 | Testing & Quality Assurance | e2e_tests | Create tests/e2e/test_emergency_shutdown.py | 578 | 3 | 2 | Not Started | Emergency flow |
+| 578 | Testing & Quality Assurance | e2e_tests | Create tests/e2e/test_session_flow.py | 577 | 4 | 3 | Complete | Full session startup, observing, shutdown, recovery tests |
+| 579 | Testing & Quality Assurance | e2e_tests | Create tests/e2e/test_emergency_shutdown.py | 578 | 3 | 2 | Complete | Rain, power failure, manual stop, equipment fault tests |
 | 580 | Testing & Quality Assurance | e2e_tests | Add audio fixture files for voice tests | 579 | 2 | 2 | Complete | Test audio |
 | 581 | Testing & Quality Assurance | ci_cd | Review .github/workflows/ci.yml | None | 2 | 1 | Complete | Has unit tests, integration, lint, docker validation |
 | 582 | Testing & Quality Assurance | ci_cd | Add unit test job with coverage | 581 | 2 | 1 | Complete | pytest --cov with XML/HTML reports in ci.yml |
 | 583 | Testing & Quality Assurance | ci_cd | Add coverage threshold check (80%) | 582 | 2 | 1 | Complete | Coverage threshold check step in ci.yml with warning on <80% |
-| 584 | Testing & Quality Assurance | ci_cd | Add integration test job with simulators | 583 | 3 | 2 | Not Started | Docker tests |
+| 584 | Testing & Quality Assurance | ci_cd | Add integration test job with simulators | 583 | 3 | 2 | Complete | integration-tests-simulators job in ci.yml with docker compose |
 | 585 | Testing & Quality Assurance | ci_cd | Add e2e test job | 584 | 3 | 2 | Not Started | Full tests |
 | 586 | Testing & Quality Assurance | ci_cd | Add type checking job (mypy) | 585 | 2 | 1 | Complete | type-check job in ci.yml with mypy on nightwatch/services/voice |
 | 587 | Testing & Quality Assurance | ci_cd | Add linting job (ruff) | 586 | 2 | 1 | Complete | Enhanced lint job with ruff check and format in ci.yml |
-| 588 | Testing & Quality Assurance | ci_cd | Add security scanning job | 587 | 3 | 2 | Not Started | Vulnerability check |
+| 588 | Testing & Quality Assurance | ci_cd | Add security scanning job | 587 | 3 | 2 | Complete | security-scan job with bandit, pip-audit, secret detection |
 | 589 | Testing & Quality Assurance | ci_cd | Add documentation build job | 588 | 2 | 1 | Complete | docs-validation job in ci.yml |
 | 590 | Testing & Quality Assurance | ci_cd | Add release automation | 589 | 3 | 2 | Not Started | Version tagging |
 | 591 | Testing & Quality Assurance | ci_cd | Create GitHub issue templates | 590 | 2 | 1 | Complete | Bug report, feature request |
