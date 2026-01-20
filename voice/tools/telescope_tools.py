@@ -155,9 +155,18 @@ TELESCOPE_TOOLS: List[Tool] = [
     Tool(
         name="park_telescope",
         description="Park the telescope at its home/park position. "
-                    "Use this to safely stow the telescope.",
+                    "Use this to safely stow the telescope. "
+                    "Requires confirmation if currently tracking.",
         category=ToolCategory.MOUNT,
-        parameters=[]
+        parameters=[
+            ToolParameter(
+                name="confirmed",
+                type="boolean",
+                description="Set to true to confirm park while tracking",
+                required=False,
+                default=False
+            )
+        ]
     ),
 
     Tool(
@@ -199,15 +208,31 @@ TELESCOPE_TOOLS: List[Tool] = [
     Tool(
         name="sync_position",
         description="Sync the telescope's position to a known object. "
-                    "Use after centering an object to improve pointing accuracy.",
+                    "Use after centering an object to improve pointing accuracy. "
+                    "Requires confirmation as it modifies the pointing model.",
         category=ToolCategory.MOUNT,
         parameters=[
             ToolParameter(
                 name="object_name",
                 type="string",
                 description="Name of centered object to sync on"
+            ),
+            ToolParameter(
+                name="confirmed",
+                type="boolean",
+                description="Set to true to confirm sync operation",
+                required=False,
+                default=False
             )
         ]
+    ),
+
+    Tool(
+        name="home_telescope",
+        description="Find the telescope's home position using encoders or limit switches. "
+                    "Use to recalibrate the mount's position reference.",
+        category=ToolCategory.MOUNT,
+        parameters=[]
     ),
 
     # -------------------------------------------------------------------------
@@ -1259,8 +1284,8 @@ def create_default_handlers(
 
     handlers["goto_coordinates"] = goto_coordinates
 
-    async def park_telescope() -> str:
-        """Park telescope at home position (Step 337)."""
+    async def park_telescope(confirmed: bool = False) -> str:
+        """Park telescope at home position (Steps 337-338)."""
         if not mount_client:
             return "Mount not available"
 
@@ -1268,6 +1293,10 @@ def create_default_handlers(
         status = mount_client.get_status()
         if status and status.is_parked:
             return "Telescope is already parked"
+
+        # Step 338: Require confirmation if currently tracking/observing
+        if status and status.is_tracking and not confirmed:
+            return "Telescope is currently tracking. Say 'confirm park' to park and end tracking."
 
         success = mount_client.park()
         if success:
@@ -1393,6 +1422,85 @@ def create_default_handlers(
         return ". ".join(parts)
 
     handlers["get_mount_status"] = get_mount_status
+
+    async def sync_position(object_name: str, confirmed: bool = False) -> str:
+        """Sync telescope position to a known object (Steps 347-348)."""
+        if not mount_client:
+            return "Mount not available"
+
+        # Step 348: Require confirmation for sync - it changes pointing model
+        if not confirmed:
+            return f"Sync will update pointing model to match '{object_name}'. Say 'confirm sync' to proceed."
+
+        # Look up object coordinates
+        obj = None
+        ra = None
+        dec = None
+
+        if catalog_service:
+            obj = catalog_service.lookup(object_name)
+            if obj:
+                ra = obj.ra_hms
+                dec = obj.dec_dms
+
+        if not obj and ephemeris_service:
+            # Try planets
+            try:
+                from services.ephemeris import CelestialBody
+                body = CelestialBody(object_name.lower())
+                pos = ephemeris_service.get_body_position(body)
+                ra = pos.ra_hms
+                dec = pos.dec_dms
+            except (ValueError, KeyError):
+                pass
+
+        if not ra or not dec:
+            return f"Cannot sync - object '{object_name}' not found"
+
+        # Perform sync
+        if hasattr(mount_client, 'sync'):
+            success = mount_client.sync(ra, dec)
+        elif hasattr(mount_client, 'sync_ra_dec'):
+            success = mount_client.sync_ra_dec(ra, dec)
+        else:
+            return "Mount does not support sync operation"
+
+        if success:
+            return f"Position synced to {object_name}. Pointing model updated."
+        return f"Failed to sync position to {object_name}"
+
+    handlers["sync_position"] = sync_position
+
+    async def home_telescope() -> str:
+        """Send telescope to home position (Step 349)."""
+        if not mount_client:
+            return "Mount not available"
+
+        # Check if already at home
+        status = mount_client.get_status()
+        if status and hasattr(status, 'at_home') and status.at_home:
+            return "Telescope is already at home position"
+
+        # Stop any current motion first
+        mount_client.stop()
+
+        # Send home command
+        if hasattr(mount_client, 'find_home'):
+            success = mount_client.find_home()
+        elif hasattr(mount_client, 'home'):
+            success = mount_client.home()
+        else:
+            # Fall back to park if no home command
+            success = mount_client.park()
+            if success:
+                return "Home command not available - parked telescope instead"
+            return "Mount does not support home operation"
+
+        if success:
+            return "Finding home position. Please wait for completion."
+        return "Failed to start home sequence"
+
+    handlers["home_telescope"] = home_telescope
 
     # Catalog handlers
     async def lookup_object(object_name: str) -> str:
@@ -1793,11 +1901,13 @@ def create_default_handlers(
     handlers["get_sensor_health"] = get_sensor_health
 
     async def get_hysteresis_status() -> dict:
-        """Get current safety hysteresis state."""
+        """Get current safety hysteresis state (Steps 383-384)."""
         if not safety_monitor:
             return {"error": "Safety monitor not available"}
 
-        return {
+        from datetime import datetime
+
+        result = {
             "wind_triggered": safety_monitor._wind_triggered,
             "humidity_triggered": safety_monitor._humidity_triggered,
             "cloud_triggered": safety_monitor._cloud_triggered,
@@ -1807,8 +1917,33 @@ def create_default_handlers(
                 "wind_clear_mph": safety_monitor.thresholds.wind_limit_mph - safety_monitor.thresholds.wind_hysteresis_mph,
                 "humidity_limit": safety_monitor.thresholds.humidity_limit,
                 "humidity_clear": safety_monitor.thresholds.humidity_limit - safety_monitor.thresholds.humidity_hysteresis
-            }
+            },
+            # Step 384: Time until threshold reset
+            "time_to_reset": {}
         }
+
+        # Calculate time until rain holdoff clears
+        if hasattr(safety_monitor, '_last_rain_time') and safety_monitor._last_rain_time:
+            elapsed = (datetime.now() - safety_monitor._last_rain_time).total_seconds() / 60.0
+            holdoff = safety_monitor.thresholds.rain_holdoff_minutes
+            if elapsed < holdoff:
+                remaining = holdoff - elapsed
+                result["time_to_reset"]["rain_holdoff_minutes"] = round(remaining, 1)
+
+        # Calculate time until safe to resume (if currently unsafe)
+        if hasattr(safety_monitor, '_safe_since') and safety_monitor._safe_since:
+            safe_duration = (datetime.now() - safety_monitor._safe_since).total_seconds()
+            resume_threshold = safety_monitor.thresholds.safe_duration_to_resume
+            if safe_duration < resume_threshold:
+                remaining = (resume_threshold - safe_duration) / 60.0
+                result["time_to_reset"]["safe_resume_minutes"] = round(remaining, 1)
+
+        # If unsafe, show time since unsafe started
+        if hasattr(safety_monitor, '_unsafe_since') and safety_monitor._unsafe_since:
+            unsafe_duration = (datetime.now() - safety_monitor._unsafe_since).total_seconds()
+            result["unsafe_duration_seconds"] = round(unsafe_duration, 0)
+
+        return result
 
     handlers["get_hysteresis_status"] = get_hysteresis_status
 

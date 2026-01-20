@@ -423,7 +423,7 @@ Create installation scripts, hardware integration guides, and prepare for Nevada
 | 335 | Tool Handler Implementation | mount_tools | Implement goto_coordinates handler | 334 | 2 | 1 | Complete | goto_coordinates() with safety and altitude checks |
 | 336 | Tool Handler Implementation | mount_tools | Add coordinate validation (0-24h, -90 to +90) | 335 | 2 | 1 | Complete | Range and format validation in goto_coordinates |
 | 337 | Tool Handler Implementation | mount_tools | Implement park_telescope handler | 336 | 2 | 1 | Complete | park_telescope() with status check |
-| 338 | Tool Handler Implementation | mount_tools | Add confirmation requirement for park | 337 | 2 | 1 | Not Started | Safety |
+| 338 | Tool Handler Implementation | mount_tools | Add confirmation requirement for park | 337 | 2 | 1 | Complete | park_telescope(confirmed) requires confirm if tracking |
 | 339 | Tool Handler Implementation | mount_tools | Implement unpark_telescope handler | 338 | 2 | 1 | Complete | unpark_telescope() with safety check |
 | 340 | Tool Handler Implementation | mount_tools | Add safety check before unpark | 339 | 2 | 1 | Complete | safety_monitor.evaluate() in unpark_telescope |
 | 341 | Tool Handler Implementation | mount_tools | Implement stop_telescope handler | 340 | 2 | 1 | Complete | stop_telescope() emergency stop |
@@ -432,9 +432,9 @@ Create installation scripts, hardware integration guides, and prepare for Nevada
 | 344 | Tool Handler Implementation | mount_tools | Implement stop_tracking handler | 343 | 2 | 1 | Complete | stop_tracking() handler |
 | 345 | Tool Handler Implementation | mount_tools | Implement get_mount_status handler | 344 | 2 | 1 | Complete | get_mount_status() with position and state |
 | 346 | Tool Handler Implementation | mount_tools | Add formatted position in status response | 345 | 2 | 1 | Complete | RA/Dec formatting with altitude |
-| 347 | Tool Handler Implementation | mount_tools | Implement sync_position handler | 346 | 2 | 1 | Not Started | Pointing sync |
-| 348 | Tool Handler Implementation | mount_tools | Add confirmation requirement for sync | 347 | 2 | 1 | Not Started | Safety |
-| 349 | Tool Handler Implementation | mount_tools | Implement home_telescope handler | 348 | 2 | 1 | Not Started | Find home |
+| 347 | Tool Handler Implementation | mount_tools | Implement sync_position handler | 346 | 2 | 1 | Complete | sync_position() with catalog/ephemeris lookup |
+| 348 | Tool Handler Implementation | mount_tools | Add confirmation requirement for sync | 347 | 2 | 1 | Complete | sync_position(confirmed) requires confirm |
+| 349 | Tool Handler Implementation | mount_tools | Implement home_telescope handler | 348 | 2 | 1 | Complete | home_telescope() with find_home/home fallback |
 | 350 | Tool Handler Implementation | mount_tools | Add home position offset setting | 349 | 2 | 1 | Not Started | Calibration |
 | 351 | Tool Handler Implementation | mount_tools | Write unit tests for mount tool handlers | 350 | 2 | 2 | Not Started | Test coverage |
 | 352 | Tool Handler Implementation | catalog_tools | Implement lookup_object handler | 257,78 | 2 | 1 | Not Started | Object search |
@@ -468,10 +468,10 @@ Create installation scripts, hardware integration guides, and prepare for Nevada
 | 380 | Tool Handler Implementation | safety_tools | Add detailed reason if unsafe | 379 | 2 | 1 | Complete | Categorized reasons with current readings |
 | 381 | Tool Handler Implementation | safety_tools | Implement get_sensor_health handler | 380 | 2 | 1 | Complete | get_sensor_health() returns string status |
 | 382 | Tool Handler Implementation | safety_tools | Add last reading timestamps | 381 | 2 | 1 | Complete | Timestamps and age in sensor health |
-| 383 | Tool Handler Implementation | safety_tools | Implement get_hysteresis_status handler | 382 | 2 | 1 | Not Started | Threshold states |
-| 384 | Tool Handler Implementation | safety_tools | Add time until threshold reset | 383 | 2 | 1 | Not Started | Wait time |
+| 383 | Tool Handler Implementation | safety_tools | Implement get_hysteresis_status handler | 382 | 2 | 1 | Complete | get_hysteresis_status() with triggered states |
+| 384 | Tool Handler Implementation | safety_tools | Add time until threshold reset | 383 | 2 | 1 | Complete | time_to_reset with rain holdoff and resume times |
 | 385 | Tool Handler Implementation | safety_tools | Write unit tests for safety tool handlers | 384 | 2 | 2 | Not Started | Test coverage |
-| 386 | Tool Handler Implementation | session_tools | Implement confirm_command handler | 257 | 2 | 1 | Not Started | User confirmation |
+| 386 | Tool Handler Implementation | session_tools | Implement confirm_command handler | 257 | 2 | 1 | Complete | confirm_command() returns confirmation prompt |
 | 387 | Tool Handler Implementation | session_tools | Add timeout for confirmation | 386 | 2 | 1 | Not Started | Auto-cancel |
 | 388 | Tool Handler Implementation | session_tools | Implement get_observation_log handler | 387 | 2 | 1 | Not Started | Session history |
 | 389 | Tool Handler Implementation | session_tools | Add filtering by date range | 388 | 2 | 1 | Not Started | History query |
