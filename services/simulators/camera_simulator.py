@@ -700,6 +700,305 @@ class CameraSimulator:
         return stats
 
     # =========================================================================
+    # SER File Recording (Step 98)
+    # =========================================================================
+
+    async def record_ser_file(
+        self,
+        filepath: str,
+        duration_sec: float,
+        roi: Optional[Tuple[int, int, int, int]] = None,
+        observer: str = "NIGHTWATCH",
+        telescope: str = "Observatory",
+        progress_callback: Optional[Callable[[int, int], None]] = None
+    ) -> dict:
+        """
+        Record planetary video to SER file format (Step 98).
+
+        SER is the standard format for planetary imaging, supported by
+        all major stacking software (AutoStakkert!, RegiStax, PIPP).
+
+        SER format specification:
+        - 14-byte signature "LUCAM-RECORDER"
+        - 178-byte header with metadata
+        - Raw frame data (uncompressed)
+        - Optional timestamp trailer
+
+        Args:
+            filepath: Output .ser file path
+            duration_sec: Recording duration in seconds
+            roi: Optional region of interest (x, y, width, height)
+            observer: Observer name for header
+            telescope: Telescope/instrument name for header
+            progress_callback: Called with (current_frame, total_estimated)
+
+        Returns:
+            Dict with recording statistics
+        """
+        logger.info(f"Starting SER recording: {filepath}, {duration_sec}s")
+
+        # Initialize SER writer
+        ser_writer = SERWriter(
+            filepath=filepath,
+            width=roi[2] if roi else self.props.max_width // self._binning,
+            height=roi[3] if roi else self.props.max_height // self._binning,
+            bit_depth=self.props.bit_depth,
+            color_mode=SERColorMode.RGB if self.props.is_color else SERColorMode.MONO,
+            observer=observer,
+            telescope=telescope,
+        )
+
+        frame_count = 0
+        timestamps = []
+        start_time = time.time()
+
+        try:
+            ser_writer.open()
+
+            # Estimate total frames
+            frame_time = max(self._exposure_us / 1_000_000, 0.01)
+            estimated_frames = int(duration_sec / frame_time)
+
+            # Capture frames
+            while (time.time() - start_time) < duration_sec:
+                # Generate frame
+                if roi:
+                    frame_data = self._generate_stream_frame()
+                else:
+                    frame_data = self.capture_frame()
+
+                # Write to SER
+                timestamp = datetime.now()
+                ser_writer.write_frame(frame_data, timestamp)
+                timestamps.append(timestamp)
+                frame_count += 1
+
+                if progress_callback:
+                    progress_callback(frame_count, estimated_frames)
+
+                # Frame timing
+                await asyncio.sleep(frame_time)
+
+        finally:
+            ser_writer.close()
+
+        duration = time.time() - start_time
+        actual_fps = frame_count / duration if duration > 0 else 0
+
+        stats = {
+            "filepath": filepath,
+            "total_frames": frame_count,
+            "duration_sec": duration,
+            "actual_fps": actual_fps,
+            "width": ser_writer.width,
+            "height": ser_writer.height,
+            "bit_depth": ser_writer.bit_depth,
+            "file_size_mb": Path(filepath).stat().st_size / (1024 * 1024) if Path(filepath).exists() else 0,
+        }
+
+        logger.info(f"SER recording complete: {frame_count} frames, {stats['file_size_mb']:.1f} MB")
+
+        return stats
+
+
+class SERColorMode(Enum):
+    """SER file color modes."""
+    MONO = 0
+    BAYER_RGGB = 8
+    BAYER_GRBG = 9
+    BAYER_GBRG = 10
+    BAYER_BGGR = 11
+    BAYER_CYYM = 16
+    BAYER_YCMY = 17
+    BAYER_YMCY = 18
+    BAYER_MYYC = 19
+    RGB = 100
+    BGR = 101
+
+
+class SERWriter:
+    """
+    SER file writer for planetary video recording (Step 98).
+
+    Implements the SER file format specification for planetary imaging.
+    Compatible with AutoStakkert!, RegiStax, PIPP, and other stacking software.
+
+    SER Format Structure:
+    - Header (178 bytes)
+    - Frame data (width * height * bytes_per_pixel * frame_count)
+    - Timestamps (optional, 8 bytes per frame)
+    """
+
+    # SER file signature
+    SIGNATURE = b"LUCAM-RECORDER"
+
+    def __init__(
+        self,
+        filepath: str,
+        width: int,
+        height: int,
+        bit_depth: int = 8,
+        color_mode: SERColorMode = SERColorMode.MONO,
+        observer: str = "",
+        telescope: str = "",
+        instrument: str = "NIGHTWATCH Camera"
+    ):
+        """
+        Initialize SER writer.
+
+        Args:
+            filepath: Output file path
+            width: Frame width in pixels
+            height: Frame height in pixels
+            bit_depth: Bits per pixel (8 or 16)
+            color_mode: Color/Bayer mode
+            observer: Observer name (max 40 chars)
+            telescope: Telescope name (max 40 chars)
+            instrument: Instrument name (max 40 chars)
+        """
+        self.filepath = filepath
+        self.width = width
+        self.height = height
+        self.bit_depth = bit_depth
+        self.color_mode = color_mode
+        self.observer = observer[:40]
+        self.telescope = telescope[:40]
+        self.instrument = instrument[:40]
+
+        self._file = None
+        self._frame_count = 0
+        self._timestamps: List[datetime] = []
+        self._header_written = False
+
+    def open(self):
+        """Open file and write header."""
+        self._file = open(self.filepath, 'wb')
+        self._write_header()
+        self._header_written = True
+
+    def _write_header(self):
+        """Write SER file header (178 bytes)."""
+        import struct
+
+        # Determine bytes per pixel
+        if self.color_mode == SERColorMode.RGB:
+            planes = 3
+        elif self.color_mode == SERColorMode.BGR:
+            planes = 3
+        else:
+            planes = 1
+
+        bytes_per_pixel = (self.bit_depth + 7) // 8 * planes
+
+        # Build header
+        header = bytearray(178)
+
+        # Signature (14 bytes)
+        header[0:14] = self.SIGNATURE
+
+        # LuID - camera ID (4 bytes)
+        struct.pack_into('<I', header, 14, 0)
+
+        # ColorID (4 bytes)
+        struct.pack_into('<I', header, 18, self.color_mode.value)
+
+        # LittleEndian (4 bytes) - 0 for big endian, 1 for little endian
+        struct.pack_into('<I', header, 22, 1)
+
+        # ImageWidth (4 bytes)
+        struct.pack_into('<I', header, 26, self.width)
+
+        # ImageHeight (4 bytes)
+        struct.pack_into('<I', header, 30, self.height)
+
+        # PixelDepthPerPlane (4 bytes)
+        struct.pack_into('<I', header, 34, self.bit_depth)
+
+        # FrameCount (4 bytes) - placeholder, updated on close
+        struct.pack_into('<I', header, 38, 0)
+
+        # Observer (40 bytes)
+        observer_bytes = self.observer.encode('utf-8')[:40].ljust(40, b'\x00')
+        header[42:82] = observer_bytes
+
+        # Instrument (40 bytes)
+        instrument_bytes = self.instrument.encode('utf-8')[:40].ljust(40, b'\x00')
+        header[82:122] = instrument_bytes
+
+        # Telescope (40 bytes)
+        telescope_bytes = self.telescope.encode('utf-8')[:40].ljust(40, b'\x00')
+        header[122:162] = telescope_bytes
+
+        # DateTime (8 bytes) - local time as Windows FILETIME
+        # FILETIME is 100-nanosecond intervals since Jan 1, 1601
+        now = datetime.now()
+        # Convert to Windows FILETIME
+        epoch_diff = 116444736000000000  # 100-ns intervals from 1601 to 1970
+        timestamp = int(now.timestamp() * 10000000) + epoch_diff
+        struct.pack_into('<Q', header, 162, timestamp)
+
+        # DateTime_UTC (8 bytes)
+        utc_now = datetime.utcnow()
+        utc_timestamp = int(utc_now.timestamp() * 10000000) + epoch_diff
+        struct.pack_into('<Q', header, 170, utc_timestamp)
+
+        self._file.write(header)
+
+    def write_frame(self, frame_data: bytes, timestamp: Optional[datetime] = None):
+        """
+        Write a single frame to the SER file.
+
+        Args:
+            frame_data: Raw frame bytes
+            timestamp: Frame timestamp (for trailer)
+        """
+        if not self._file or not self._header_written:
+            raise RuntimeError("SER file not open")
+
+        self._file.write(frame_data)
+        self._frame_count += 1
+
+        if timestamp:
+            self._timestamps.append(timestamp)
+
+    def close(self):
+        """Close file and update frame count in header."""
+        if not self._file:
+            return
+
+        import struct
+
+        # Write timestamp trailer if we have timestamps
+        if self._timestamps:
+            epoch_diff = 116444736000000000
+            for ts in self._timestamps:
+                filetime = int(ts.timestamp() * 10000000) + epoch_diff
+                self._file.write(struct.pack('<Q', filetime))
+
+        # Update frame count in header
+        self._file.seek(38)
+        self._file.write(struct.pack('<I', self._frame_count))
+
+        self._file.close()
+        self._file = None
+
+        logger.debug(f"SER file closed: {self._frame_count} frames")
+
+    @property
+    def frame_count(self) -> int:
+        """Get current frame count."""
+        return self._frame_count
+
+    def __enter__(self):
+        self.open()
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.close()
+        return False
+
+
+    # =========================================================================
     # Cooler Simulation
     # =========================================================================
 

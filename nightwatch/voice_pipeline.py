@@ -224,6 +224,132 @@ ASTRONOMY_NORMALIZATIONS = {
 
 
 # =============================================================================
+# Wake Word Detection (Step 298)
+# =============================================================================
+
+
+class WakeWordDetector:
+    """
+    Detect wake words in transcribed text (Step 298).
+
+    Supports:
+    - Exact match: "nightwatch" matches "nightwatch"
+    - Prefix phrases: "hey nightwatch" matches "hey nightwatch, slew to M31"
+    - Fuzzy matching: "night watch" matches "nightwatch"
+    """
+
+    # Common wake word variations
+    VARIATIONS = {
+        "nightwatch": ["nightwatch", "night watch", "night-watch", "nitewatch"],
+        "hey nightwatch": [
+            "hey nightwatch", "hey night watch", "hey night-watch",
+            "hey nitewatch", "hi nightwatch", "hi night watch",
+        ],
+        "ok nightwatch": [
+            "ok nightwatch", "okay nightwatch", "o k nightwatch",
+            "ok night watch", "okay night watch",
+        ],
+    }
+
+    def __init__(self, wake_word: str, fuzzy_threshold: float = 0.8):
+        """
+        Initialize wake word detector.
+
+        Args:
+            wake_word: The wake word/phrase to detect
+            fuzzy_threshold: Minimum similarity ratio for fuzzy matching (0-1)
+        """
+        self.wake_word = wake_word.lower().strip()
+        self.fuzzy_threshold = fuzzy_threshold
+
+        # Build list of acceptable variations
+        self.acceptable_variations: List[str] = [self.wake_word]
+        for base, variations in self.VARIATIONS.items():
+            if base in self.wake_word or self.wake_word in base:
+                self.acceptable_variations.extend(variations)
+
+        # Remove duplicates
+        self.acceptable_variations = list(set(self.acceptable_variations))
+
+    def _similarity(self, s1: str, s2: str) -> float:
+        """
+        Calculate similarity ratio between two strings.
+
+        Uses simple character-based similarity (Jaccard-like).
+        """
+        if not s1 or not s2:
+            return 0.0
+
+        # Normalize strings
+        s1 = s1.lower().replace("-", " ").replace("_", " ")
+        s2 = s2.lower().replace("-", " ").replace("_", " ")
+
+        # Character set similarity
+        set1 = set(s1.replace(" ", ""))
+        set2 = set(s2.replace(" ", ""))
+
+        if not set1 or not set2:
+            return 0.0
+
+        intersection = len(set1 & set2)
+        union = len(set1 | set2)
+
+        return intersection / union if union > 0 else 0.0
+
+    def detect(self, text: str) -> Tuple[bool, str]:
+        """
+        Check if text contains the wake word.
+
+        Args:
+            text: Transcribed text to check
+
+        Returns:
+            Tuple of (detected: bool, command: str)
+            - detected: True if wake word was found
+            - command: Remaining text after wake word (or empty if not found)
+        """
+        if not text:
+            return False, ""
+
+        text_lower = text.lower().strip()
+
+        # Check for exact prefix match with variations
+        for variation in self.acceptable_variations:
+            if text_lower.startswith(variation):
+                # Extract command after wake word
+                command = text[len(variation):].strip()
+                # Remove leading comma or punctuation
+                if command and command[0] in ",.:;!?":
+                    command = command[1:].strip()
+                return True, command
+
+        # Check for fuzzy prefix match
+        words = text_lower.split()
+        wake_words = self.wake_word.split()
+        num_wake_words = len(wake_words)
+
+        if len(words) >= num_wake_words:
+            prefix = " ".join(words[:num_wake_words])
+            for variation in self.acceptable_variations:
+                if self._similarity(prefix, variation) >= self.fuzzy_threshold:
+                    # Extract command after detected wake word
+                    remaining_words = words[num_wake_words:]
+                    command = " ".join(remaining_words)
+                    # Preserve original casing from input
+                    if remaining_words:
+                        orig_words = text.split()
+                        command = " ".join(orig_words[num_wake_words:])
+                    return True, command.strip()
+
+        return False, ""
+
+    def is_wake_word_only(self, text: str) -> bool:
+        """Check if text is just the wake word with no command."""
+        detected, command = self.detect(text)
+        return detected and not command.strip()
+
+
+# =============================================================================
 # Audio Feedback Sounds (Step 309)
 # =============================================================================
 
@@ -1593,6 +1719,12 @@ class VoicePipeline:
                 enabled=True
             )
 
+        # Step 298: Wake word detector
+        self._wake_word_detector: Optional[WakeWordDetector] = None
+        if self.config.wake_word:
+            self._wake_word_detector = WakeWordDetector(self.config.wake_word)
+            logger.info(f"Wake word detection enabled: '{self.config.wake_word}'")
+
         # Metrics (Step 308 - enhanced latency tracking)
         self._commands_processed = 0
         self._total_latency_ms = 0.0
@@ -2146,8 +2278,36 @@ class VoicePipeline:
                 audio_data = await self._audio_capture.capture_until_silence()
 
                 if audio_data:
-                    # Process the captured audio
-                    result = await self.process_audio(audio_data)
+                    # Step 298: Wake word detection
+                    if self._wake_word_detector:
+                        # Transcribe first to check for wake word
+                        stt = self._get_stt()
+                        transcription = await stt.transcribe(audio_data)
+
+                        if not transcription:
+                            logger.debug("No transcription detected, continuing...")
+                            continue
+
+                        # Check for wake word
+                        detected, command = self._wake_word_detector.detect(transcription)
+
+                        if not detected:
+                            logger.debug(f"Wake word not detected in: '{transcription[:50]}...'")
+                            continue
+
+                        if not command:
+                            # Wake word only, no command - play acknowledgment
+                            logger.info("Wake word detected, waiting for command...")
+                            if self._enable_feedback:
+                                await self.play_response(AudioFeedback.listening_started())
+                            continue
+
+                        # Wake word + command detected - process the command directly
+                        logger.info(f"Wake word detected, command: '{command}'")
+                        result = await self.process_text(command)
+                    else:
+                        # No wake word configured - process all audio
+                        result = await self.process_audio(audio_data)
 
                     # Call callback if provided
                     if callback:
@@ -2179,6 +2339,38 @@ class VoicePipeline:
         self._continuous_listening = False
         if self._audio_capture:
             self._audio_capture.stop_capture()
+
+    def set_wake_word(self, wake_word: Optional[str]):
+        """
+        Set or clear the wake word for continuous listening (Step 298).
+
+        Args:
+            wake_word: Wake word/phrase to detect, or None to disable
+        """
+        if wake_word:
+            self._wake_word_detector = WakeWordDetector(wake_word)
+            self.config.wake_word = wake_word
+            logger.info(f"Wake word set to: '{wake_word}'")
+        else:
+            self._wake_word_detector = None
+            self.config.wake_word = None
+            logger.info("Wake word detection disabled")
+
+    def check_wake_word(self, text: str) -> Tuple[bool, str]:
+        """
+        Check if text contains the configured wake word (Step 298).
+
+        Args:
+            text: Text to check for wake word
+
+        Returns:
+            Tuple of (detected: bool, command: str)
+            - detected: True if wake word was found
+            - command: Remaining text after wake word
+        """
+        if self._wake_word_detector:
+            return self._wake_word_detector.detect(text)
+        return True, text  # No wake word configured, treat all as commands
 
     # =========================================================================
     # Concurrent Request Handling (Step 307)

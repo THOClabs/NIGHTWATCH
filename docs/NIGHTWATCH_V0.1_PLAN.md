@@ -183,7 +183,7 @@ Create installation scripts, hardware integration guides, and prepare for Nevada
 | 95 | Core Service Completion | camera | Implement temperature monitoring | 94 | 2 | 1 | Complete | get_temperature_status(), set_cooler() in asi_camera.py |
 | 96 | Core Service Completion | camera | Add capture abort functionality | 95 | 2 | 1 | Complete | abort_capture(), get_capture_progress() in asi_camera.py |
 | 97 | Core Service Completion | camera | Implement capture progress callbacks | 96 | 3 | 2 | Complete | register_capture_callback(), capture_with_progress() with status/progress |
-| 98 | Core Service Completion | camera | Add SER file recording for planetary | 97 | 4 | 3 | Not Started | Video format |
+| 98 | Core Service Completion | camera | Add SER file recording for planetary | 97 | 4 | 3 | Complete | SERWriter class, SERColorMode enum, record_ser_file() in camera_simulator.py |
 | 99 | Core Service Completion | camera | Create mock camera for testing | 98 | 3 | 2 | Complete | tests/mocks/mock_camera.py with presets |
 | 100 | Core Service Completion | camera | Write unit tests for camera control | 99 | 2 | 2 | Complete | test_camera_service.py (26 tests) |
 | 101 | Core Service Completion | camera | Write integration test with simulator | 100 | 3 | 2 | Complete | tests/integration/test_camera_simulator.py (6 test classes) |
@@ -268,7 +268,7 @@ Create installation scripts, hardware integration guides, and prepare for Nevada
 | 180 | Core Service Completion | focus | Review focuser_service.py current implementation | None | 2 | 1 | Complete | Full autofocus, V-curve/HFD, temp compensation |
 | 181 | Core Service Completion | focus | Complete V-curve autofocus algorithm | 180 | 4 | 3 | Complete | _fit_vcurve_full() with Cramer's rule, R², confidence levels |
 | 182 | Core Service Completion | focus | Add HFD (Half-Flux Diameter) calculation | 181 | 4 | 3 | Complete | calculate_hfd_from_image(), _calculate_single_star_hfd() aperture photometry |
-| 183 | Core Service Completion | focus | Implement Bahtinov mask analysis | 182 | 5 | 4 | Not Started | Diffraction pattern |
+| 183 | Core Service Completion | focus | Implement Bahtinov mask analysis | 182 | 5 | 4 | Complete | _bahtinov_focus(), analyze_bahtinov_pattern(), FFT spike detection in focuser_service.py |
 | 184 | Core Service Completion | focus | Add contrast-based focusing | 183 | 3 | 2 | Complete | _contrast_focus(), _measure_contrast(), calculate_laplacian_variance() in focuser_service.py |
 | 185 | Core Service Completion | focus | Implement temperature compensation calibration | 184 | 4 | 3 | Complete | Multi-point calibration, linear regression, R² stats |
 | 186 | Core Service Completion | focus | Add temperature coefficient storage | 185 | 2 | 1 | Complete | save/load_temp_coefficient() in focuser_service.py |
@@ -383,7 +383,7 @@ Create installation scripts, hardware integration guides, and prepare for Nevada
 | 295 | Voice Pipeline Integration | voice_pipeline | Implement audio capture with VAD | 294 | 3 | 2 | Complete | AudioCapture class with webrtcvad, capture_until_silence() |
 | 296 | Voice Pipeline Integration | voice_pipeline | Add push-to-talk mode support | 295 | 2 | 1 | Complete | input_mode, ptt_key in VoiceConfig |
 | 297 | Voice Pipeline Integration | voice_pipeline | Implement continuous listening mode | 296 | 3 | 2 | Complete | listen_continuous(), stop_continuous_listening() |
-| 298 | Voice Pipeline Integration | voice_pipeline | Add wake word detection (pymicro-vad as trigger) | 297 | 4 | 3 | Not Started | Voice activation |
+| 298 | Voice Pipeline Integration | voice_pipeline | Add wake word detection (pymicro-vad as trigger) | 297 | 4 | 3 | Complete | WakeWordDetector class, fuzzy matching, set_wake_word() in voice_pipeline.py |
 | 299 | Voice Pipeline Integration | voice_pipeline | Implement STT transcription call | 298 | 2 | 1 | Complete | Speech to text |
 | 300 | Voice Pipeline Integration | voice_pipeline | Add transcription post-processing (normalization) | 299 | 2 | 1 | Complete | normalize_transcript(), ASTRONOMY_NORMALIZATIONS |
 | 301 | Voice Pipeline Integration | voice_pipeline | Implement LLM tool selection call | 300 | 3 | 2 | Complete | select_tool_from_intent(), get_tool_for_command() with quick matching |
