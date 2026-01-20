@@ -47,6 +47,62 @@ class TTSSettings:
     language: str = "en"
 
 
+# Step 323: Urgency keywords for dynamic speech rate adjustment
+URGENCY_KEYWORDS = {
+    "high": [
+        "emergency", "warning", "danger", "critical", "abort", "stop",
+        "immediately", "urgent", "unsafe", "fail", "error", "alert"
+    ],
+    "low": [
+        "observing", "viewing", "looking at", "current altitude",
+        "magnitude", "constellation", "info", "status"
+    ]
+}
+
+
+def detect_urgency(text: str) -> str:
+    """
+    Detect urgency level from text content (Step 323).
+
+    Args:
+        text: Text to analyze
+
+    Returns:
+        Urgency level: "high", "normal", or "low"
+    """
+    text_lower = text.lower()
+
+    # Check for high urgency keywords
+    for keyword in URGENCY_KEYWORDS["high"]:
+        if keyword in text_lower:
+            return "high"
+
+    # Check for low urgency keywords (calm, informational)
+    for keyword in URGENCY_KEYWORDS["low"]:
+        if keyword in text_lower:
+            return "low"
+
+    return "normal"
+
+
+def get_urgency_rate(urgency: str) -> float:
+    """
+    Get speech rate multiplier for urgency level (Step 323).
+
+    Args:
+        urgency: Urgency level
+
+    Returns:
+        Rate multiplier (1.0 = normal, >1.0 = faster, <1.0 = slower)
+    """
+    rates = {
+        "high": 1.25,    # Faster for urgent alerts
+        "normal": 1.0,   # Normal speed
+        "low": 0.9,      # Slightly slower for calm observation info
+    }
+    return rates.get(urgency, 1.0)
+
+
 class WyomingTTSServer:
     """
     Wyoming protocol server for NIGHTWATCH text-to-speech.
@@ -202,6 +258,20 @@ class WyomingTTSServer:
             settings.voice = request.voice
         if request.rate:
             settings.rate = request.rate
+
+        # Step 323: Apply dynamic speech rate based on urgency
+        urgency = detect_urgency(text)
+        urgency_rate = get_urgency_rate(urgency)
+        effective_rate = settings.rate * urgency_rate
+
+        if urgency != "normal":
+            logger.debug(f"Urgency detected: {urgency}, rate adjusted to {effective_rate:.2f}")
+
+        # Apply rate to TTS if supported
+        if hasattr(self.tts, 'set_rate'):
+            self.tts.set_rate(effective_rate)
+        elif hasattr(self.tts, 'config') and hasattr(self.tts.config, 'speed'):
+            self.tts.config.speed = effective_rate
 
         # Run synthesis in thread pool to avoid blocking
         loop = asyncio.get_event_loop()

@@ -235,6 +235,29 @@ TELESCOPE_TOOLS: List[Tool] = [
         parameters=[]
     ),
 
+    Tool(
+        name="set_home_offset",
+        description="Set home position offset for calibration. "
+                    "Adjusts the reference point used by home_telescope.",
+        category=ToolCategory.MOUNT,
+        parameters=[
+            ToolParameter(
+                name="ra_offset_arcmin",
+                type="number",
+                description="Right Ascension offset in arcminutes (±60 max)",
+                required=False,
+                default=0.0
+            ),
+            ToolParameter(
+                name="dec_offset_arcmin",
+                type="number",
+                description="Declination offset in arcminutes (±60 max)",
+                required=False,
+                default=0.0
+            )
+        ]
+    ),
+
     # -------------------------------------------------------------------------
     # CATALOG TOOLS
     # -------------------------------------------------------------------------
@@ -262,7 +285,8 @@ TELESCOPE_TOOLS: List[Tool] = [
 
     Tool(
         name="find_objects",
-        description="Search for objects matching criteria.",
+        description="Search for objects matching criteria. "
+                    "Returns objects filtered by type, constellation, magnitude, and visibility.",
         category=ToolCategory.CATALOG,
         parameters=[
             ToolParameter(
@@ -281,8 +305,22 @@ TELESCOPE_TOOLS: List[Tool] = [
             ToolParameter(
                 name="max_magnitude",
                 type="number",
-                description="Maximum (brightest) magnitude",
+                description="Maximum (dimmest) magnitude to include",
                 required=False
+            ),
+            ToolParameter(
+                name="min_altitude",
+                type="number",
+                description="Minimum altitude in degrees (default 10)",
+                required=False,
+                default=10.0
+            ),
+            ToolParameter(
+                name="limit",
+                type="number",
+                description="Maximum number of results (default 10)",
+                required=False,
+                default=10
             )
         ]
     ),
@@ -1530,6 +1568,40 @@ def create_default_handlers(
 
     handlers["home_telescope"] = home_telescope
 
+    async def set_home_offset(ra_offset_arcmin: float = 0.0, dec_offset_arcmin: float = 0.0) -> str:
+        """Set home position offset for calibration (Step 350)."""
+        if not mount_client:
+            return "Mount not available"
+
+        # Validate offset ranges (reasonable limits for home calibration)
+        max_offset = 60.0  # Maximum 1 degree offset
+        if abs(ra_offset_arcmin) > max_offset:
+            return f"RA offset too large: {ra_offset_arcmin}' (max ±{max_offset}')"
+        if abs(dec_offset_arcmin) > max_offset:
+            return f"Dec offset too large: {dec_offset_arcmin}' (max ±{max_offset}')"
+
+        # Apply offset to mount if supported
+        if hasattr(mount_client, 'set_home_offset'):
+            success = mount_client.set_home_offset(ra_offset_arcmin, dec_offset_arcmin)
+            if success:
+                return (f"Home position offset set: RA {ra_offset_arcmin:+.1f}', "
+                        f"Dec {dec_offset_arcmin:+.1f}'")
+            return "Failed to set home offset"
+
+        # Alternative: store offset in OnStepX extended commands
+        if onstepx_extended and hasattr(onstepx_extended, 'set_home_offset'):
+            success = onstepx_extended.set_home_offset(ra_offset_arcmin, dec_offset_arcmin)
+            if success:
+                return (f"Home position offset set via OnStepX: RA {ra_offset_arcmin:+.1f}', "
+                        f"Dec {dec_offset_arcmin:+.1f}'")
+
+        # If no native support, provide guidance
+        return (f"Mount does not support programmatic home offset. "
+                f"Please adjust mechanically or via mount firmware: "
+                f"RA {ra_offset_arcmin:+.1f}', Dec {dec_offset_arcmin:+.1f}'")
+
+    handlers["set_home_offset"] = set_home_offset
+
     # Catalog handlers
     async def lookup_object(object_name: str) -> str:
         """Look up information about a celestial object (Step 352)."""
@@ -1606,6 +1678,117 @@ def create_default_handlers(
         return f"Object '{object_name}' not found in catalog"
 
     handlers["lookup_object"] = lookup_object
+
+    async def find_objects(
+        object_type: str = None,
+        constellation: str = None,
+        max_magnitude: float = None,
+        min_altitude: float = 10.0,
+        limit: int = 10
+    ) -> str:
+        """Find celestial objects matching criteria (Steps 356-357)."""
+        if not catalog_service:
+            return "Catalog not available"
+
+        parts = []
+        results = []
+
+        # Build filter description
+        filters = []
+        if object_type:
+            filters.append(f"type={object_type}")
+        if constellation:
+            filters.append(f"constellation={constellation}")
+        if max_magnitude:
+            filters.append(f"mag<={max_magnitude}")
+        if min_altitude > 0:
+            filters.append(f"altitude>={min_altitude}°")
+
+        filter_str = ", ".join(filters) if filters else "all objects"
+
+        # Step 357: Apply filters using catalog service
+        try:
+            # Try to use catalog's search method
+            if hasattr(catalog_service, 'search'):
+                search_results = catalog_service.search(
+                    object_type=object_type,
+                    constellation=constellation,
+                    max_magnitude=max_magnitude
+                )
+            elif hasattr(catalog_service, 'find_objects'):
+                search_results = catalog_service.find_objects(
+                    object_type=object_type,
+                    constellation=constellation,
+                    max_magnitude=max_magnitude
+                )
+            else:
+                # Fallback: iterate through catalog
+                search_results = []
+                if hasattr(catalog_service, 'get_all_objects'):
+                    all_objects = catalog_service.get_all_objects()
+                    for obj in all_objects:
+                        # Filter by type
+                        if object_type:
+                            obj_type = getattr(obj, 'object_type', '').lower()
+                            if object_type.lower() not in obj_type:
+                                continue
+                        # Filter by constellation
+                        if constellation:
+                            obj_const = getattr(obj, 'constellation', '').lower()
+                            if constellation.lower() != obj_const:
+                                continue
+                        # Filter by magnitude
+                        if max_magnitude:
+                            obj_mag = getattr(obj, 'magnitude', None)
+                            if obj_mag is None or obj_mag > max_magnitude:
+                                continue
+                        search_results.append(obj)
+
+            # Filter by altitude if ephemeris available
+            for obj in search_results[:limit * 2]:  # Get extra for altitude filtering
+                if len(results) >= limit:
+                    break
+
+                # Check altitude
+                if ephemeris_service and min_altitude > 0:
+                    try:
+                        ra_deg = getattr(obj, 'ra_degrees', None)
+                        dec_deg = getattr(obj, 'dec_degrees', None)
+                        if ra_deg is not None and dec_deg is not None:
+                            alt = ephemeris_service.get_altitude_for_coords(ra_deg, dec_deg)
+                            if alt is not None and alt < min_altitude:
+                                continue
+                            obj._current_alt = alt
+                    except Exception:
+                        pass
+
+                results.append(obj)
+
+            if not results:
+                return f"No objects found matching: {filter_str}"
+
+            parts.append(f"Found {len(results)} objects ({filter_str}):")
+            for obj in results:
+                name = getattr(obj, 'name', None) or getattr(obj, 'catalog_id', 'Unknown')
+                obj_type = getattr(obj, 'object_type', '')
+                mag = getattr(obj, 'magnitude', None)
+                alt = getattr(obj, '_current_alt', None)
+
+                line = f"  {name}"
+                if obj_type:
+                    line += f" ({obj_type})"
+                if mag is not None:
+                    line += f" mag {mag:.1f}"
+                if alt is not None:
+                    line += f" at {alt:.0f}°"
+                parts.append(line)
+
+            return "\n".join(parts)
+
+        except Exception as e:
+            return f"Error searching catalog: {e}"
+
+    handlers["find_objects"] = find_objects
 
     # Ephemeris handlers
     async def get_planet_position(planet: str) -> str:

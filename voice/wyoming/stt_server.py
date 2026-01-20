@@ -69,12 +69,15 @@ class WyomingSTTServer:
     """
 
     DEFAULT_PORT = 10300
+    # Step 317: Confidence threshold for filtering low-quality transcripts
+    DEFAULT_CONFIDENCE_THRESHOLD = 0.6
 
     def __init__(
         self,
         stt: Optional["WhisperSTT"] = None,
         host: str = "0.0.0.0",
         port: int = DEFAULT_PORT,
+        confidence_threshold: float = DEFAULT_CONFIDENCE_THRESHOLD,
     ):
         """
         Initialize Wyoming STT server.
@@ -83,14 +86,21 @@ class WyomingSTTServer:
             stt: WhisperSTT instance (will create default if None)
             host: Host to bind to
             port: Port to listen on
+            confidence_threshold: Minimum confidence for valid transcripts (Step 317)
         """
         self.stt = stt
         self.host = host
         self.port = port
+        self.confidence_threshold = confidence_threshold
         self._server = None
         self._running = False
         self._clients: List[asyncio.Task] = []
         self._on_transcript_callbacks: List[Callable[[str], None]] = []
+        self._on_low_confidence_callbacks: List[Callable[[str, float], None]] = []
+
+    def register_low_confidence_callback(self, callback: Callable[[str, float], None]):
+        """Register callback for low-confidence transcripts (Step 317)."""
+        self._on_low_confidence_callbacks.append(callback)
 
     def _ensure_stt(self):
         """Ensure STT service is available."""
@@ -262,9 +272,29 @@ class WyomingSTTServer:
         loop = asyncio.get_event_loop()
         result = await loop.run_in_executor(None, self.stt.transcribe, audio)
 
-        logger.info(f"Transcript: {result.text}")
+        logger.info(f"Transcript: {result.text} (confidence: {result.confidence:.2f})")
 
-        # Notify callbacks
+        # Step 317: Apply confidence filtering
+        if result.confidence < self.confidence_threshold:
+            logger.warning(
+                f"Low confidence transcript filtered: '{result.text}' "
+                f"({result.confidence:.2f} < {self.confidence_threshold})"
+            )
+            # Notify low-confidence callbacks
+            for callback in self._on_low_confidence_callbacks:
+                try:
+                    callback(result.text, result.confidence)
+                except Exception as e:
+                    logger.error(f"Low confidence callback error: {e}")
+
+            # Return empty transcript for low confidence
+            return WyomingMessage.transcript(
+                text="",
+                confidence=result.confidence,
+                is_final=True,
+            )
+
+        # Notify callbacks for valid transcripts
         for callback in self._on_transcript_callbacks:
             try:
                 callback(result.text)
