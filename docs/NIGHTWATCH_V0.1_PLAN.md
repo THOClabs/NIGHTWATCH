@@ -453,7 +453,7 @@ Create installation scripts, hardware integration guides, and prepare for Nevada
 | 365 | Tool Handler Implementation | ephemeris_tools | Implement is_it_dark handler | 364 | 2 | 1 | Complete | Enhanced is_it_dark() with time until |
 | 366 | Tool Handler Implementation | ephemeris_tools | Add twilight phase details | 365 | 2 | 1 | Complete | Civil/nautical/astro descriptions |
 | 367 | Tool Handler Implementation | ephemeris_tools | Implement whats_up_tonight handler | 366 | 3 | 2 | Complete | Planets, DSO, moon warning, altitude filter |
-| 368 | Tool Handler Implementation | ephemeris_tools | Add object prioritization by visibility window | 367 | 3 | 2 | Not Started | Best timing |
+| 368 | Tool Handler Implementation | ephemeris_tools | Add object prioritization by visibility window | 367 | 3 | 2 | Complete | Priority scoring by altitude and setting time |
 | 369 | Tool Handler Implementation | ephemeris_tools | Write unit tests for ephemeris tool handlers | 368 | 2 | 2 | Complete | TestEphemerisToolHandlers in test_telescope_tools.py (5 tests) |
 | 370 | Tool Handler Implementation | weather_tools | Implement get_weather handler | 257 | 2 | 1 | Complete | Enhanced get_weather() with full conditions |
 | 371 | Tool Handler Implementation | weather_tools | Add formatted temperature (F and C) | 370 | 2 | 1 | Complete | Both F and C in get_weather response |
@@ -587,16 +587,16 @@ Create installation scripts, hardware integration guides, and prepare for Nevada
 | 499 | Safety System Hardening | watchdog | Implement safe state on persistent failure | 498 | 3 | 2 | Complete | SafeStateHandler.enter_safe_state() parks, closes, alerts |
 | 500 | Safety System Hardening | watchdog | Write unit tests for watchdog | 499 | 2 | 2 | Complete | Test coverage |
 | 501 | Hardware-in-Loop Simulation | docker | Review docker-compose.dev.yml current state | None | 2 | 1 | Complete | Already well-configured with Alpaca/INDI simulators |
-| 502 | Hardware-in-Loop Simulation | docker | Add mount simulator service | 501 | 3 | 2 | Not Started | OnStepX sim |
-| 503 | Hardware-in-Loop Simulation | docker | Configure mount simulator with LX200 protocol | 502 | 2 | 1 | Not Started | TCP port 9999 |
-| 504 | Hardware-in-Loop Simulation | docker | Add weather simulator service | 503 | 3 | 2 | Not Started | Ecowitt sim |
-| 505 | Hardware-in-Loop Simulation | docker | Configure weather simulator with HTTP API | 504 | 2 | 1 | Not Started | Mock data |
+| 502 | Hardware-in-Loop Simulation | docker | Add mount simulator service | 501 | 3 | 2 | Complete | Dockerfile.mount, mount_simulator.py with LX200 protocol |
+| 503 | Hardware-in-Loop Simulation | docker | Configure mount simulator with LX200 protocol | 502 | 2 | 1 | Complete | TCP port 9999, full LX200 command set |
+| 504 | Hardware-in-Loop Simulation | docker | Add weather simulator service | 503 | 3 | 2 | Complete | Dockerfile.weather, weather_simulator.py |
+| 505 | Hardware-in-Loop Simulation | docker | Configure weather simulator with HTTP API | 504 | 2 | 1 | Complete | Ecowitt JSON API at /get_livedata_info |
 | 506 | Hardware-in-Loop Simulation | docker | Add cloud sensor simulator service | 505 | 3 | 2 | Not Started | AAG sim |
 | 507 | Hardware-in-Loop Simulation | docker | Configure cloud simulator with serial protocol | 506 | 2 | 1 | Not Started | Mock data |
 | 508 | Hardware-in-Loop Simulation | docker | Add PHD2 simulator service | 507 | 3 | 2 | Not Started | Guiding sim |
 | 509 | Hardware-in-Loop Simulation | docker | Configure PHD2 simulator JSON-RPC | 508 | 2 | 1 | Not Started | Port 4400 |
-| 510 | Hardware-in-Loop Simulation | docker | Add INDI simulator configuration | 509 | 2 | 1 | Not Started | Device sim |
-| 511 | Hardware-in-Loop Simulation | docker | Add Alpaca simulator configuration | 510 | 2 | 1 | Not Started | Device sim |
+| 510 | Hardware-in-Loop Simulation | docker | Add INDI simulator configuration | 509 | 2 | 1 | Complete | GPS driver added, INDICONFIG volume |
+| 511 | Hardware-in-Loop Simulation | docker | Add Alpaca simulator configuration | 510 | 2 | 1 | Complete | Location/discovery config, server name |
 | 512 | Hardware-in-Loop Simulation | docker | Create docker-compose.test.yml for CI | 511 | 2 | 2 | Complete | Lightweight |
 | 513 | Hardware-in-Loop Simulation | docker | Add healthcheck for all services | 512 | 2 | 1 | Complete | Startup wait |
 | 514 | Hardware-in-Loop Simulation | docker | Create docker-compose.prod.yml template | 513 | 2 | 2 | Complete | Production config |

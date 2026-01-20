@@ -1,0 +1,31 @@
+# Weather Simulator Dockerfile
+# Simulates Ecowitt GW1000/GW2000 gateway HTTP API
+#
+# Build: docker build -f Dockerfile.weather -t nightwatch/weather-sim .
+# Run:   docker run -p 8080:8080 nightwatch/weather-sim
+
+FROM python:3.11-slim
+
+LABEL maintainer="NIGHTWATCH <thoclabs@example.com>"
+LABEL description="Ecowitt HTTP API weather simulator for NIGHTWATCH testing"
+
+WORKDIR /app
+
+# Install dependencies
+RUN pip install --no-cache-dir aiohttp
+
+# Copy simulator script
+COPY weather_simulator.py /app/
+
+# Default configuration
+ENV WEATHER_SIM_PORT=8080
+ENV WEATHER_SIM_TEMP_F=55.0
+ENV WEATHER_SIM_HUMIDITY=45.0
+ENV WEATHER_SIM_WIND_MPH=5.0
+ENV WEATHER_SIM_PRESSURE_HPA=1013.25
+ENV WEATHER_SIM_EVENTS_ENABLED=false
+ENV WEATHER_SIM_UPDATE_INTERVAL=10
+
+EXPOSE 8080
+
+CMD ["python", "weather_simulator.py"]

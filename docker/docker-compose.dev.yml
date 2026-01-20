@@ -9,15 +9,20 @@
 # Services:
 #   - alpaca-simulators: ASCOM Alpaca device simulators (telescope, camera, focuser)
 #   - indi-server: INDI device simulators for Linux-native device control
+#   - mount-simulator: LX200 protocol mount simulator (OnStepX compatible)
+#   - weather-simulator: Ecowitt-compatible weather data HTTP API
 #
 # See docs/INTEGRATION_PLAN.md Phase 4 for details.
 
 version: '3.8'
 
 services:
-  # ASCOM Alpaca Simulators
+  # ==========================================================================
+  # ASCOM Alpaca Simulators (Step 511)
+  # ==========================================================================
   # Provides network-accessible simulated astronomy devices
   # API documentation: http://localhost:11111/swagger
+  # Devices: Telescope (0), Camera (0), Focuser (0), FilterWheel (0), Dome (0)
   alpaca-simulators:
     image: ghcr.io/ascominitiative/alpaca-simulators:latest
     container_name: nightwatch-alpaca-sim
@@ -25,6 +30,12 @@ services:
       - "11111:11111"
     environment:
       - ASPNETCORE_URLS=http://+:11111
+      # Alpaca configuration
+      - Alpaca__DiscoveryPort=32227
+      - Alpaca__ServerName=NIGHTWATCH-Alpaca-Sim
+      - Alpaca__Location__Latitude=39.0
+      - Alpaca__Location__Longitude=-117.0
+      - Alpaca__Location__Elevation=1830
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:11111/management/apiversions"]
       interval: 10s
@@ -34,9 +45,12 @@ services:
     networks:
       - nightwatch-dev
 
-  # INDI Server with Simulators
+  # ==========================================================================
+  # INDI Server with Simulators (Step 510)
+  # ==========================================================================
   # Provides Linux-native device simulation via INDI protocol
   # Connect with: indi_getprop -h localhost -p 7624
+  # Simulator drivers provide realistic device behavior for testing
   indi-server:
     image: indilib/indi-full:latest
     container_name: nightwatch-indi-sim
@@ -50,6 +64,12 @@ services:
       indi_simulator_focus
       indi_simulator_wheel
       indi_simulator_dome
+      indi_simulator_gps
+    environment:
+      # INDI simulator configuration
+      - INDICONFIG=/tmp/indi-config
+    volumes:
+      - indi-config:/tmp/indi-config
     healthcheck:
       test: ["CMD-SHELL", "echo ':' | nc -w 1 localhost 7624 || exit 1"]
       interval: 10s
@@ -59,13 +79,89 @@ services:
     networks:
       - nightwatch-dev
 
+  # ==========================================================================
+  # Mount Simulator - LX200 Protocol (Step 503)
+  # ==========================================================================
+  # Simulates OnStepX mount controller with LX200/extended command set
+  # TCP port 9999 - standard for OnStepX WiFi connection
+  # Responds to LX200 commands: :GR# :GD# :Sr# :Sd# :MS# :Q# etc.
+  mount-simulator:
+    build:
+      context: ./simulators
+      dockerfile: Dockerfile.mount
+    container_name: nightwatch-mount-sim
+    ports:
+      - "9999:9999"
+    environment:
+      # Mount simulator configuration
+      - MOUNT_SIM_PORT=9999
+      - MOUNT_SIM_LATITUDE=39.0
+      - MOUNT_SIM_LONGITUDE=-117.0
+      - MOUNT_SIM_TIMEZONE=-8
+      # Slew rates in degrees/second
+      - MOUNT_SIM_SLEW_RATE=2.0
+      - MOUNT_SIM_TRACK_RATE=0.004178  # Sidereal rate
+      # Initial position (parked)
+      - MOUNT_SIM_INIT_RA=0.0
+      - MOUNT_SIM_INIT_DEC=90.0
+      - MOUNT_SIM_PARKED=true
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z localhost 9999 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+    networks:
+      - nightwatch-dev
+
+  # ==========================================================================
+  # Weather Simulator - Ecowitt HTTP API (Step 505)
+  # ==========================================================================
+  # Simulates Ecowitt GW1000/GW2000 gateway HTTP API
+  # Returns realistic weather data in Ecowitt JSON format
+  # Endpoint: http://localhost:8080/get_livedata_info
+  weather-simulator:
+    build:
+      context: ./simulators
+      dockerfile: Dockerfile.weather
+    container_name: nightwatch-weather-sim
+    ports:
+      - "8080:8080"
+    environment:
+      # Weather simulator configuration
+      - WEATHER_SIM_PORT=8080
+      # Base weather conditions (will vary with simulated cycles)
+      - WEATHER_SIM_TEMP_F=55.0
+      - WEATHER_SIM_HUMIDITY=45.0
+      - WEATHER_SIM_WIND_MPH=5.0
+      - WEATHER_SIM_PRESSURE_HPA=1013.25
+      # Enable weather events (rain, wind gusts) for testing
+      - WEATHER_SIM_EVENTS_ENABLED=false
+      # Update interval in seconds
+      - WEATHER_SIM_UPDATE_INTERVAL=10
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/get_livedata_info"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+    networks:
+      - nightwatch-dev
+
+  # ==========================================================================
   # PHD2 Guiding Simulator (optional)
+  # ==========================================================================
   # Uncomment to enable PHD2 server simulation for guiding tests
+  # JSON-RPC interface on port 4400
   # phd2-simulator:
-  #   image: nightwatch/phd2-sim:latest
+  #   build:
+  #     context: ./simulators
+  #     dockerfile: Dockerfile.phd2
   #   container_name: nightwatch-phd2-sim
   #   ports:
   #     - "4400:4400"
+  #   environment:
+  #     - PHD2_SIM_PORT=4400
   #   networks:
   #     - nightwatch-dev
 
@@ -78,3 +174,5 @@ networks:
 volumes:
   alpaca-config:
   indi-config:
+  mount-config:
+  weather-config:

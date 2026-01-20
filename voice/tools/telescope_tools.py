@@ -4418,6 +4418,49 @@ def create_default_handlers(
             except Exception as e:
                 parts.append(f"(Catalog search limited: {e})")
 
+        # Step 368: Add visibility window prioritization
+        # Calculate time until set for each object
+        for suggestion in suggestions:
+            suggestion['hours_visible'] = None
+            suggestion['priority_score'] = 0
+
+            if ephemeris_service and suggestion.get('altitude'):
+                try:
+                    # Estimate hours visible based on altitude and declination
+                    # Objects near transit have more time, objects setting soon have less
+                    alt = suggestion['altitude']
+
+                    # Higher altitude = more time remaining (simplified)
+                    # Objects above 60° are likely near transit
+                    # Objects at 20-30° are likely setting soon
+                    if alt > 60:
+                        suggestion['hours_visible'] = 4.0
+                        suggestion['visibility_note'] = "Near transit - excellent timing"
+                    elif alt > 45:
+                        suggestion['hours_visible'] = 3.0
+                        suggestion['visibility_note'] = "Good visibility window"
+                    elif alt > 30:
+                        suggestion['hours_visible'] = 2.0
+                        suggestion['visibility_note'] = "Observe soon"
+                    else:
+                        suggestion['hours_visible'] = 1.0
+                        suggestion['visibility_note'] = "Setting soon - observe now"
+
+                    # Priority score combines altitude and visibility window
+                    # Higher = better target to observe now
+                    if suggestion['hours_visible']:
+                        # Prefer objects setting soon but still at good altitude
+                        if alt > 30 and suggestion['hours_visible'] <= 2.0:
+                            suggestion['priority_score'] = 100  # Urgent - setting soon
+                        elif alt > 45:
+                            suggestion['priority_score'] = 80   # Good position
+                        elif alt > 60:
+                            suggestion['priority_score'] = 60   # Can wait - near transit
+                        else:
+                            suggestion['priority_score'] = 40   # Low priority
+                except Exception:
+                    pass
+
         # Build response
         if moon_warning:
             parts.append(moon_warning)
@@ -4428,8 +4471,9 @@ def create_default_handlers(
                 parts.append("Try again after astronomical twilight.")
             return " ".join(parts)
 
-        # Sort by altitude (highest first)
-        suggestions.sort(key=lambda x: x.get('altitude') or 0, reverse=True)
+        # Sort by priority score (objects needing observation soonest first)
+        # Then by altitude as tiebreaker
+        suggestions.sort(key=lambda x: (x.get('priority_score') or 0, x.get('altitude') or 0), reverse=True)
         suggestions = suggestions[:limit]
 
         # Group by type
@@ -4439,12 +4483,18 @@ def create_default_handlers(
         if planets:
             parts.append("Visible planets:")
             for p in planets:
-                parts.append(f"  • {p['name']}: {p['description']}")
+                desc = p['description']
+                if p.get('visibility_note'):
+                    desc += f" - {p['visibility_note']}"
+                parts.append(f"  • {p['name']}: {desc}")
 
         if dso:
-            parts.append("Recommended objects:")
+            parts.append("Recommended objects (prioritized by visibility window):")
             for obj in dso:
-                parts.append(f"  • {obj['name']} ({obj['type']}): {obj['description']}")
+                desc = obj['description']
+                if obj.get('visibility_note'):
+                    desc += f" - {obj['visibility_note']}"
+                parts.append(f"  • {obj['name']} ({obj['type']}): {desc}")
 
         return "\n".join(parts)
 

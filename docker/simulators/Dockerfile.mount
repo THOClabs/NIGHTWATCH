@@ -1,0 +1,33 @@
+# Mount Simulator Dockerfile
+# Simulates OnStepX mount with LX200 protocol over TCP
+#
+# Build: docker build -f Dockerfile.mount -t nightwatch/mount-sim .
+# Run:   docker run -p 9999:9999 nightwatch/mount-sim
+
+FROM python:3.11-slim
+
+LABEL maintainer="NIGHTWATCH <thoclabs@example.com>"
+LABEL description="LX200 protocol mount simulator for NIGHTWATCH testing"
+
+WORKDIR /app
+
+# Install dependencies
+RUN pip install --no-cache-dir asyncio
+
+# Copy simulator script
+COPY mount_simulator.py /app/
+
+# Default configuration
+ENV MOUNT_SIM_PORT=9999
+ENV MOUNT_SIM_LATITUDE=39.0
+ENV MOUNT_SIM_LONGITUDE=-117.0
+ENV MOUNT_SIM_TIMEZONE=-8
+ENV MOUNT_SIM_SLEW_RATE=2.0
+ENV MOUNT_SIM_TRACK_RATE=0.004178
+ENV MOUNT_SIM_INIT_RA=0.0
+ENV MOUNT_SIM_INIT_DEC=90.0
+ENV MOUNT_SIM_PARKED=true
+
+EXPOSE 9999
+
+CMD ["python", "mount_simulator.py"]
