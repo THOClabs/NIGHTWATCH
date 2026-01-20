@@ -79,6 +79,8 @@ __all__ = [
     "CommandPriority",
     "CommandQueue",
     "QueuedCommand",
+    "EventBus",
+    "EventSubscription",
 ]
 
 
@@ -463,6 +465,368 @@ class OrchestratorMetrics:
             "error_count": self.error_count,
             "errors_by_service": self.errors_by_service.copy(),
         }
+
+
+# =============================================================================
+# Event Bus for Inter-Service Communication (Step 242)
+# =============================================================================
+
+
+@dataclass
+class EventSubscription:
+    """
+    Subscription to an event type (Step 242).
+
+    Represents a single subscription to an event type with callback.
+    """
+    event_type: EventType
+    callback: Callable
+    subscriber_id: str
+    filter_fn: Optional[Callable[[OrchestratorEvent], bool]] = None
+    one_shot: bool = False  # If True, unsubscribe after first call
+    created_at: datetime = field(default_factory=datetime.now)
+
+
+class EventBus:
+    """
+    Event bus for loose coupling between services (Step 242).
+
+    Provides publish-subscribe messaging for inter-service communication
+    without direct dependencies between services.
+
+    Features:
+    - Type-safe event routing
+    - Async and sync callback support
+    - Event filtering
+    - One-shot subscriptions
+    - Wildcard subscriptions (all events)
+    - Event history for debugging
+    - Subscription management
+
+    Usage:
+        bus = EventBus()
+
+        # Subscribe to events
+        def on_slew(event):
+            print(f"Slewing to {event.data.get('target')}")
+
+        bus.subscribe(EventType.MOUNT_SLEW_STARTED, on_slew, "my_service")
+
+        # Publish events
+        await bus.publish(EventType.MOUNT_SLEW_STARTED, source="mount", data={"target": "M31"})
+
+        # Unsubscribe
+        bus.unsubscribe("my_service", EventType.MOUNT_SLEW_STARTED)
+    """
+
+    def __init__(self, max_history: int = 100):
+        """
+        Initialize event bus.
+
+        Args:
+            max_history: Maximum number of events to keep in history
+        """
+        self._subscriptions: Dict[EventType, List[EventSubscription]] = {}
+        self._wildcard_subscriptions: List[EventSubscription] = []
+        self._history: List[OrchestratorEvent] = []
+        self._max_history = max_history
+        self._lock = asyncio.Lock()
+
+        # Statistics
+        self._events_published = 0
+        self._events_delivered = 0
+        self._delivery_errors = 0
+
+    def subscribe(
+        self,
+        event_type: EventType,
+        callback: Callable,
+        subscriber_id: str,
+        filter_fn: Optional[Callable[[OrchestratorEvent], bool]] = None,
+        one_shot: bool = False,
+    ) -> EventSubscription:
+        """
+        Subscribe to an event type (Step 242).
+
+        Args:
+            event_type: Type of event to subscribe to
+            callback: Function to call when event occurs
+            subscriber_id: Unique identifier for subscriber
+            filter_fn: Optional filter function (return True to receive event)
+            one_shot: If True, unsubscribe after first delivery
+
+        Returns:
+            The subscription object
+        """
+        subscription = EventSubscription(
+            event_type=event_type,
+            callback=callback,
+            subscriber_id=subscriber_id,
+            filter_fn=filter_fn,
+            one_shot=one_shot,
+        )
+
+        if event_type not in self._subscriptions:
+            self._subscriptions[event_type] = []
+        self._subscriptions[event_type].append(subscription)
+
+        logger.debug(f"Subscriber '{subscriber_id}' subscribed to {event_type.value}")
+        return subscription
+
+    def subscribe_all(
+        self,
+        callback: Callable,
+        subscriber_id: str,
+        filter_fn: Optional[Callable[[OrchestratorEvent], bool]] = None,
+    ) -> EventSubscription:
+        """
+        Subscribe to all events (Step 242).
+
+        Args:
+            callback: Function to call for any event
+            subscriber_id: Unique identifier for subscriber
+            filter_fn: Optional filter function
+
+        Returns:
+            The subscription object
+        """
+        subscription = EventSubscription(
+            event_type=None,  # None means wildcard
+            callback=callback,
+            subscriber_id=subscriber_id,
+            filter_fn=filter_fn,
+        )
+        self._wildcard_subscriptions.append(subscription)
+        logger.debug(f"Subscriber '{subscriber_id}' subscribed to all events")
+        return subscription
+
+    def unsubscribe(
+        self,
+        subscriber_id: str,
+        event_type: Optional[EventType] = None,
+    ) -> int:
+        """
+        Unsubscribe from events (Step 242).
+
+        Args:
+            subscriber_id: Subscriber to unsubscribe
+            event_type: Specific event type (None = all)
+
+        Returns:
+            Number of subscriptions removed
+        """
+        removed = 0
+
+        if event_type is None:
+            # Remove from all event types
+            for et in self._subscriptions:
+                before = len(self._subscriptions[et])
+                self._subscriptions[et] = [
+                    s for s in self._subscriptions[et]
+                    if s.subscriber_id != subscriber_id
+                ]
+                removed += before - len(self._subscriptions[et])
+
+            # Remove wildcard subscriptions
+            before = len(self._wildcard_subscriptions)
+            self._wildcard_subscriptions = [
+                s for s in self._wildcard_subscriptions
+                if s.subscriber_id != subscriber_id
+            ]
+            removed += before - len(self._wildcard_subscriptions)
+        else:
+            # Remove from specific event type
+            if event_type in self._subscriptions:
+                before = len(self._subscriptions[event_type])
+                self._subscriptions[event_type] = [
+                    s for s in self._subscriptions[event_type]
+                    if s.subscriber_id != subscriber_id
+                ]
+                removed = before - len(self._subscriptions[event_type])
+
+        if removed > 0:
+            logger.debug(f"Removed {removed} subscription(s) for '{subscriber_id}'")
+        return removed
+
+    async def publish(
+        self,
+        event_type: EventType,
+        source: str = "",
+        data: Optional[Dict[str, Any]] = None,
+        message: str = "",
+    ) -> int:
+        """
+        Publish an event (Step 242).
+
+        Args:
+            event_type: Type of event
+            source: Source service/component
+            data: Event data dictionary
+            message: Human-readable message
+
+        Returns:
+            Number of subscribers notified
+        """
+        event = OrchestratorEvent(
+            event_type=event_type,
+            timestamp=datetime.now(),
+            source=source,
+            data=data or {},
+            message=message,
+        )
+
+        return await self.publish_event(event)
+
+    async def publish_event(self, event: OrchestratorEvent) -> int:
+        """
+        Publish a pre-constructed event (Step 242).
+
+        Args:
+            event: Event to publish
+
+        Returns:
+            Number of subscribers notified
+        """
+        async with self._lock:
+            self._events_published += 1
+
+            # Add to history
+            self._history.append(event)
+            if len(self._history) > self._max_history:
+                self._history = self._history[-self._max_history:]
+
+        # Get subscribers for this event type
+        subscribers = list(self._subscriptions.get(event.event_type, []))
+        subscribers.extend(self._wildcard_subscriptions)
+
+        delivered = 0
+        one_shot_to_remove = []
+
+        for subscription in subscribers:
+            # Apply filter if present
+            if subscription.filter_fn:
+                try:
+                    if not subscription.filter_fn(event):
+                        continue
+                except Exception as e:
+                    logger.warning(f"Event filter error for '{subscription.subscriber_id}': {e}")
+                    continue
+
+            # Deliver event
+            try:
+                if asyncio.iscoroutinefunction(subscription.callback):
+                    await subscription.callback(event)
+                else:
+                    subscription.callback(event)
+                delivered += 1
+                self._events_delivered += 1
+
+                if subscription.one_shot:
+                    one_shot_to_remove.append(subscription)
+
+            except Exception as e:
+                self._delivery_errors += 1
+                logger.error(f"Event delivery error to '{subscription.subscriber_id}': {e}")
+
+        # Remove one-shot subscriptions
+        for sub in one_shot_to_remove:
+            self.unsubscribe(sub.subscriber_id, sub.event_type)
+
+        logger.debug(f"Published {event.event_type.value} from '{event.source}' to {delivered} subscribers")
+        return delivered
+
+    def get_history(
+        self,
+        event_type: Optional[EventType] = None,
+        source: Optional[str] = None,
+        limit: int = 50,
+    ) -> List[OrchestratorEvent]:
+        """
+        Get event history (Step 242).
+
+        Args:
+            event_type: Filter by event type
+            source: Filter by source
+            limit: Maximum events to return
+
+        Returns:
+            List of recent events matching filters
+        """
+        events = self._history.copy()
+
+        if event_type:
+            events = [e for e in events if e.event_type == event_type]
+        if source:
+            events = [e for e in events if e.source == source]
+
+        return events[-limit:]
+
+    def get_subscribers(
+        self,
+        event_type: Optional[EventType] = None
+    ) -> List[Dict[str, Any]]:
+        """Get list of subscribers."""
+        result = []
+
+        if event_type:
+            for sub in self._subscriptions.get(event_type, []):
+                result.append({
+                    "subscriber_id": sub.subscriber_id,
+                    "event_type": event_type.value,
+                    "one_shot": sub.one_shot,
+                    "created_at": sub.created_at.isoformat(),
+                })
+        else:
+            for et, subs in self._subscriptions.items():
+                for sub in subs:
+                    result.append({
+                        "subscriber_id": sub.subscriber_id,
+                        "event_type": et.value,
+                        "one_shot": sub.one_shot,
+                        "created_at": sub.created_at.isoformat(),
+                    })
+
+            for sub in self._wildcard_subscriptions:
+                result.append({
+                    "subscriber_id": sub.subscriber_id,
+                    "event_type": "*",
+                    "one_shot": sub.one_shot,
+                    "created_at": sub.created_at.isoformat(),
+                })
+
+        return result
+
+    def get_stats(self) -> Dict[str, Any]:
+        """Get event bus statistics."""
+        total_subscriptions = sum(
+            len(subs) for subs in self._subscriptions.values()
+        ) + len(self._wildcard_subscriptions)
+
+        return {
+            "events_published": self._events_published,
+            "events_delivered": self._events_delivered,
+            "delivery_errors": self._delivery_errors,
+            "total_subscriptions": total_subscriptions,
+            "history_size": len(self._history),
+            "event_types_active": len(self._subscriptions),
+        }
+
+    def clear_history(self):
+        """Clear event history."""
+        self._history.clear()
+
+    def clear_subscriptions(self, subscriber_id: Optional[str] = None):
+        """
+        Clear subscriptions.
+
+        Args:
+            subscriber_id: If provided, only clear for this subscriber
+        """
+        if subscriber_id:
+            self.unsubscribe(subscriber_id)
+        else:
+            self._subscriptions.clear()
+            self._wildcard_subscriptions.clear()
 
 
 # =============================================================================

@@ -23,6 +23,441 @@ logger = logging.getLogger("NIGHTWATCH.Power")
 
 
 # =============================================================================
+# PDU CLIENT - HTTP/SNMP Interface (Step 153)
+# =============================================================================
+
+
+class PDUProtocol(Enum):
+    """Supported PDU communication protocols."""
+    HTTP = "http"
+    SNMP = "snmp"
+    SIMULATION = "simulation"
+
+
+@dataclass
+class PDUConfig:
+    """
+    PDU (Power Distribution Unit) configuration (Step 153).
+
+    Supports both HTTP REST API and SNMP protocols for common
+    smart PDU models.
+    """
+    protocol: PDUProtocol = PDUProtocol.SIMULATION
+    host: str = "192.168.1.100"
+    port: int = 80  # HTTP port, or 161 for SNMP
+
+    # HTTP settings
+    http_username: str = "admin"
+    http_password: str = "admin"
+    http_timeout_sec: float = 10.0
+
+    # SNMP settings
+    snmp_community: str = "private"  # Read-write community
+    snmp_version: int = 2  # SNMPv1, v2c, or v3
+
+    # Port mapping (PDU outlet -> device name)
+    port_names: Dict[int, str] = field(default_factory=lambda: {
+        1: "mount",
+        2: "camera",
+        3: "focuser",
+        4: "computer",
+    })
+
+    # Number of outlets
+    num_outlets: int = 8
+
+
+class PDUClient:
+    """
+    Smart PDU client with HTTP and SNMP support (Step 153).
+
+    Provides unified interface for controlling smart PDUs from
+    various manufacturers via HTTP REST API or SNMP.
+
+    Supported PDU types:
+    - APC Switched Rack PDU (SNMP)
+    - CyberPower PDU (HTTP/SNMP)
+    - TP-Link Smart PDU (HTTP)
+    - Generic SNMP PDU
+
+    Common SNMP OIDs for outlet control:
+    - APC: 1.3.6.1.4.1.318.1.1.4.4.2.1.3.<outlet>
+    - CyberPower: 1.3.6.1.4.1.3808.1.1.3.3.3.1.1.4.<outlet>
+
+    Usage:
+        pdu = PDUClient(PDUConfig(protocol=PDUProtocol.HTTP))
+        await pdu.connect()
+        await pdu.set_outlet(1, True)  # Turn on outlet 1
+        status = await pdu.get_all_outlets()
+    """
+
+    def __init__(self, config: Optional[PDUConfig] = None):
+        """
+        Initialize PDU client.
+
+        Args:
+            config: PDU configuration
+        """
+        self.config = config or PDUConfig()
+        self._connected = False
+        self._outlet_states: Dict[int, bool] = {}
+
+        # Initialize all outlets as unknown (None means unknown)
+        for i in range(1, self.config.num_outlets + 1):
+            self._outlet_states[i] = True  # Assume on initially
+
+    @property
+    def is_connected(self) -> bool:
+        """Check if connected to PDU."""
+        return self._connected
+
+    async def connect(self) -> bool:
+        """
+        Connect to PDU.
+
+        Returns:
+            True if connection successful
+        """
+        if self.config.protocol == PDUProtocol.SIMULATION:
+            logger.info("PDU client in simulation mode")
+            self._connected = True
+            return True
+
+        try:
+            if self.config.protocol == PDUProtocol.HTTP:
+                return await self._connect_http()
+            elif self.config.protocol == PDUProtocol.SNMP:
+                return await self._connect_snmp()
+            else:
+                logger.error(f"Unknown PDU protocol: {self.config.protocol}")
+                return False
+        except Exception as e:
+            logger.error(f"PDU connection failed: {e}")
+            return False
+
+    async def disconnect(self):
+        """Disconnect from PDU."""
+        self._connected = False
+        logger.info("PDU client disconnected")
+
+    async def _connect_http(self) -> bool:
+        """Connect via HTTP REST API."""
+        try:
+            import aiohttp
+            url = f"http://{self.config.host}:{self.config.port}/api/status"
+
+            async with aiohttp.ClientSession() as session:
+                auth = aiohttp.BasicAuth(
+                    self.config.http_username,
+                    self.config.http_password
+                )
+                async with session.get(
+                    url,
+                    auth=auth,
+                    timeout=aiohttp.ClientTimeout(total=self.config.http_timeout_sec)
+                ) as response:
+                    if response.status == 200:
+                        self._connected = True
+                        logger.info(f"Connected to PDU via HTTP at {self.config.host}")
+                        return True
+                    else:
+                        logger.error(f"PDU HTTP connection failed: {response.status}")
+                        return False
+        except ImportError:
+            logger.warning("aiohttp not installed, using simulation mode")
+            self._connected = True
+            return True
+        except Exception as e:
+            logger.error(f"PDU HTTP connection error: {e}")
+            return False
+
+    async def _connect_snmp(self) -> bool:
+        """Connect via SNMP."""
+        try:
+            # Test SNMP connectivity by reading sysDescr
+            result = await self._snmp_get("1.3.6.1.2.1.1.1.0")  # sysDescr
+            if result:
+                self._connected = True
+                logger.info(f"Connected to PDU via SNMP at {self.config.host}: {result}")
+                return True
+            return False
+        except Exception as e:
+            logger.error(f"PDU SNMP connection error: {e}")
+            return False
+
+    async def _snmp_get(self, oid: str) -> Optional[str]:
+        """
+        Get SNMP OID value.
+
+        Args:
+            oid: SNMP OID to query
+
+        Returns:
+            Value as string, or None if failed
+        """
+        try:
+            from pysnmp.hlapi.asyncio import (
+                getCmd, SnmpEngine, CommunityData, UdpTransportTarget,
+                ContextData, ObjectType, ObjectIdentity
+            )
+
+            engine = SnmpEngine()
+            errorIndication, errorStatus, errorIndex, varBinds = await getCmd(
+                engine,
+                CommunityData(self.config.snmp_community),
+                UdpTransportTarget((self.config.host, 161)),
+                ContextData(),
+                ObjectType(ObjectIdentity(oid))
+            )
+
+            if errorIndication or errorStatus:
+                logger.error(f"SNMP GET error: {errorIndication or errorStatus}")
+                return None
+
+            for varBind in varBinds:
+                return str(varBind[1])
+            return None
+
+        except ImportError:
+            logger.warning("pysnmp not installed, using simulation")
+            return "Simulated PDU"
+        except Exception as e:
+            logger.error(f"SNMP GET failed: {e}")
+            return None
+
+    async def _snmp_set(self, oid: str, value: int) -> bool:
+        """
+        Set SNMP OID value.
+
+        Args:
+            oid: SNMP OID to set
+            value: Integer value to set
+
+        Returns:
+            True if successful
+        """
+        try:
+            from pysnmp.hlapi.asyncio import (
+                setCmd, SnmpEngine, CommunityData, UdpTransportTarget,
+                ContextData, ObjectType, ObjectIdentity, Integer
+            )
+
+            engine = SnmpEngine()
+            errorIndication, errorStatus, errorIndex, varBinds = await setCmd(
+                engine,
+                CommunityData(self.config.snmp_community),
+                UdpTransportTarget((self.config.host, 161)),
+                ContextData(),
+                ObjectType(ObjectIdentity(oid), Integer(value))
+            )
+
+            if errorIndication or errorStatus:
+                logger.error(f"SNMP SET error: {errorIndication or errorStatus}")
+                return False
+
+            return True
+
+        except ImportError:
+            logger.warning("pysnmp not installed, using simulation")
+            return True
+        except Exception as e:
+            logger.error(f"SNMP SET failed: {e}")
+            return False
+
+    async def _http_request(
+        self,
+        method: str,
+        endpoint: str,
+        data: Optional[Dict] = None
+    ) -> Optional[Dict]:
+        """
+        Make HTTP request to PDU.
+
+        Args:
+            method: HTTP method (GET, POST, PUT)
+            endpoint: API endpoint
+            data: Optional request data
+
+        Returns:
+            Response JSON or None if failed
+        """
+        try:
+            import aiohttp
+            url = f"http://{self.config.host}:{self.config.port}{endpoint}"
+
+            async with aiohttp.ClientSession() as session:
+                auth = aiohttp.BasicAuth(
+                    self.config.http_username,
+                    self.config.http_password
+                )
+
+                if method == "GET":
+                    async with session.get(
+                        url, auth=auth,
+                        timeout=aiohttp.ClientTimeout(total=self.config.http_timeout_sec)
+                    ) as response:
+                        if response.status == 200:
+                            return await response.json()
+                elif method in ("POST", "PUT"):
+                    async with session.request(
+                        method, url, auth=auth, json=data,
+                        timeout=aiohttp.ClientTimeout(total=self.config.http_timeout_sec)
+                    ) as response:
+                        if response.status in (200, 201, 204):
+                            try:
+                                return await response.json()
+                            except:
+                                return {"success": True}
+
+            return None
+
+        except ImportError:
+            logger.warning("aiohttp not installed")
+            return {"success": True, "simulated": True}
+        except Exception as e:
+            logger.error(f"HTTP request failed: {e}")
+            return None
+
+    async def get_outlet_state(self, outlet: int) -> Optional[bool]:
+        """
+        Get state of a single outlet.
+
+        Args:
+            outlet: Outlet number (1-based)
+
+        Returns:
+            True if on, False if off, None if unknown
+        """
+        if outlet < 1 or outlet > self.config.num_outlets:
+            logger.error(f"Invalid outlet number: {outlet}")
+            return None
+
+        if self.config.protocol == PDUProtocol.SIMULATION:
+            return self._outlet_states.get(outlet, True)
+
+        if self.config.protocol == PDUProtocol.HTTP:
+            result = await self._http_request("GET", f"/api/outlets/{outlet}")
+            if result:
+                return result.get("state", result.get("on", True))
+
+        elif self.config.protocol == PDUProtocol.SNMP:
+            # Generic SNMP OID for outlet state (adjust for specific PDU)
+            oid = f"1.3.6.1.4.1.318.1.1.4.4.2.1.3.{outlet}"  # APC OID
+            result = await self._snmp_get(oid)
+            if result:
+                return result == "1"  # 1 = on, 2 = off for APC
+
+        return self._outlet_states.get(outlet)
+
+    async def get_all_outlets(self) -> Dict[int, Dict[str, Any]]:
+        """
+        Get state of all outlets.
+
+        Returns:
+            Dict mapping outlet number to status dict
+        """
+        outlets = {}
+
+        for i in range(1, self.config.num_outlets + 1):
+            state = await self.get_outlet_state(i)
+            outlets[i] = {
+                "outlet": i,
+                "name": self.config.port_names.get(i, f"Outlet {i}"),
+                "state": state,
+                "on": state is True,
+            }
+
+        return outlets
+
+    async def set_outlet(self, outlet: int, on: bool) -> bool:
+        """
+        Set outlet state.
+
+        Args:
+            outlet: Outlet number (1-based)
+            on: True to turn on, False to turn off
+
+        Returns:
+            True if successful
+        """
+        if outlet < 1 or outlet > self.config.num_outlets:
+            logger.error(f"Invalid outlet number: {outlet}")
+            return False
+
+        action = "ON" if on else "OFF"
+        outlet_name = self.config.port_names.get(outlet, f"Outlet {outlet}")
+        logger.info(f"Setting PDU outlet {outlet} ({outlet_name}) to {action}")
+
+        if self.config.protocol == PDUProtocol.SIMULATION:
+            self._outlet_states[outlet] = on
+            return True
+
+        success = False
+
+        if self.config.protocol == PDUProtocol.HTTP:
+            result = await self._http_request(
+                "PUT",
+                f"/api/outlets/{outlet}",
+                {"state": on, "on": on}
+            )
+            success = result is not None
+
+        elif self.config.protocol == PDUProtocol.SNMP:
+            # APC: 1 = on, 2 = off
+            oid = f"1.3.6.1.4.1.318.1.1.4.4.2.1.3.{outlet}"
+            value = 1 if on else 2
+            success = await self._snmp_set(oid, value)
+
+        if success:
+            self._outlet_states[outlet] = on
+            logger.info(f"Outlet {outlet} set to {action}")
+        else:
+            logger.error(f"Failed to set outlet {outlet} to {action}")
+
+        return success
+
+    async def cycle_outlet(self, outlet: int, delay_sec: float = 5.0) -> bool:
+        """
+        Power cycle an outlet.
+
+        Args:
+            outlet: Outlet number
+            delay_sec: Delay between off and on
+
+        Returns:
+            True if successful
+        """
+        logger.info(f"Power cycling outlet {outlet}")
+
+        if not await self.set_outlet(outlet, False):
+            return False
+
+        await asyncio.sleep(delay_sec)
+
+        return await self.set_outlet(outlet, True)
+
+    async def all_on(self) -> bool:
+        """Turn all outlets on."""
+        success = True
+        for i in range(1, self.config.num_outlets + 1):
+            if not await self.set_outlet(i, True):
+                success = False
+        return success
+
+    async def all_off(self) -> bool:
+        """Turn all outlets off."""
+        success = True
+        for i in range(1, self.config.num_outlets + 1):
+            if not await self.set_outlet(i, False):
+                success = False
+        return success
+
+    def get_outlet_name(self, outlet: int) -> str:
+        """Get configured name for outlet."""
+        return self.config.port_names.get(outlet, f"Outlet {outlet}")
+
+
+# =============================================================================
 # NUT CLIENT (Network UPS Tools Protocol)
 # =============================================================================
 

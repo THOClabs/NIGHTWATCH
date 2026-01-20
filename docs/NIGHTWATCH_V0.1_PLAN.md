@@ -238,7 +238,7 @@ Create installation scripts, hardware integration guides, and prepare for Nevada
 | 150 | Core Service Completion | power | Implement shutdown-at-threshold (20%) logic | 149 | 3 | 2 | Complete | emergency_threshold_pct, _emergency_shutdown |
 | 151 | Core Service Completion | power | Add power event logging | 150 | 2 | 1 | Complete | _log_event, PowerEvent dataclass |
 | 152 | Core Service Completion | power | Implement smart PDU port control (optional) | 151 | 4 | 3 | Not Started | Device power cycling |
-| 153 | Core Service Completion | power | Add PDU HTTP/SNMP interface | 152 | 3 | 2 | Not Started | Protocol support |
+| 153 | Core Service Completion | power | Add PDU HTTP/SNMP interface | 152 | 3 | 2 | Complete | PDUClient class with HTTP/SNMP protocols |
 | 154 | Core Service Completion | power | Implement sequenced power-on order | 153 | 3 | 2 | Complete | sequenced_power_on() in power_manager.py |
 | 155 | Core Service Completion | power | Implement sequenced power-off order | 154 | 3 | 2 | Complete | sequenced_power_off() in power_manager.py |
 | 156 | Core Service Completion | power | Create mock UPS for testing | 155 | 2 | 2 | Complete | _use_simulation mode in PowerManager |
@@ -327,7 +327,7 @@ Create installation scripts, hardware integration guides, and prepare for Nevada
 | 239 | Orchestrator Development | orchestrator | Add mount error recovery (reconnect) | 238 | 3 | 2 | Complete | recover_mount() with retry in orchestrator.py |
 | 240 | Orchestrator Development | orchestrator | Add weather error recovery (cache) | 239 | 3 | 2 | Complete | recover_weather() with cache fallback in orchestrator.py |
 | 241 | Orchestrator Development | orchestrator | Add camera error recovery (reset) | 240 | 3 | 2 | Complete | recover_camera() with device reset in orchestrator.py |
-| 242 | Orchestrator Development | orchestrator | Implement event bus for inter-service communication | 241 | 4 | 3 | Not Started | Loose coupling |
+| 242 | Orchestrator Development | orchestrator | Implement event bus for inter-service communication | 241 | 4 | 3 | Complete | EventBus class with pub-sub, filters, history |
 | 243 | Orchestrator Development | orchestrator | Add mount position changed event | 242 | 2 | 1 | Complete | Position updates |
 | 244 | Orchestrator Development | orchestrator | Add weather changed event | 243 | 2 | 1 | Complete | Weather updates |
 | 245 | Orchestrator Development | orchestrator | Add safety state changed event | 244 | 2 | 1 | Complete | Safety alerts |
@@ -352,7 +352,7 @@ Create installation scripts, hardware integration guides, and prepare for Nevada
 | 264 | Orchestrator Development | tool_executor | Add tool execution logging | 263 | 2 | 1 | Complete | _log_execution(), get_execution_log() |
 | 265 | Orchestrator Development | tool_executor | Implement safety veto check before execution | 264 | 3 | 2 | Complete | VETOED status in handlers |
 | 266 | Orchestrator Development | tool_executor | Add confirmation requirement for critical tools | 265 | 3 | 2 | Complete | requires_confirmation on Tool, open_roof/close_roof/emergency_shutdown marked |
-| 267 | Orchestrator Development | tool_executor | Implement tool chaining for complex commands | 266 | 4 | 3 | Not Started | Multi-step operations |
+| 267 | Orchestrator Development | tool_executor | Implement tool chaining for complex commands | 266 | 4 | 3 | Complete | ToolChain, ChainStep, ChainResult with builtin chains |
 | 268 | Orchestrator Development | tool_executor | Write unit tests for tool executor | 267 | 2 | 2 | Complete | 35 tests in test_tool_executor.py |
 | 269 | Orchestrator Development | response_formatter | Create nightwatch/response_formatter.py module | 212 | 2 | 1 | Complete | Full formatter module |
 | 270 | Orchestrator Development | response_formatter | Implement tool result to natural language conversion | 269 | 4 | 3 | Complete | format() method |

@@ -51,6 +51,9 @@ __all__ = [
     "ToolResult",
     "ToolStatus",
     "ToolExecutionError",
+    "ToolChain",
+    "ChainStep",
+    "ChainResult",
 ]
 
 
@@ -981,3 +984,388 @@ class ToolExecutor:
             return sign * (d + m/60)
         else:
             return float(dec_str) * sign
+
+
+# =============================================================================
+# Tool Chaining (Step 267)
+# =============================================================================
+
+
+@dataclass
+class ChainStep:
+    """
+    A single step in a tool chain.
+
+    Attributes:
+        tool_name: Name of the tool to execute
+        parameters: Static parameters for the tool
+        param_mappings: Dynamic parameter mappings from previous step results
+        condition: Optional condition function to check before executing
+        on_failure: Action on failure: "stop", "skip", or "continue"
+        description: Human-readable description of this step
+    """
+    tool_name: str
+    parameters: Dict[str, Any] = field(default_factory=dict)
+    param_mappings: Dict[str, str] = field(default_factory=dict)
+    condition: Optional[Callable[[Dict[str, Any]], bool]] = None
+    on_failure: str = "stop"  # "stop", "skip", "continue"
+    description: str = ""
+
+    def __post_init__(self):
+        if self.on_failure not in ("stop", "skip", "continue"):
+            raise ValueError(f"Invalid on_failure: {self.on_failure}")
+
+
+@dataclass
+class ChainResult:
+    """
+    Result of executing a tool chain.
+
+    Attributes:
+        success: Whether all required steps completed successfully
+        steps_executed: Number of steps that were executed
+        steps_total: Total number of steps in the chain
+        results: List of ToolResults for each executed step
+        final_data: Aggregated data from all successful steps
+        message: Summary message
+        execution_time_ms: Total execution time
+    """
+    success: bool
+    steps_executed: int
+    steps_total: int
+    results: List[ToolResult] = field(default_factory=list)
+    final_data: Dict[str, Any] = field(default_factory=dict)
+    message: str = ""
+    execution_time_ms: float = 0.0
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary for serialization."""
+        return {
+            "success": self.success,
+            "steps_executed": self.steps_executed,
+            "steps_total": self.steps_total,
+            "results": [r.to_dict() for r in self.results],
+            "final_data": self.final_data,
+            "message": self.message,
+            "execution_time_ms": self.execution_time_ms,
+        }
+
+
+class ToolChain:
+    """
+    Tool chain for executing complex multi-step commands (Step 267).
+
+    Allows chaining multiple tools together, with parameter passing
+    between steps and conditional execution.
+
+    Example usage:
+        chain = ToolChain("slew_and_capture", executor)
+
+        # Add steps
+        chain.add_step("goto_object", {"object_name": "M31"})
+        chain.add_step("capture_image", {"exposure_sec": 30})
+
+        # Execute the chain
+        result = await chain.execute()
+
+    Example with parameter passing:
+        chain = ToolChain("lookup_and_goto", executor)
+        chain.add_step("lookup_object", {"object_name": "M42"})
+        chain.add_step(
+            "goto_coordinates",
+            param_mappings={"ra": "lookup_object.ra", "dec": "lookup_object.dec"}
+        )
+
+    Built-in chains:
+        - "slew_and_capture": Slew to object, then capture image
+        - "focus_and_capture": Autofocus, then capture image
+        - "full_imaging": Slew, focus, guide, capture sequence
+    """
+
+    # Built-in chain definitions
+    BUILTIN_CHAINS: Dict[str, List[Dict[str, Any]]] = {
+        "slew_and_capture": [
+            {"tool": "goto_object", "params": {}, "param_keys": ["object_name"]},
+            {"tool": "capture_image", "params": {"exposure_sec": 30}, "param_keys": ["exposure_sec"]},
+        ],
+        "focus_and_capture": [
+            {"tool": "autofocus", "params": {}},
+            {"tool": "capture_image", "params": {"exposure_sec": 30}, "param_keys": ["exposure_sec"]},
+        ],
+        "safe_shutdown": [
+            {"tool": "stop_guiding", "params": {}, "on_failure": "continue"},
+            {"tool": "park_telescope", "params": {}},
+            {"tool": "close_enclosure", "params": {}, "on_failure": "continue"},
+        ],
+        "startup_sequence": [
+            {"tool": "check_can_observe", "params": {}},
+            {"tool": "open_enclosure", "params": {}, "on_failure": "stop"},
+            {"tool": "unpark_telescope", "params": {}},
+        ],
+    }
+
+    def __init__(
+        self,
+        name: str,
+        executor: ToolExecutor,
+        description: str = "",
+        stop_on_veto: bool = True
+    ):
+        """
+        Initialize a tool chain.
+
+        Args:
+            name: Name of the chain (for logging)
+            executor: ToolExecutor instance to execute tools
+            description: Human-readable description
+            stop_on_veto: Whether to stop the chain if a step is vetoed
+        """
+        self.name = name
+        self.executor = executor
+        self.description = description
+        self.stop_on_veto = stop_on_veto
+        self._steps: List[ChainStep] = []
+        self._context: Dict[str, Any] = {}
+
+        logger.debug(f"ToolChain '{name}' created")
+
+    def add_step(
+        self,
+        tool_name: str,
+        parameters: Optional[Dict[str, Any]] = None,
+        param_mappings: Optional[Dict[str, str]] = None,
+        condition: Optional[Callable[[Dict[str, Any]], bool]] = None,
+        on_failure: str = "stop",
+        description: str = ""
+    ) -> "ToolChain":
+        """
+        Add a step to the chain.
+
+        Args:
+            tool_name: Name of the tool to execute
+            parameters: Static parameters for the tool
+            param_mappings: Dynamic mappings like {"ra": "step1.data.ra"}
+            condition: Function that returns True if step should execute
+            on_failure: "stop", "skip", or "continue"
+            description: Human-readable description
+
+        Returns:
+            Self for method chaining
+        """
+        step = ChainStep(
+            tool_name=tool_name,
+            parameters=parameters or {},
+            param_mappings=param_mappings or {},
+            condition=condition,
+            on_failure=on_failure,
+            description=description or f"Execute {tool_name}",
+        )
+        self._steps.append(step)
+        return self
+
+    def clear(self) -> "ToolChain":
+        """Clear all steps from the chain."""
+        self._steps.clear()
+        self._context.clear()
+        return self
+
+    def set_context(self, key: str, value: Any) -> "ToolChain":
+        """Set a context value for parameter resolution."""
+        self._context[key] = value
+        return self
+
+    @classmethod
+    def from_builtin(
+        cls,
+        chain_name: str,
+        executor: ToolExecutor,
+        params: Optional[Dict[str, Any]] = None
+    ) -> "ToolChain":
+        """
+        Create a chain from a built-in definition.
+
+        Args:
+            chain_name: Name of the built-in chain
+            executor: ToolExecutor instance
+            params: Override parameters for the chain
+
+        Returns:
+            Configured ToolChain instance
+        """
+        if chain_name not in cls.BUILTIN_CHAINS:
+            raise ValueError(f"Unknown built-in chain: {chain_name}")
+
+        params = params or {}
+        chain = cls(chain_name, executor, description=f"Built-in: {chain_name}")
+
+        for step_def in cls.BUILTIN_CHAINS[chain_name]:
+            step_params = dict(step_def.get("params", {}))
+
+            # Override with provided params if matching param_keys
+            for key in step_def.get("param_keys", []):
+                if key in params:
+                    step_params[key] = params[key]
+
+            chain.add_step(
+                tool_name=step_def["tool"],
+                parameters=step_params,
+                on_failure=step_def.get("on_failure", "stop"),
+            )
+
+        return chain
+
+    def _resolve_param(self, mapping: str, results: Dict[str, ToolResult]) -> Any:
+        """
+        Resolve a parameter mapping to its value.
+
+        Mapping format: "step_name.field" or "step_name.data.subfield"
+        """
+        parts = mapping.split(".")
+        if len(parts) < 2:
+            # Check context
+            return self._context.get(mapping)
+
+        step_name = parts[0]
+        if step_name not in results:
+            raise ValueError(f"Step '{step_name}' not found in results")
+
+        result = results[step_name]
+
+        # Navigate to the value
+        if parts[1] == "data" and len(parts) > 2:
+            value = result.data
+            for part in parts[2:]:
+                if isinstance(value, dict):
+                    value = value.get(part)
+                else:
+                    value = getattr(value, part, None)
+            return value
+        elif parts[1] == "message":
+            return result.message
+        elif parts[1] == "status":
+            return result.status.value
+        else:
+            # Assume it's a data field
+            return result.data.get(parts[1]) if result.data else None
+
+    async def execute(
+        self,
+        timeout_per_step: Optional[float] = None
+    ) -> ChainResult:
+        """
+        Execute the chain.
+
+        Args:
+            timeout_per_step: Optional timeout override per step
+
+        Returns:
+            ChainResult with execution details
+        """
+        start_time = time.time()
+        results_by_name: Dict[str, ToolResult] = {}
+        all_results: List[ToolResult] = []
+        final_data: Dict[str, Any] = {}
+        steps_executed = 0
+
+        logger.info(f"Executing chain '{self.name}' with {len(self._steps)} steps")
+
+        for i, step in enumerate(self._steps):
+            step_id = f"{step.tool_name}_{i}"
+
+            # Check condition
+            if step.condition:
+                try:
+                    should_run = step.condition(final_data)
+                    if not should_run:
+                        logger.debug(f"Step {i+1} '{step.tool_name}' skipped (condition false)")
+                        continue
+                except Exception as e:
+                    logger.warning(f"Condition check failed for step {i+1}: {e}")
+                    continue
+
+            # Build parameters
+            params = dict(step.parameters)
+            for param_name, mapping in step.param_mappings.items():
+                try:
+                    params[param_name] = self._resolve_param(mapping, results_by_name)
+                except Exception as e:
+                    logger.error(f"Failed to resolve param '{param_name}': {e}")
+                    if step.on_failure == "stop":
+                        return ChainResult(
+                            success=False,
+                            steps_executed=steps_executed,
+                            steps_total=len(self._steps),
+                            results=all_results,
+                            final_data=final_data,
+                            message=f"Parameter resolution failed at step {i+1}: {e}",
+                            execution_time_ms=(time.time() - start_time) * 1000,
+                        )
+                    elif step.on_failure == "skip":
+                        continue
+
+            # Execute the step
+            logger.debug(f"Executing step {i+1}: {step.tool_name}")
+            result = await self.executor.execute(
+                step.tool_name,
+                params,
+                timeout=timeout_per_step
+            )
+
+            all_results.append(result)
+            results_by_name[step.tool_name] = result
+            steps_executed += 1
+
+            # Aggregate successful data
+            if result.success and result.data:
+                final_data[step.tool_name] = result.data
+
+            # Handle failure
+            if not result.success:
+                is_veto = result.status == ToolStatus.VETOED
+
+                if is_veto and self.stop_on_veto:
+                    logger.warning(f"Chain stopped at step {i+1}: vetoed")
+                    return ChainResult(
+                        success=False,
+                        steps_executed=steps_executed,
+                        steps_total=len(self._steps),
+                        results=all_results,
+                        final_data=final_data,
+                        message=f"Chain vetoed at step {i+1}: {result.message}",
+                        execution_time_ms=(time.time() - start_time) * 1000,
+                    )
+
+                if step.on_failure == "stop":
+                    logger.warning(f"Chain stopped at step {i+1}: {result.error}")
+                    return ChainResult(
+                        success=False,
+                        steps_executed=steps_executed,
+                        steps_total=len(self._steps),
+                        results=all_results,
+                        final_data=final_data,
+                        message=f"Chain failed at step {i+1}: {result.message}",
+                        execution_time_ms=(time.time() - start_time) * 1000,
+                    )
+                elif step.on_failure == "skip":
+                    logger.info(f"Step {i+1} failed but skipping: {result.error}")
+                # "continue" just proceeds to next step
+
+        # Success
+        execution_time = (time.time() - start_time) * 1000
+        logger.info(
+            f"Chain '{self.name}' completed: {steps_executed}/{len(self._steps)} steps "
+            f"in {execution_time:.1f}ms"
+        )
+
+        return ChainResult(
+            success=True,
+            steps_executed=steps_executed,
+            steps_total=len(self._steps),
+            results=all_results,
+            final_data=final_data,
+            message=f"Chain completed successfully ({steps_executed} steps)",
+            execution_time_ms=execution_time,
+        )
+
+    def __repr__(self) -> str:
+        return f"ToolChain(name='{self.name}', steps={len(self._steps)})"
