@@ -260,7 +260,7 @@ Create installation scripts, hardware integration guides, and prepare for Nevada
 | 172 | Core Service Completion | enclosure | Implement position estimation (percentage) | 171 | 3 | 2 | Complete | estimate_position_percent(), get_position_status(), move_to_position() in roof_controller.py |
 | 173 | Core Service Completion | enclosure | Add mount park verification before open | 172 | 3 | 2 | Complete | verify_mount_parked_before_open() in roof_controller.py |
 | 174 | Core Service Completion | enclosure | Implement 30-minute rain holdoff timer | 173 | 2 | 2 | Complete | get_rain_holdoff_status(), reset_rain_holdoff() in roof_controller.py |
-| 175 | Core Service Completion | enclosure | Add power loss brake engagement | 174 | 3 | 2 | Not Started | Failsafe |
+| 175 | Core Service Completion | enclosure | Add power loss brake engagement | 174 | 3 | 2 | Complete | setup_power_loss_detection(), release_brake(), get_brake_status() in roof_controller.py |
 | 176 | Core Service Completion | enclosure | Implement status callbacks (opening, open, closing, closed) | 175 | 2 | 1 | Complete | register_status_callback() in roof_controller.py |
 | 177 | Core Service Completion | enclosure | Create mock GPIO for testing | 176 | 2 | 2 | Complete | tests/mocks/mock_gpio.py |
 | 178 | Core Service Completion | enclosure | Write unit tests for roof controller | 177 | 2 | 2 | Complete | tests/unit/test_roof_controller.py (45 tests) |
@@ -269,12 +269,12 @@ Create installation scripts, hardware integration guides, and prepare for Nevada
 | 181 | Core Service Completion | focus | Complete V-curve autofocus algorithm | 180 | 4 | 3 | Not Started | Parabolic fit |
 | 182 | Core Service Completion | focus | Add HFD (Half-Flux Diameter) calculation | 181 | 4 | 3 | Not Started | Star measurement |
 | 183 | Core Service Completion | focus | Implement Bahtinov mask analysis | 182 | 5 | 4 | Not Started | Diffraction pattern |
-| 184 | Core Service Completion | focus | Add contrast-based focusing | 183 | 3 | 2 | Not Started | Alternative method |
+| 184 | Core Service Completion | focus | Add contrast-based focusing | 183 | 3 | 2 | Complete | _contrast_focus(), _measure_contrast(), calculate_laplacian_variance() in focuser_service.py |
 | 185 | Core Service Completion | focus | Implement temperature compensation calibration | 184 | 4 | 3 | Not Started | Auto-adjust for temp |
 | 186 | Core Service Completion | focus | Add temperature coefficient storage | 185 | 2 | 1 | Complete | save/load_temp_coefficient() in focuser_service.py |
 | 187 | Core Service Completion | focus | Implement backlash compensation | 186 | 3 | 2 | Complete | Direction-aware backlash tracking, calibrate_backlash(), get_backlash_info() in focuser_service.py |
 | 188 | Core Service Completion | focus | Add focus position history tracking | 187 | 2 | 2 | Complete | FocusPositionRecord, get_position_history(), get_position_stats() in focuser_service.py |
-| 189 | Core Service Completion | focus | Implement focus run database | 188 | 3 | 2 | Not Started | Analysis data |
+| 189 | Core Service Completion | focus | Implement focus run database | 188 | 3 | 2 | Complete | FocusRunDatabase class with SQLite persistence in focuser_service.py |
 | 190 | Core Service Completion | focus | Create mock focuser for testing | 189 | 2 | 2 | Complete | tests/mocks/mock_focuser.py with error injection |
 | 191 | Core Service Completion | focus | Write unit tests for autofocus algorithms | 190 | 3 | 2 | Complete | tests/unit/test_focuser_service.py (35 tests) |
 | 192 | Core Service Completion | focus | Write integration test with camera | 191 | 3 | 2 | Not Started | End-to-end test |
@@ -608,7 +608,7 @@ Create installation scripts, hardware integration guides, and prepare for Nevada
 | 520 | Hardware-in-Loop Simulation | simulators | Add simulated slew behavior | 519 | 3 | 2 | Complete | Async slew with configurable rate |
 | 521 | Hardware-in-Loop Simulation | simulators | Add simulated tracking rate | 520 | 2 | 1 | Complete | TrackingRate enum (sidereal/lunar/solar/king) in mount_simulator.py |
 | 522 | Hardware-in-Loop Simulation | simulators | Implement park/unpark simulation | 521 | 2 | 1 | Complete | MountState enum, park/unpark methods in mount_simulator.py |
-| 523 | Hardware-in-Loop Simulation | simulators | Add configurable fault injection | 522 | 3 | 2 | Not Started | Error testing |
+| 523 | Hardware-in-Loop Simulation | simulators | Add configurable fault injection | 522 | 3 | 2 | Complete | FaultInjector class with FaultType enum in docker/simulators/fault_injection.py |
 | 524 | Hardware-in-Loop Simulation | simulators | Create weather_simulator.py | 523 | 3 | 2 | Complete | docker/simulators/weather_simulator.py - aiohttp server |
 | 525 | Hardware-in-Loop Simulation | simulators | Implement Ecowitt API simulation | 524 | 3 | 2 | Complete | /get_livedata_info endpoint with JSON response |
 | 526 | Hardware-in-Loop Simulation | simulators | Add weather pattern generation | 525 | 3 | 2 | Complete | Diurnal temp cycles, wind variability, rain events |

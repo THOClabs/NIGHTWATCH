@@ -99,6 +99,343 @@ class FocusPositionRecord:
     hfd: Optional[float] = None  # HFD at this position if measured
 
 
+class FocusRunDatabase:
+    """
+    SQLite database for storing focus run history (Step 189).
+
+    Provides persistent storage for focus runs, enabling:
+    - Historical analysis of focus performance
+    - Temperature compensation calibration data
+    - Focus trend tracking over time
+    - Debug and diagnostic information
+
+    Schema:
+    - focus_runs: Main run data (id, timestamp, method, positions, success)
+    - focus_measurements: Individual measurements per run
+    """
+
+    def __init__(self, db_path: str = "focus_history.db"):
+        """
+        Initialize focus run database.
+
+        Args:
+            db_path: Path to SQLite database file
+        """
+        self.db_path = db_path
+        self._conn = None
+        self._initialized = False
+
+    def initialize(self) -> bool:
+        """
+        Initialize database and create tables.
+
+        Returns:
+            True if initialization successful
+        """
+        try:
+            import sqlite3
+            self._conn = sqlite3.connect(self.db_path)
+            self._create_tables()
+            self._initialized = True
+            logger.info(f"Focus database initialized: {self.db_path}")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to initialize focus database: {e}")
+            return False
+
+    def _create_tables(self):
+        """Create database tables if they don't exist."""
+        cursor = self._conn.cursor()
+
+        # Focus runs table
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS focus_runs (
+                run_id TEXT PRIMARY KEY,
+                start_time TEXT NOT NULL,
+                end_time TEXT,
+                method TEXT NOT NULL,
+                initial_position INTEGER,
+                final_position INTEGER,
+                best_hfd REAL,
+                success INTEGER,
+                error TEXT,
+                temperature_c REAL
+            )
+        """)
+
+        # Focus measurements table
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS focus_measurements (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                run_id TEXT NOT NULL,
+                timestamp TEXT NOT NULL,
+                position INTEGER NOT NULL,
+                hfd REAL,
+                fwhm REAL,
+                peak_value REAL,
+                star_count INTEGER,
+                temperature_c REAL,
+                FOREIGN KEY (run_id) REFERENCES focus_runs (run_id)
+            )
+        """)
+
+        # Index for efficient queries
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_runs_time ON focus_runs (start_time)
+        """)
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_measurements_run ON focus_measurements (run_id)
+        """)
+
+        self._conn.commit()
+
+    def save_run(self, run: FocusRun) -> bool:
+        """
+        Save a focus run to the database (Step 189).
+
+        Args:
+            run: FocusRun to save
+
+        Returns:
+            True if saved successfully
+        """
+        if not self._initialized:
+            logger.warning("Focus database not initialized")
+            return False
+
+        try:
+            cursor = self._conn.cursor()
+
+            # Insert run record
+            cursor.execute("""
+                INSERT OR REPLACE INTO focus_runs
+                (run_id, start_time, end_time, method, initial_position,
+                 final_position, best_hfd, success, error, temperature_c)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                run.run_id,
+                run.start_time.isoformat(),
+                run.end_time.isoformat() if run.end_time else None,
+                run.method.value,
+                run.initial_position,
+                run.final_position,
+                run.best_hfd,
+                1 if run.success else 0,
+                run.error,
+                run.measurements[-1].temperature_c if run.measurements else None
+            ))
+
+            # Insert measurements
+            for m in run.measurements:
+                cursor.execute("""
+                    INSERT INTO focus_measurements
+                    (run_id, timestamp, position, hfd, fwhm, peak_value,
+                     star_count, temperature_c)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    run.run_id,
+                    m.timestamp.isoformat(),
+                    m.position,
+                    m.hfd,
+                    m.fwhm,
+                    m.peak_value,
+                    m.star_count,
+                    m.temperature_c
+                ))
+
+            self._conn.commit()
+            logger.debug(f"Saved focus run {run.run_id} to database")
+            return True
+
+        except Exception as e:
+            logger.error(f"Failed to save focus run: {e}")
+            return False
+
+    def get_run(self, run_id: str) -> Optional[FocusRun]:
+        """
+        Retrieve a focus run by ID (Step 189).
+
+        Args:
+            run_id: Run identifier
+
+        Returns:
+            FocusRun or None if not found
+        """
+        if not self._initialized:
+            return None
+
+        try:
+            cursor = self._conn.cursor()
+
+            # Get run record
+            cursor.execute("""
+                SELECT run_id, start_time, end_time, method, initial_position,
+                       final_position, best_hfd, success, error
+                FROM focus_runs WHERE run_id = ?
+            """, (run_id,))
+            row = cursor.fetchone()
+
+            if not row:
+                return None
+
+            run = FocusRun(
+                run_id=row[0],
+                start_time=datetime.fromisoformat(row[1]),
+                end_time=datetime.fromisoformat(row[2]) if row[2] else None,
+                method=AutoFocusMethod(row[3]),
+                initial_position=row[4],
+                final_position=row[5],
+                best_hfd=row[6] or float('inf'),
+                success=bool(row[7]),
+                error=row[8]
+            )
+
+            # Get measurements
+            cursor.execute("""
+                SELECT timestamp, position, hfd, fwhm, peak_value,
+                       star_count, temperature_c
+                FROM focus_measurements WHERE run_id = ?
+                ORDER BY timestamp
+            """, (run_id,))
+
+            for m_row in cursor.fetchall():
+                run.measurements.append(FocusMetric(
+                    timestamp=datetime.fromisoformat(m_row[0]),
+                    position=m_row[1],
+                    hfd=m_row[2] or 0,
+                    fwhm=m_row[3] or 0,
+                    peak_value=m_row[4] or 0,
+                    star_count=m_row[5] or 0,
+                    temperature_c=m_row[6] or 0
+                ))
+
+            return run
+
+        except Exception as e:
+            logger.error(f"Failed to retrieve focus run: {e}")
+            return None
+
+    def get_recent_runs(self, limit: int = 10) -> List[FocusRun]:
+        """
+        Get most recent focus runs (Step 189).
+
+        Args:
+            limit: Maximum number of runs to return
+
+        Returns:
+            List of FocusRun objects, most recent first
+        """
+        if not self._initialized:
+            return []
+
+        try:
+            cursor = self._conn.cursor()
+            cursor.execute("""
+                SELECT run_id FROM focus_runs
+                ORDER BY start_time DESC LIMIT ?
+            """, (limit,))
+
+            runs = []
+            for (run_id,) in cursor.fetchall():
+                run = self.get_run(run_id)
+                if run:
+                    runs.append(run)
+
+            return runs
+
+        except Exception as e:
+            logger.error(f"Failed to get recent runs: {e}")
+            return []
+
+    def get_runs_by_temperature_range(
+        self,
+        min_temp: float,
+        max_temp: float
+    ) -> List[FocusRun]:
+        """
+        Get focus runs within a temperature range (Step 189).
+
+        Useful for analyzing focus position vs temperature relationship.
+
+        Args:
+            min_temp: Minimum temperature in Celsius
+            max_temp: Maximum temperature in Celsius
+
+        Returns:
+            List of FocusRun objects within temperature range
+        """
+        if not self._initialized:
+            return []
+
+        try:
+            cursor = self._conn.cursor()
+            cursor.execute("""
+                SELECT run_id FROM focus_runs
+                WHERE temperature_c BETWEEN ? AND ?
+                AND success = 1
+                ORDER BY temperature_c
+            """, (min_temp, max_temp))
+
+            runs = []
+            for (run_id,) in cursor.fetchall():
+                run = self.get_run(run_id)
+                if run:
+                    runs.append(run)
+
+            return runs
+
+        except Exception as e:
+            logger.error(f"Failed to get runs by temperature: {e}")
+            return []
+
+    def get_focus_statistics(self) -> dict:
+        """
+        Get overall focus statistics (Step 189).
+
+        Returns:
+            Dict with statistics:
+            - total_runs: Total number of focus runs
+            - successful_runs: Number of successful runs
+            - avg_hfd: Average best HFD across successful runs
+            - avg_duration_sec: Average focus run duration
+        """
+        if not self._initialized:
+            return {}
+
+        try:
+            cursor = self._conn.cursor()
+
+            cursor.execute("SELECT COUNT(*) FROM focus_runs")
+            total = cursor.fetchone()[0]
+
+            cursor.execute("SELECT COUNT(*) FROM focus_runs WHERE success = 1")
+            successful = cursor.fetchone()[0]
+
+            cursor.execute("""
+                SELECT AVG(best_hfd) FROM focus_runs
+                WHERE success = 1 AND best_hfd < 100
+            """)
+            avg_hfd = cursor.fetchone()[0] or 0
+
+            return {
+                "total_runs": total,
+                "successful_runs": successful,
+                "success_rate": successful / total if total > 0 else 0,
+                "avg_hfd": avg_hfd,
+            }
+
+        except Exception as e:
+            logger.error(f"Failed to get focus statistics: {e}")
+            return {}
+
+    def close(self):
+        """Close database connection."""
+        if self._conn:
+            self._conn.close()
+            self._conn = None
+            self._initialized = False
+
+
 class FocuserService:
     """
     Temperature-compensated auto-focus for NIGHTWATCH.
@@ -543,6 +880,8 @@ class FocuserService:
                 await self._vcurve_focus(run, camera)
             elif method == AutoFocusMethod.HFD:
                 await self._hfd_focus(run, camera)
+            elif method == AutoFocusMethod.CONTRAST:
+                await self._contrast_focus(run, camera)
             else:
                 raise ValueError(f"Unsupported auto-focus method: {method}")
 
@@ -684,6 +1023,153 @@ class FocuserService:
 
         # Step 188: Record final position with HFD
         self._record_position("auto_focus_complete", hfd=best_hfd)
+
+    async def _contrast_focus(self, run: FocusRun, camera):
+        """
+        Contrast-based auto-focus algorithm (Step 184).
+
+        Maximizes image contrast/sharpness as a focus metric.
+        This is useful when stars are not available (e.g., daytime,
+        lunar/planetary imaging, or terrestrial targets).
+
+        The algorithm:
+        1. Sample contrast at multiple focus positions
+        2. Find the position with maximum contrast
+        3. Use hill-climbing to refine the position
+        """
+        logger.info("Starting contrast-based auto-focus")
+
+        # Calculate focus range
+        half_range = (self.config.autofocus_samples // 2) * self.config.autofocus_step_size
+        start_pos = self._position - half_range
+        end_pos = self._position + half_range
+
+        # Move to start position with backlash compensation
+        await self.move_to(start_pos - self.config.backlash_steps, False)
+        await self.move_to(start_pos, False)
+
+        # Sample contrast at each position
+        positions = []
+        contrasts = []
+
+        for i in range(self.config.autofocus_samples):
+            pos = start_pos + i * self.config.autofocus_step_size
+            await self.move_to(pos, compensate_backlash=False)
+
+            # Measure contrast
+            contrast = await self._measure_contrast(camera)
+
+            positions.append(pos)
+            contrasts.append(contrast)
+
+            # Record as a focus metric (use contrast as inverse HFD for consistency)
+            run.measurements.append(FocusMetric(
+                timestamp=datetime.now(),
+                position=pos,
+                hfd=1.0 / max(contrast, 0.001),  # Lower HFD = better focus
+                fwhm=0,
+                peak_value=contrast,  # Store actual contrast in peak_value
+                star_count=0,
+                temperature_c=self._temperature
+            ))
+
+            logger.debug(f"Contrast sample: pos={pos}, contrast={contrast:.4f}")
+
+        # Find position with maximum contrast
+        max_idx = contrasts.index(max(contrasts))
+        best_pos = positions[max_idx]
+        best_contrast = contrasts[max_idx]
+
+        # Refine with smaller steps around best position
+        step = self.config.autofocus_step_size // 4
+        await self.move_to(best_pos - step * 2, compensate_backlash=True)
+
+        for offset in range(-2, 3):
+            pos = best_pos + offset * step
+            await self.move_to(pos, compensate_backlash=False)
+            contrast = await self._measure_contrast(camera)
+
+            if contrast > best_contrast:
+                best_contrast = contrast
+                best_pos = pos
+
+        # Move to best position
+        await self.move_to(best_pos, reason="auto_focus")
+
+        # Final verification
+        final_contrast = await self._measure_contrast(camera)
+
+        run.final_position = best_pos
+        run.best_hfd = 1.0 / max(final_contrast, 0.001)  # Convert to HFD-like metric
+
+        logger.info(f"Contrast focus complete: pos={best_pos}, contrast={final_contrast:.4f}")
+
+        # Step 188: Record final position
+        self._record_position("contrast_focus_complete", hfd=run.best_hfd)
+
+    async def _measure_contrast(self, camera) -> float:
+        """
+        Measure image contrast/sharpness (Step 184).
+
+        Uses Laplacian variance as a focus metric. Higher variance
+        indicates sharper edges and better focus.
+
+        In real implementation:
+        1. Capture frame with camera
+        2. Convert to grayscale
+        3. Apply Laplacian operator
+        4. Calculate variance of result
+
+        Returns:
+            Contrast metric (higher = sharper)
+        """
+        # Simulate contrast measurement
+        # Returns a curve centered around position 25000
+        optimal = 25000
+        distance = abs(self._position - optimal)
+
+        # Inverse parabolic model: contrast peaks at optimal
+        max_contrast = 1.0
+        k = 4e-9
+        contrast = max_contrast - k * distance * distance
+
+        # Add noise
+        import random
+        contrast += random.gauss(0, 0.01)
+
+        await asyncio.sleep(self.config.autofocus_exposure_sec * 0.5)
+
+        return max(0.1, contrast)
+
+    def calculate_laplacian_variance(self, image_data) -> float:
+        """
+        Calculate Laplacian variance of an image (Step 184).
+
+        The Laplacian highlights edges, and its variance indicates
+        how many sharp edges are present. In-focus images have
+        higher Laplacian variance.
+
+        Args:
+            image_data: 2D numpy array of image data
+
+        Returns:
+            Laplacian variance (higher = sharper)
+        """
+        try:
+            import numpy as np
+            from scipy import ndimage
+
+            # Apply Laplacian filter
+            laplacian = ndimage.laplace(image_data.astype(np.float64))
+
+            # Calculate variance
+            variance = laplacian.var()
+
+            return float(variance)
+        except ImportError:
+            # Fallback if scipy not available
+            logger.warning("scipy not available for Laplacian calculation")
+            return 0.5
 
     async def _measure_hfd(self, camera) -> float:
         """

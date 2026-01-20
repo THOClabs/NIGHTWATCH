@@ -1214,6 +1214,180 @@ class RoofController:
             return result
 
     # =========================================================================
+    # POWER LOSS BRAKE ENGAGEMENT (Step 175)
+    # =========================================================================
+
+    def setup_power_loss_detection(self, gpio: GPIOInterface, power_pin: int = 25):
+        """
+        Setup power loss detection for brake engagement (Step 175).
+
+        Monitors a GPIO pin connected to the power supply status.
+        When power is lost, the brake is automatically engaged to
+        prevent roof movement from gravity or wind.
+
+        Args:
+            gpio: GPIOInterface instance
+            power_pin: GPIO pin connected to power status (active high = power OK)
+        """
+        self._power_gpio = gpio
+        self._power_pin = power_pin
+        self._brake_engaged = False
+
+        logger.info(f"Setting up power loss detection on GPIO {power_pin}")
+
+        if gpio.backend == GPIOBackend.GPIOZERO:
+            try:
+                from gpiozero import Button
+                # Power loss = button pressed (power pin goes low)
+                power_monitor = Button(power_pin, pull_up=True)
+                power_monitor.when_pressed = self._on_power_loss
+                power_monitor.when_released = self._on_power_restored
+                self._power_monitor = power_monitor
+                logger.info("Power loss detection configured (gpiozero)")
+            except Exception as e:
+                logger.error(f"Failed to setup power loss detection: {e}")
+        elif gpio.backend == GPIOBackend.RPIGPIO:
+            try:
+                import RPi.GPIO as GPIO
+                GPIO.setup(power_pin, GPIO.IN, pull_up_down=GPIO.PUD_UP)
+                GPIO.add_event_detect(
+                    power_pin,
+                    GPIO.BOTH,
+                    callback=self._on_power_change_rpigpio,
+                    bouncetime=50
+                )
+                logger.info("Power loss detection configured (RPi.GPIO)")
+            except Exception as e:
+                logger.error(f"Failed to setup power loss detection: {e}")
+        else:
+            logger.info("Power loss detection in mock mode")
+
+    def _on_power_loss(self):
+        """
+        Handle power loss event - engage brake immediately (Step 175).
+
+        Called from GPIO interrupt when power is lost. Must be fast
+        and non-blocking. Engages mechanical brake to hold roof position.
+        """
+        logger.critical("POWER LOSS DETECTED - ENGAGING BRAKE")
+        self._brake_engaged = True
+        self._safety[SafetyCondition.POWER_OK] = False
+
+        # Stop motor immediately (de-energize relays)
+        if hasattr(self, '_gpio') and self._gpio:
+            self._gpio.stop_motor()
+
+        # In real hardware, brake engagement is typically:
+        # - Spring-loaded brake that engages when power is removed
+        # - Or a separate brake relay that we energize
+        # For simulation, we just set the flag
+
+        # Schedule notification on event loop
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                loop.call_soon_threadsafe(
+                    lambda: asyncio.create_task(self._notify_callbacks("power_loss"))
+                )
+        except Exception as e:
+            logger.error(f"Failed to notify power loss: {e}")
+
+    def _on_power_restored(self):
+        """
+        Handle power restoration - brake remains engaged until cleared (Step 175).
+
+        Power restoration doesn't automatically release the brake.
+        Operator must verify conditions and manually release.
+        """
+        logger.info("Power restored - brake remains engaged until manually cleared")
+        self._safety[SafetyCondition.POWER_OK] = True
+
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                loop.call_soon_threadsafe(
+                    lambda: asyncio.create_task(self._notify_callbacks("power_restored"))
+                )
+        except Exception as e:
+            logger.error(f"Failed to notify power restoration: {e}")
+
+    def _on_power_change_rpigpio(self, channel):
+        """RPi.GPIO power change callback wrapper (Step 175)."""
+        import RPi.GPIO as GPIO
+        if GPIO.input(channel):
+            self._on_power_restored()
+        else:
+            self._on_power_loss()
+
+    def release_brake(self, confirmed: bool = False) -> dict:
+        """
+        Release the mechanical brake after power loss (Step 175).
+
+        Brake must be manually released after power is restored.
+        Requires confirmation to prevent accidental release.
+
+        Args:
+            confirmed: Must be True to release brake
+
+        Returns:
+            Dict with result:
+            - success: True if brake released
+            - message: Status message
+        """
+        if not confirmed:
+            return {
+                "success": False,
+                "requires_confirmation": True,
+                "message": "Brake release requires confirmation. Set confirmed=True.",
+            }
+
+        if not self._brake_engaged:
+            return {
+                "success": True,
+                "message": "Brake was not engaged",
+            }
+
+        if not self._safety[SafetyCondition.POWER_OK]:
+            return {
+                "success": False,
+                "message": "Cannot release brake - power still not OK",
+            }
+
+        logger.info("Releasing mechanical brake")
+        self._brake_engaged = False
+
+        return {
+            "success": True,
+            "message": "Brake released - roof can now move",
+        }
+
+    def get_brake_status(self) -> dict:
+        """
+        Get current brake status (Step 175).
+
+        Returns:
+            Dict with brake information:
+            - engaged: True if brake is engaged
+            - power_ok: True if power is available
+            - can_move: True if roof can move (brake released and power OK)
+        """
+        return {
+            "engaged": self._brake_engaged,
+            "power_ok": self._safety.get(SafetyCondition.POWER_OK, True),
+            "can_move": not self._brake_engaged and self._safety.get(SafetyCondition.POWER_OK, True),
+        }
+
+    def trigger_mock_power_loss(self):
+        """Trigger power loss for testing (Step 175)."""
+        logger.info("Mock power loss triggered")
+        self._on_power_loss()
+
+    def trigger_mock_power_restore(self):
+        """Trigger power restoration for testing (Step 175)."""
+        logger.info("Mock power restore triggered")
+        self._on_power_restored()
+
+    # =========================================================================
     # STATUS MONITORING
     # =========================================================================
 
