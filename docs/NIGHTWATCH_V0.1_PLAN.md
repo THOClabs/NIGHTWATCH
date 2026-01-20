@@ -175,14 +175,14 @@ Create installation scripts, hardware integration guides, and prepare for Nevada
 | 87 | Core Service Completion | camera | Implement exposure time control (set/get) | 86 | 2 | 1 | Complete | set_exposure(), get_exposure(), get_exposure_range() in asi_camera.py |
 | 88 | Core Service Completion | camera | Implement binning control (1x1, 2x2, 4x4) | 87 | 2 | 1 | Complete | set_binning(), get_binning(), get_supported_binning() in asi_camera.py |
 | 89 | Core Service Completion | camera | Implement ROI (region of interest) control | 88 | 3 | 2 | Complete | set_roi(), get_roi(), set_roi_centered(), get_roi_presets() |
-| 90 | Core Service Completion | camera | Implement single frame capture | 89 | 3 | 2 | Not Started | Still image capture |
+| 90 | Core Service Completion | camera | Implement single frame capture | 89 | 3 | 2 | Complete | capture_frame() async with SDK integration and simulation mode |
 | 91 | Core Service Completion | camera | Implement video/streaming capture mode | 90 | 4 | 3 | Not Started | Planetary imaging |
-| 92 | Core Service Completion | camera | Implement image download and format conversion | 91 | 3 | 2 | Not Started | RAW to usable format |
-| 93 | Core Service Completion | camera | Add FITS header writing | 92 | 3 | 2 | Not Started | Metadata for astrometry |
+| 92 | Core Service Completion | camera | Implement image download and format conversion | 91 | 3 | 2 | Complete | convert_raw_to_numpy(), debayer_image(), save_image() with PNG/FITS/RAW |
+| 93 | Core Service Completion | camera | Add FITS header writing | 92 | 3 | 2 | Complete | _save_fits() with astropy, create_fits_header(), standard headers |
 | 94 | Core Service Completion | camera | Implement cooling control (setpoint, power) | 93 | 3 | 2 | Complete | set_target_temperature(), wait_for_temperature(), get_cooling_recommendation() |
 | 95 | Core Service Completion | camera | Implement temperature monitoring | 94 | 2 | 1 | Complete | get_temperature_status(), set_cooler() in asi_camera.py |
 | 96 | Core Service Completion | camera | Add capture abort functionality | 95 | 2 | 1 | Complete | abort_capture(), get_capture_progress() in asi_camera.py |
-| 97 | Core Service Completion | camera | Implement capture progress callbacks | 96 | 3 | 2 | Not Started | Status updates |
+| 97 | Core Service Completion | camera | Implement capture progress callbacks | 96 | 3 | 2 | Complete | register_capture_callback(), capture_with_progress() with status/progress |
 | 98 | Core Service Completion | camera | Add SER file recording for planetary | 97 | 4 | 3 | Not Started | Video format |
 | 99 | Core Service Completion | camera | Create mock camera for testing | 98 | 3 | 2 | Complete | tests/mocks/mock_camera.py with presets |
 | 100 | Core Service Completion | camera | Write unit tests for camera control | 99 | 2 | 2 | Complete | test_camera_service.py (26 tests) |

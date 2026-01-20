@@ -18,7 +18,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
-from typing import Optional, List, Tuple, Any
+from typing import Optional, List, Tuple, Any, Callable
 
 logger = logging.getLogger("NIGHTWATCH.Camera")
 
@@ -736,6 +736,550 @@ class ASICamera:
         except Exception as e:
             logger.error(f"Single capture failed: {e}")
             raise
+
+    # =========================================================================
+    # SINGLE FRAME CAPTURE (Step 90)
+    # =========================================================================
+
+    async def capture_frame(
+        self,
+        exposure_sec: Optional[float] = None,
+        gain: Optional[int] = None,
+        callback: Optional[Callable[[str, float], None]] = None
+    ) -> Optional[bytes]:
+        """
+        Capture a single frame and return raw image data (Step 90).
+
+        Args:
+            exposure_sec: Exposure time (uses current if None)
+            gain: Gain value (uses current if None)
+            callback: Progress callback(status, percent)
+
+        Returns:
+            Raw image data as bytes, or None on failure
+        """
+        if not self._camera:
+            logger.error("Camera not initialized")
+            return None
+
+        if self._capturing:
+            logger.warning("Capture already in progress")
+            return None
+
+        try:
+            self._capturing = True
+
+            # Apply settings if provided
+            if exposure_sec is not None:
+                self.set_exposure(exposure_sec * 1000)  # Convert to ms
+            if gain is not None:
+                self.set_gain(gain)
+
+            if callback:
+                callback("starting", 0.0)
+
+            # Start exposure
+            exposure_us = int(self._settings.exposure_ms * 1000)
+
+            if callback:
+                callback("exposing", 10.0)
+
+            # Capture the frame
+            # Note: Real implementation uses self._camera.capture()
+            # For SDK-less testing, simulate
+            if ASISDKWrapper.SDK_AVAILABLE and self._camera:
+                try:
+                    self._camera.start_exposure()
+
+                    # Wait for exposure (with timeout)
+                    timeout = self._settings.exposure_ms / 1000.0 + 10.0
+                    start = datetime.now()
+
+                    while (datetime.now() - start).total_seconds() < timeout:
+                        status = self._camera.get_exposure_status()
+                        if status == self._asi.ASI_EXP_SUCCESS:
+                            break
+                        elif status == self._asi.ASI_EXP_FAILED:
+                            raise RuntimeError("Exposure failed")
+                        await asyncio.sleep(0.01)
+
+                    if callback:
+                        callback("downloading", 70.0)
+
+                    # Download image data
+                    image_data = self._camera.get_data_after_exposure()
+
+                    if callback:
+                        callback("complete", 100.0)
+
+                    return bytes(image_data) if image_data else None
+
+                except Exception as e:
+                    logger.error(f"Frame capture failed: {e}")
+                    return None
+            else:
+                # Simulation mode
+                await asyncio.sleep(self._settings.exposure_ms / 1000.0)
+                if callback:
+                    callback("complete", 100.0)
+                # Return dummy data for testing
+                roi = self.get_roi()
+                size = roi[2] * roi[3] * 2  # 16-bit
+                return bytes([0] * min(size, 1024))
+
+        finally:
+            self._capturing = False
+
+    # =========================================================================
+    # IMAGE FORMAT CONVERSION (Step 92)
+    # =========================================================================
+
+    @staticmethod
+    def convert_raw_to_numpy(
+        raw_data: bytes,
+        width: int,
+        height: int,
+        bit_depth: int = 16,
+        is_color: bool = False
+    ):
+        """
+        Convert raw camera data to numpy array (Step 92).
+
+        Args:
+            raw_data: Raw image bytes
+            width: Image width
+            height: Image height
+            bit_depth: Bits per pixel (8 or 16)
+            is_color: True for color (Bayer) data
+
+        Returns:
+            numpy array or None if numpy unavailable
+        """
+        try:
+            import numpy as np
+
+            if bit_depth <= 8:
+                dtype = np.uint8
+            else:
+                dtype = np.uint16
+
+            # Reshape to image dimensions
+            img = np.frombuffer(raw_data, dtype=dtype)
+
+            if is_color:
+                # Bayer pattern - same dimensions as mono
+                img = img.reshape((height, width))
+            else:
+                img = img.reshape((height, width))
+
+            return img
+
+        except ImportError:
+            logger.warning("numpy not available for image conversion")
+            return None
+        except Exception as e:
+            logger.error(f"Image conversion failed: {e}")
+            return None
+
+    @staticmethod
+    def debayer_image(bayer_data, pattern: str = "RGGB"):
+        """
+        Convert Bayer pattern to RGB image (Step 92).
+
+        Args:
+            bayer_data: numpy array with Bayer pattern
+            pattern: Bayer pattern type (RGGB, BGGR, GRBG, GBRG)
+
+        Returns:
+            RGB numpy array or None
+        """
+        try:
+            import numpy as np
+
+            # Try OpenCV first (faster)
+            try:
+                import cv2
+
+                patterns = {
+                    "RGGB": cv2.COLOR_BAYER_RG2RGB,
+                    "BGGR": cv2.COLOR_BAYER_BG2RGB,
+                    "GRBG": cv2.COLOR_BAYER_GR2RGB,
+                    "GBRG": cv2.COLOR_BAYER_GB2RGB,
+                }
+
+                cv_pattern = patterns.get(pattern, cv2.COLOR_BAYER_RG2RGB)
+                return cv2.cvtColor(bayer_data, cv_pattern)
+
+            except ImportError:
+                # Fallback: Simple bilinear interpolation
+                h, w = bayer_data.shape
+                rgb = np.zeros((h, w, 3), dtype=bayer_data.dtype)
+
+                # Very basic debayering (not optimal but works)
+                # RGGB pattern
+                rgb[0::2, 0::2, 0] = bayer_data[0::2, 0::2]  # R
+                rgb[0::2, 1::2, 1] = bayer_data[0::2, 1::2]  # G
+                rgb[1::2, 0::2, 1] = bayer_data[1::2, 0::2]  # G
+                rgb[1::2, 1::2, 2] = bayer_data[1::2, 1::2]  # B
+
+                return rgb
+
+        except ImportError:
+            logger.warning("numpy not available for debayering")
+            return None
+        except Exception as e:
+            logger.error(f"Debayering failed: {e}")
+            return None
+
+    def save_image(
+        self,
+        image_data: bytes,
+        filepath: Path,
+        format: ImageFormat = ImageFormat.FITS,
+        metadata: Optional[dict] = None
+    ) -> bool:
+        """
+        Save image data to file in specified format (Step 92).
+
+        Args:
+            image_data: Raw image bytes
+            filepath: Output file path
+            format: Output format
+            metadata: Optional metadata for FITS headers
+
+        Returns:
+            True if successful
+        """
+        try:
+            filepath.parent.mkdir(parents=True, exist_ok=True)
+            roi = self.get_roi()
+            width, height = roi[2], roi[3]
+
+            if format == ImageFormat.FITS:
+                return self._save_fits(image_data, filepath, width, height, metadata)
+            elif format == ImageFormat.PNG:
+                return self._save_png(image_data, filepath, width, height)
+            elif format in [ImageFormat.RAW8, ImageFormat.RAW16]:
+                # Save raw bytes
+                with open(filepath, 'wb') as f:
+                    f.write(image_data)
+                return True
+            else:
+                logger.error(f"Unsupported format: {format}")
+                return False
+
+        except Exception as e:
+            logger.error(f"Failed to save image: {e}")
+            return False
+
+    def _save_png(self, image_data: bytes, filepath: Path, width: int, height: int) -> bool:
+        """Save image as PNG."""
+        try:
+            import numpy as np
+            from PIL import Image
+
+            # Convert to numpy
+            img = self.convert_raw_to_numpy(
+                image_data, width, height,
+                bit_depth=self._info.bit_depth if self._info else 16,
+                is_color=self._info.is_color if self._info else False
+            )
+
+            if img is None:
+                return False
+
+            # Handle color
+            if self._info and self._info.is_color:
+                img = self.debayer_image(img)
+
+            # Scale to 8-bit for PNG
+            if img.dtype == np.uint16:
+                img = (img / 256).astype(np.uint8)
+
+            # Save with PIL
+            pil_img = Image.fromarray(img)
+            pil_img.save(str(filepath))
+            logger.info(f"Saved PNG: {filepath}")
+            return True
+
+        except ImportError as e:
+            logger.error(f"PNG save requires PIL/numpy: {e}")
+            return False
+        except Exception as e:
+            logger.error(f"PNG save failed: {e}")
+            return False
+
+    # =========================================================================
+    # FITS HEADER WRITING (Step 93)
+    # =========================================================================
+
+    def _save_fits(
+        self,
+        image_data: bytes,
+        filepath: Path,
+        width: int,
+        height: int,
+        metadata: Optional[dict] = None
+    ) -> bool:
+        """
+        Save image as FITS with proper headers (Step 93).
+
+        Args:
+            image_data: Raw image bytes
+            filepath: Output path
+            width: Image width
+            height: Image height
+            metadata: Additional metadata for headers
+
+        Returns:
+            True if successful
+        """
+        try:
+            from astropy.io import fits
+            import numpy as np
+
+            # Convert to numpy
+            img = self.convert_raw_to_numpy(
+                image_data, width, height,
+                bit_depth=self._info.bit_depth if self._info else 16,
+                is_color=self._info.is_color if self._info else False
+            )
+
+            if img is None:
+                return False
+
+            # Create FITS HDU
+            hdu = fits.PrimaryHDU(img)
+            header = hdu.header
+
+            # Standard FITS headers
+            header['SIMPLE'] = True
+            header['BITPIX'] = 16 if img.dtype == np.uint16 else 8
+            header['NAXIS'] = 2
+            header['NAXIS1'] = width
+            header['NAXIS2'] = height
+
+            # Camera information
+            if self._info:
+                header['INSTRUME'] = self._info.name
+                header['CAMERAID'] = self._info.camera_id
+                header['PIXSIZE'] = (self._info.pixel_size_um, 'Pixel size in microns')
+                header['ISCOLOR'] = self._info.is_color
+
+            # Capture settings
+            header['EXPTIME'] = (self._settings.exposure_ms / 1000.0, 'Exposure time in seconds')
+            header['GAIN'] = (self._settings.gain, 'Camera gain')
+            header['XBINNING'] = self._settings.binning
+            header['YBINNING'] = self._settings.binning
+
+            # ROI
+            roi = self.get_roi()
+            header['XORGSUBF'] = roi[0]
+            header['YORGSUBF'] = roi[1]
+
+            # Temperature
+            temp = self.get_temperature()
+            if temp is not None:
+                header['CCD-TEMP'] = (temp, 'Sensor temperature in Celsius')
+
+            # Timestamp
+            header['DATE-OBS'] = datetime.utcnow().isoformat()
+            header['TIMESYS'] = 'UTC'
+
+            # Software
+            header['SWCREATE'] = 'NIGHTWATCH Observatory Control'
+
+            # Add custom metadata
+            if metadata:
+                for key, value in metadata.items():
+                    # FITS keys max 8 chars
+                    fits_key = key[:8].upper()
+                    if isinstance(value, tuple):
+                        header[fits_key] = value  # (value, comment)
+                    else:
+                        header[fits_key] = value
+
+            # Write file
+            hdu.writeto(str(filepath), overwrite=True)
+            logger.info(f"Saved FITS: {filepath}")
+            return True
+
+        except ImportError:
+            logger.error("FITS save requires astropy: pip install astropy")
+            return False
+        except Exception as e:
+            logger.error(f"FITS save failed: {e}")
+            return False
+
+    def create_fits_header(self, metadata: Optional[dict] = None) -> dict:
+        """
+        Create FITS header dictionary for current camera state (Step 93).
+
+        Args:
+            metadata: Additional custom metadata
+
+        Returns:
+            Dictionary of FITS header key-value pairs
+        """
+        headers = {
+            'SIMPLE': True,
+            'BITPIX': 16,
+            'DATE-OBS': datetime.utcnow().isoformat(),
+            'TIMESYS': 'UTC',
+            'SWCREATE': 'NIGHTWATCH',
+        }
+
+        # Camera info
+        if self._info:
+            headers['INSTRUME'] = self._info.name
+            headers['CAMERAID'] = self._info.camera_id
+            headers['PIXSIZE'] = self._info.pixel_size_um
+            headers['ISCOLOR'] = self._info.is_color
+
+        # Settings
+        headers['EXPTIME'] = self._settings.exposure_ms / 1000.0
+        headers['GAIN'] = self._settings.gain
+        headers['XBINNING'] = self._settings.binning
+        headers['YBINNING'] = self._settings.binning
+
+        # ROI
+        roi = self.get_roi()
+        headers['NAXIS1'] = roi[2]
+        headers['NAXIS2'] = roi[3]
+        headers['XORGSUBF'] = roi[0]
+        headers['YORGSUBF'] = roi[1]
+
+        # Temperature
+        temp = self.get_temperature()
+        if temp is not None:
+            headers['CCD-TEMP'] = temp
+
+        # Custom metadata
+        if metadata:
+            for key, value in metadata.items():
+                headers[key[:8].upper()] = value
+
+        return headers
+
+    # =========================================================================
+    # CAPTURE PROGRESS CALLBACKS (Step 97)
+    # =========================================================================
+
+    def register_capture_callback(self, callback: Callable[[str, float, Optional[dict]], None]):
+        """
+        Register a callback for capture progress updates (Step 97).
+
+        Callback receives:
+        - status: Current status string
+        - progress: Percentage complete (0-100)
+        - data: Optional additional data dict
+
+        Args:
+            callback: Function to call with progress updates
+        """
+        if not hasattr(self, '_capture_callbacks'):
+            self._capture_callbacks: List[Callable] = []
+        self._capture_callbacks.append(callback)
+
+    def unregister_capture_callback(self, callback: Callable):
+        """Remove a registered callback."""
+        if hasattr(self, '_capture_callbacks'):
+            try:
+                self._capture_callbacks.remove(callback)
+            except ValueError:
+                pass
+
+    def _notify_capture_progress(self, status: str, progress: float, data: Optional[dict] = None):
+        """Notify all registered callbacks of capture progress."""
+        if not hasattr(self, '_capture_callbacks'):
+            return
+
+        for callback in self._capture_callbacks:
+            try:
+                callback(status, progress, data)
+            except Exception as e:
+                logger.warning(f"Capture callback error: {e}")
+
+    async def capture_with_progress(
+        self,
+        exposure_sec: float,
+        format: ImageFormat = ImageFormat.FITS,
+        filepath: Optional[Path] = None,
+        metadata: Optional[dict] = None
+    ) -> Optional[Path]:
+        """
+        Capture single frame with progress callbacks (Step 97).
+
+        Args:
+            exposure_sec: Exposure time in seconds
+            format: Output format
+            filepath: Output path (auto-generated if None)
+            metadata: Additional FITS metadata
+
+        Returns:
+            Path to saved image or None on failure
+        """
+        if not self._initialized:
+            self._notify_capture_progress("error", 0, {"error": "Camera not initialized"})
+            return None
+
+        if self._capturing:
+            self._notify_capture_progress("error", 0, {"error": "Capture in progress"})
+            return None
+
+        # Generate filepath if not provided
+        if filepath is None:
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            ext = "fits" if format == ImageFormat.FITS else "png"
+            filepath = self.data_dir / f"capture_{timestamp}.{ext}"
+
+        try:
+            self._notify_capture_progress("preparing", 5, {
+                "exposure_sec": exposure_sec,
+                "filepath": str(filepath)
+            })
+
+            # Set exposure
+            self.set_exposure(exposure_sec * 1000)
+
+            self._notify_capture_progress("exposing", 10, {
+                "exposure_sec": exposure_sec
+            })
+
+            # Capture frame with internal callback
+            def progress_cb(status: str, pct: float):
+                # Map internal progress to overall progress
+                mapped_pct = 10 + (pct * 0.6)  # 10-70%
+                self._notify_capture_progress(status, mapped_pct, None)
+
+            image_data = await self.capture_frame(callback=progress_cb)
+
+            if image_data is None:
+                self._notify_capture_progress("error", 70, {"error": "Capture failed"})
+                return None
+
+            self._notify_capture_progress("saving", 75, {
+                "format": format.value,
+                "filepath": str(filepath)
+            })
+
+            # Save image
+            success = self.save_image(image_data, filepath, format, metadata)
+
+            if success:
+                self._notify_capture_progress("complete", 100, {
+                    "filepath": str(filepath),
+                    "size_bytes": len(image_data)
+                })
+                return filepath
+            else:
+                self._notify_capture_progress("error", 90, {"error": "Save failed"})
+                return None
+
+        except Exception as e:
+            self._notify_capture_progress("error", 0, {"error": str(e)})
+            logger.error(f"Capture with progress failed: {e}")
+            return None
 
     # =========================================================================
     # STATUS METHODS
