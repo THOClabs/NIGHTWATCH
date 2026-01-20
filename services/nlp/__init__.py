@@ -39,6 +39,16 @@ from .user_preferences import (
     get_user_preferences,
 )
 
+from .sky_describer import (
+    SkyDescriber,
+    DescriptionStyle,
+    SkyCondition,
+    VisibleObject,
+    SkyState,
+    SkyDescription,
+    get_sky_describer,
+)
+
 __all__ = [
     # Conversation Context
     "ConversationContext",
@@ -67,4 +77,12 @@ __all__ = [
     "TargetPreference",
     "ImagingPreference",
     "get_user_preferences",
+    # Sky Description
+    "SkyDescriber",
+    "DescriptionStyle",
+    "SkyCondition",
+    "VisibleObject",
+    "SkyState",
+    "SkyDescription",
+    "get_sky_describer",
 ]
