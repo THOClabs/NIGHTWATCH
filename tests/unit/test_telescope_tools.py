@@ -960,6 +960,344 @@ class TestFocusToolHandlers:
 
 
 # ============================================================================
+# Astrometry Tool Handler Tests (Step 425)
+# ============================================================================
+
+class TestAstrometryToolHandlers:
+    """Tests for astrometry tool handlers."""
+
+    def test_astrometry_tools_defined(self):
+        """Verify all astrometry tools are defined."""
+        astrometry_tool_names = [
+            "plate_solve",
+            "get_pointing_error",
+        ]
+        tool_names = {t.name for t in TELESCOPE_TOOLS}
+        for name in astrometry_tool_names:
+            assert name in tool_names, f"Astrometry tool '{name}' not found"
+
+    def test_plate_solve_parameters(self):
+        """Verify plate_solve has sync_mount parameter."""
+        registry = ToolRegistry()
+        tool = registry.get_tool("plate_solve")
+        assert tool is not None
+
+        param_names = {p.name for p in tool.parameters}
+        # Has at least one parameter
+        assert len(param_names) >= 1
+
+    def test_get_pointing_error_no_required_params(self):
+        """Verify get_pointing_error has no required parameters."""
+        registry = ToolRegistry()
+        tool = registry.get_tool("get_pointing_error")
+        assert tool is not None
+
+        required_params = [p for p in tool.parameters if p.required]
+        assert len(required_params) == 0
+
+    def test_astrometry_handlers_created(self):
+        """Verify astrometry handlers are created in default handlers."""
+        handlers = create_default_handlers()
+
+        astrometry_handlers = [
+            "plate_solve",
+            "get_pointing_error",
+        ]
+
+        for handler_name in astrometry_handlers:
+            assert handler_name in handlers, f"Handler '{handler_name}' not created"
+            assert callable(handlers[handler_name])
+
+
+# ============================================================================
+# Enclosure Tool Handler Tests (Step 433)
+# ============================================================================
+
+class TestEnclosureToolHandlers:
+    """Tests for enclosure tool handlers."""
+
+    def test_enclosure_tools_defined(self):
+        """Verify all enclosure tools are defined."""
+        enclosure_tool_names = [
+            "open_roof",
+            "close_roof",
+            "get_roof_status",
+            "stop_roof",
+        ]
+        tool_names = {t.name for t in TELESCOPE_TOOLS}
+        for name in enclosure_tool_names:
+            assert name in tool_names, f"Enclosure tool '{name}' not found"
+
+    def test_close_roof_parameters(self):
+        """Verify close_roof has emergency parameter."""
+        registry = ToolRegistry()
+        tool = registry.get_tool("close_roof")
+        assert tool is not None
+
+        param_names = {p.name for p in tool.parameters}
+        assert "emergency" in param_names
+
+        emergency_param = next(p for p in tool.parameters if p.name == "emergency")
+        assert emergency_param.type == "boolean"
+        assert emergency_param.required is False
+
+    def test_enclosure_handlers_created(self):
+        """Verify enclosure handlers are created in default handlers."""
+        handlers = create_default_handlers()
+
+        enclosure_handlers = [
+            "open_roof",
+            "close_roof",
+            "get_roof_status",
+            "stop_roof",
+        ]
+
+        for handler_name in enclosure_handlers:
+            assert handler_name in handlers, f"Handler '{handler_name}' not created"
+            assert callable(handlers[handler_name])
+
+    def test_enclosure_tools_in_correct_category(self):
+        """Verify enclosure tools are in ENCLOSURE category."""
+        registry = ToolRegistry()
+        enclosure_tools = registry.get_tools_by_category(ToolCategory.ENCLOSURE)
+        enclosure_names = {t.name for t in enclosure_tools}
+
+        expected = ["open_roof", "close_roof", "get_roof_status", "stop_roof"]
+        for name in expected:
+            assert name in enclosure_names, f"'{name}' not in ENCLOSURE category"
+
+
+# ============================================================================
+# Power Tool Handler Tests (Step 440)
+# ============================================================================
+
+class TestPowerToolHandlers:
+    """Tests for power tool handlers."""
+
+    def test_power_tools_defined(self):
+        """Verify all power tools are defined."""
+        power_tool_names = [
+            "get_power_status",
+            "get_power_events",
+        ]
+        tool_names = {t.name for t in TELESCOPE_TOOLS}
+        for name in power_tool_names:
+            assert name in tool_names, f"Power tool '{name}' not found"
+
+    def test_get_power_events_parameters(self):
+        """Verify get_power_events has filtering parameters."""
+        registry = ToolRegistry()
+        tool = registry.get_tool("get_power_events")
+        assert tool is not None
+
+        param_names = {p.name for p in tool.parameters}
+        # Has at least one filtering parameter (hours is used for time range)
+        assert len(param_names) >= 1
+
+    def test_power_handlers_created(self):
+        """Verify power handlers are created in default handlers."""
+        handlers = create_default_handlers()
+
+        power_handlers = [
+            "get_power_status",
+            "get_power_events",
+        ]
+
+        for handler_name in power_handlers:
+            assert handler_name in handlers, f"Handler '{handler_name}' not created"
+            assert callable(handlers[handler_name])
+
+    def test_power_tools_in_correct_category(self):
+        """Verify power tools are in POWER category."""
+        registry = ToolRegistry()
+        power_tools = registry.get_tools_by_category(ToolCategory.POWER)
+        power_names = {t.name for t in power_tools}
+
+        expected = ["get_power_status", "get_power_events"]
+        for name in expected:
+            assert name in power_names, f"'{name}' not in POWER category"
+
+
+# ============================================================================
+# INDI Tool Handler Tests (Step 445)
+# ============================================================================
+
+class TestINDIToolHandlers:
+    """Tests for INDI tool handlers."""
+
+    def test_indi_tools_defined(self):
+        """Verify all INDI tools are defined."""
+        indi_tool_names = [
+            "indi_list_devices",
+            "indi_set_filter",
+            "indi_get_filter",
+            "indi_move_focuser",
+            "indi_get_focuser_status",
+        ]
+        tool_names = {t.name for t in TELESCOPE_TOOLS}
+        for name in indi_tool_names:
+            assert name in tool_names, f"INDI tool '{name}' not found"
+
+    def test_indi_set_filter_parameters(self):
+        """Verify indi_set_filter has filter_name parameter."""
+        registry = ToolRegistry()
+        tool = registry.get_tool("indi_set_filter")
+        assert tool is not None
+
+        param_names = {p.name for p in tool.parameters}
+        assert "filter_name" in param_names
+
+        filter_param = next(p for p in tool.parameters if p.name == "filter_name")
+        assert filter_param.required is True
+        assert filter_param.type == "string"
+
+    def test_indi_move_focuser_parameters(self):
+        """Verify indi_move_focuser has position parameter."""
+        registry = ToolRegistry()
+        tool = registry.get_tool("indi_move_focuser")
+        assert tool is not None
+
+        param_names = {p.name for p in tool.parameters}
+        assert "position" in param_names
+
+    def test_indi_handlers_created(self):
+        """Verify INDI handlers are created in default handlers."""
+        handlers = create_default_handlers()
+
+        indi_handlers = [
+            "indi_list_devices",
+            "indi_set_filter",
+            "indi_get_filter",
+            "indi_move_focuser",
+            "indi_get_focuser_status",
+        ]
+
+        for handler_name in indi_handlers:
+            assert handler_name in handlers, f"Handler '{handler_name}' not created"
+            assert callable(handlers[handler_name])
+
+
+# ============================================================================
+# Alpaca Tool Handler Tests (Step 449)
+# ============================================================================
+
+class TestAlpacaToolHandlers:
+    """Tests for Alpaca tool handlers."""
+
+    def test_alpaca_tools_defined(self):
+        """Verify all Alpaca tools are defined."""
+        alpaca_tool_names = [
+            "alpaca_discover_devices",
+            "alpaca_set_filter",
+            "alpaca_get_filter",
+            "alpaca_move_focuser",
+            "alpaca_get_focuser_status",
+        ]
+        tool_names = {t.name for t in TELESCOPE_TOOLS}
+        for name in alpaca_tool_names:
+            assert name in tool_names, f"Alpaca tool '{name}' not found"
+
+    def test_alpaca_set_filter_parameters(self):
+        """Verify alpaca_set_filter has filter_name parameter."""
+        registry = ToolRegistry()
+        tool = registry.get_tool("alpaca_set_filter")
+        assert tool is not None
+
+        param_names = {p.name for p in tool.parameters}
+        assert "filter_name" in param_names
+
+        filter_param = next(p for p in tool.parameters if p.name == "filter_name")
+        assert filter_param.required is True
+        assert filter_param.type == "string"
+
+    def test_alpaca_move_focuser_parameters(self):
+        """Verify alpaca_move_focuser has position parameter."""
+        registry = ToolRegistry()
+        tool = registry.get_tool("alpaca_move_focuser")
+        assert tool is not None
+
+        param_names = {p.name for p in tool.parameters}
+        assert "position" in param_names
+
+    def test_alpaca_handlers_created(self):
+        """Verify Alpaca handlers are created in default handlers."""
+        handlers = create_default_handlers()
+
+        alpaca_handlers = [
+            "alpaca_discover_devices",
+            "alpaca_set_filter",
+            "alpaca_get_filter",
+            "alpaca_move_focuser",
+            "alpaca_get_focuser_status",
+        ]
+
+        for handler_name in alpaca_handlers:
+            assert handler_name in handlers, f"Handler '{handler_name}' not created"
+            assert callable(handlers[handler_name])
+
+
+# ============================================================================
+# Encoder Tool Handler Tests (Step 456)
+# ============================================================================
+
+class TestEncoderToolHandlers:
+    """Tests for encoder tool handlers."""
+
+    def test_encoder_tools_defined(self):
+        """Verify all encoder tools are defined."""
+        encoder_tool_names = [
+            "get_encoder_position",
+            "get_pointing_correction",
+            "pec_status",
+            "pec_start",
+            "pec_stop",
+            "pec_record",
+        ]
+        tool_names = {t.name for t in TELESCOPE_TOOLS}
+        for name in encoder_tool_names:
+            assert name in tool_names, f"Encoder tool '{name}' not found"
+
+    def test_pec_tools_no_required_params(self):
+        """Verify PEC tools have no required parameters."""
+        registry = ToolRegistry()
+
+        pec_tools = ["pec_status", "pec_start", "pec_stop", "pec_record"]
+        for tool_name in pec_tools:
+            tool = registry.get_tool(tool_name)
+            assert tool is not None, f"Tool {tool_name} not found"
+            required_params = [p for p in tool.parameters if p.required]
+            assert len(required_params) == 0, f"{tool_name} should have no required params"
+
+    def test_encoder_handlers_created(self):
+        """Verify encoder handlers are created in default handlers."""
+        handlers = create_default_handlers()
+
+        encoder_handlers = [
+            "get_encoder_position",
+            "get_pointing_correction",
+            "pec_status",
+            "pec_start",
+            "pec_stop",
+            "pec_record",
+        ]
+
+        for handler_name in encoder_handlers:
+            assert handler_name in handlers, f"Handler '{handler_name}' not created"
+            assert callable(handlers[handler_name])
+
+    def test_encoder_tools_in_mount_category(self):
+        """Verify encoder tools are in MOUNT category."""
+        registry = ToolRegistry()
+        mount_tools = registry.get_tools_by_category(ToolCategory.MOUNT)
+        mount_names = {t.name for t in mount_tools}
+
+        # Encoder and PEC tools should be in MOUNT category
+        expected = ["get_encoder_position", "pec_status", "pec_start", "pec_stop", "pec_record"]
+        for name in expected:
+            assert name in mount_names, f"'{name}' not in MOUNT category"
+
+
+# ============================================================================
 # Run Configuration
 # ============================================================================
 

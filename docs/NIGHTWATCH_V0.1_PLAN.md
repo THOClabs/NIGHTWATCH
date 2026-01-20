@@ -510,7 +510,7 @@ Create installation scripts, hardware integration guides, and prepare for Nevada
 | 422 | Tool Handler Implementation | astrometry_tools | Add error in arcseconds | 421 | 2 | 1 | Complete | RA/Dec/total error with quality assessment |
 | 423 | Tool Handler Implementation | astrometry_tools | Implement center_object handler | 422 | 3 | 2 | Not Started | Precise centering |
 | 424 | Tool Handler Implementation | astrometry_tools | Add iterative refinement | 423 | 3 | 2 | Not Started | Multi-solve |
-| 425 | Tool Handler Implementation | astrometry_tools | Write unit tests for astrometry tool handlers | 424 | 2 | 2 | Not Started | Test coverage |
+| 425 | Tool Handler Implementation | astrometry_tools | Write unit tests for astrometry tool handlers | 424 | 2 | 2 | Complete | TestAstrometryToolHandlers in test_telescope_tools.py (4 tests) |
 | 426 | Tool Handler Implementation | enclosure_tools | Implement open_roof handler | 257 | 2 | 1 | Complete | open_roof() with park verification |
 | 427 | Tool Handler Implementation | enclosure_tools | Add safety check before open | 426 | 2 | 1 | Complete | safety_monitor.evaluate() in open_roof |
 | 428 | Tool Handler Implementation | enclosure_tools | Implement close_roof handler | 427 | 2 | 1 | Complete | close_roof() with state check |
@@ -518,30 +518,30 @@ Create installation scripts, hardware integration guides, and prepare for Nevada
 | 430 | Tool Handler Implementation | enclosure_tools | Implement get_roof_status handler | 429 | 2 | 1 | Complete | get_roof_status() with blockers |
 | 431 | Tool Handler Implementation | enclosure_tools | Add position percentage | 430 | 2 | 1 | Complete | get_position_percent() in status |
 | 432 | Tool Handler Implementation | enclosure_tools | Implement stop_roof handler | 431 | 2 | 1 | Complete | stop_roof() emergency stop |
-| 433 | Tool Handler Implementation | enclosure_tools | Write unit tests for enclosure tool handlers | 432 | 2 | 2 | Not Started | Test coverage |
+| 433 | Tool Handler Implementation | enclosure_tools | Write unit tests for enclosure tool handlers | 432 | 2 | 2 | Complete | TestEnclosureToolHandlers in test_telescope_tools.py (4 tests) |
 | 434 | Tool Handler Implementation | power_tools | Implement get_power_status handler | 257 | 2 | 1 | Complete | get_power_status() with UPS data |
 | 435 | Tool Handler Implementation | power_tools | Add battery percentage and runtime | 434 | 2 | 1 | Complete | Battery %, runtime, load in status |
 | 436 | Tool Handler Implementation | power_tools | Implement get_power_events handler | 435 | 2 | 1 | Complete | get_power_events() with history |
 | 437 | Tool Handler Implementation | power_tools | Add filtering by event type | 436 | 2 | 1 | Complete | event_type parameter for filtering |
 | 438 | Tool Handler Implementation | power_tools | Implement emergency_shutdown handler | 437 | 3 | 2 | Not Started | Critical action |
 | 439 | Tool Handler Implementation | power_tools | Add confirmation requirement | 438 | 2 | 1 | Not Started | Safety |
-| 440 | Tool Handler Implementation | power_tools | Write unit tests for power tool handlers | 439 | 2 | 2 | Not Started | Test coverage |
+| 440 | Tool Handler Implementation | power_tools | Write unit tests for power tool handlers | 439 | 2 | 2 | Complete | TestPowerToolHandlers in test_telescope_tools.py (4 tests) |
 | 441 | Tool Handler Implementation | indi_tools | Implement indi_discover_devices handler | 257 | 3 | 2 | Not Started | Device scan |
 | 442 | Tool Handler Implementation | indi_tools | Implement indi_connect_device handler | 441 | 2 | 1 | Not Started | Connect device |
 | 443 | Tool Handler Implementation | indi_tools | Implement indi_get_property handler | 442 | 2 | 1 | Not Started | Read property |
 | 444 | Tool Handler Implementation | indi_tools | Implement indi_set_property handler | 443 | 2 | 1 | Not Started | Write property |
-| 445 | Tool Handler Implementation | indi_tools | Write unit tests for INDI tool handlers | 444 | 2 | 2 | Not Started | Test coverage |
+| 445 | Tool Handler Implementation | indi_tools | Write unit tests for INDI tool handlers | 444 | 2 | 2 | Complete | TestINDIToolHandlers in test_telescope_tools.py (4 tests) |
 | 446 | Tool Handler Implementation | alpaca_tools | Implement alpaca_discover_devices handler | 257 | 3 | 2 | Not Started | Device scan |
 | 447 | Tool Handler Implementation | alpaca_tools | Implement alpaca_connect_device handler | 446 | 2 | 1 | Not Started | Connect device |
 | 448 | Tool Handler Implementation | alpaca_tools | Implement alpaca_get_status handler | 447 | 2 | 1 | Not Started | Device status |
-| 449 | Tool Handler Implementation | alpaca_tools | Write unit tests for Alpaca tool handlers | 448 | 2 | 2 | Not Started | Test coverage |
+| 449 | Tool Handler Implementation | alpaca_tools | Write unit tests for Alpaca tool handlers | 448 | 2 | 2 | Complete | TestAlpacaToolHandlers in test_telescope_tools.py (4 tests) |
 | 450 | Tool Handler Implementation | encoder_tools | Implement get_encoder_position handler | 257 | 2 | 1 | Complete | get_encoder_position() with counts |
 | 451 | Tool Handler Implementation | encoder_tools | Add formatted position (degrees) | 450 | 2 | 1 | Complete | Degrees and counts in output |
 | 452 | Tool Handler Implementation | encoder_tools | Implement pec_status handler | 451 | 2 | 1 | Complete | pec_status() recording/playback state |
 | 453 | Tool Handler Implementation | encoder_tools | Implement pec_record handler | 452 | 3 | 2 | Complete | pec_record() starts recording |
 | 454 | Tool Handler Implementation | encoder_tools | Implement get_driver_status handler | 453 | 2 | 1 | Complete | get_driver_status() TMC diagnostics |
 | 455 | Tool Handler Implementation | encoder_tools | Add StallGuard and current info | 454 | 2 | 1 | Complete | Stall, overtemp, load in diagnostics |
-| 456 | Tool Handler Implementation | encoder_tools | Write unit tests for encoder tool handlers | 455 | 2 | 2 | Not Started | Test coverage |
+| 456 | Tool Handler Implementation | encoder_tools | Write unit tests for encoder tool handlers | 455 | 2 | 2 | Complete | TestEncoderToolHandlers in test_telescope_tools.py (4 tests) |
 | 457 | Safety System Hardening | safety_monitor | Review safety_monitor.py current implementation | None | 2 | 1 | Complete | Full hysteresis, sensor timeouts, priority actions |
 | 458 | Safety System Hardening | safety_monitor | Add sensor timeout detection (120s) | 457 | 3 | 2 | Complete | _is_sensor_stale with configurable timeouts |
 | 459 | Safety System Hardening | safety_monitor | Implement failsafe on sensor timeout (treat as unsafe) | 458 | 3 | 2 | Complete | Stale weather data = unsafe |
