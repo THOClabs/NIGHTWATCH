@@ -281,7 +281,7 @@ Create installation scripts, hardware integration guides, and prepare for Nevada
 | 193 | Core Service Completion | guiding | Review phd2_client.py current implementation | None | 2 | 1 | Complete | Full JSON-RPC client, dither, calibration, events |
 | 194 | Core Service Completion | guiding | Complete dither implementation | 193 | 3 | 2 | Complete | dither_and_wait() with settle detection in phd2_client.py |
 | 195 | Core Service Completion | guiding | Add settling detection with timeout | 194 | 3 | 2 | Complete | wait_for_settle(), get_settle_status(), is_settling property in phd2_client.py |
-| 196 | Core Service Completion | guiding | Implement guide star loss recovery | 195 | 3 | 2 | Not Started | Auto-reselect |
+| 196 | Core Service Completion | guiding | Implement guide star loss recovery | 195 | 3 | 2 | Complete | Auto-recovery with _auto_recover_star(), manual_recover_star() in phd2_client.py |
 | 197 | Core Service Completion | guiding | Add RMS trending and alerts | 196 | 3 | 2 | Complete | RMS history, trending, alerts with callback in phd2_client.py |
 | 198 | Core Service Completion | guiding | Implement guide log parsing | 197 | 3 | 2 | Not Started | Session analysis |
 | 199 | Core Service Completion | guiding | Write unit tests for PHD2 client | 198 | 2 | 2 | Complete | tests/unit/test_phd2_client.py (18 tests) |
@@ -317,12 +317,12 @@ Create installation scripts, hardware integration guides, and prepare for Nevada
 | 229 | Orchestrator Development | orchestrator | Implement service restart on failure | 228 | 4 | 3 | Not Started | Auto-recovery |
 | 230 | Orchestrator Development | orchestrator | Add session state management | 229 | 3 | 2 | Complete | SessionState dataclass |
 | 231 | Orchestrator Development | orchestrator | Implement session start logic | 230 | 2 | 1 | Complete | start_session(), end_session() |
-| 232 | Orchestrator Development | orchestrator | Implement session end logic (park, close) | 231 | 3 | 2 | Not Started | End observation |
+| 232 | Orchestrator Development | orchestrator | Implement session end logic (park, close) | 231 | 3 | 2 | Complete | end_session() with park, close, guiding stop in orchestrator.py |
 | 233 | Orchestrator Development | orchestrator | Add observation log recording | 232 | 3 | 2 | Not Started | Session history |
 | 234 | Orchestrator Development | orchestrator | Implement command queue | 233 | 3 | 2 | Not Started | Async command handling |
 | 235 | Orchestrator Development | orchestrator | Add command priority levels | 234 | 2 | 1 | Complete | CommandPriority enum in orchestrator.py |
 | 236 | Orchestrator Development | orchestrator | Implement command timeout handling | 235 | 3 | 2 | Not Started | Prevent hangs |
-| 237 | Orchestrator Development | orchestrator | Add command cancellation support | 236 | 2 | 2 | Not Started | Abort in progress |
+| 237 | Orchestrator Development | orchestrator | Add command cancellation support | 236 | 2 | 2 | Complete | execute_cancellable(), cancel_command(), cancel_all_commands() in orchestrator.py |
 | 238 | Orchestrator Development | orchestrator | Implement error recovery strategies | 237 | 4 | 3 | Not Started | Graceful degradation |
 | 239 | Orchestrator Development | orchestrator | Add mount error recovery (reconnect) | 238 | 3 | 2 | Not Started | Connection lost |
 | 240 | Orchestrator Development | orchestrator | Add weather error recovery (cache) | 239 | 3 | 2 | Not Started | Data unavailable |
@@ -336,7 +336,7 @@ Create installation scripts, hardware integration guides, and prepare for Nevada
 | 248 | Orchestrator Development | orchestrator | Add command latency metrics | 247 | 2 | 1 | Complete | Timing data |
 | 249 | Orchestrator Development | orchestrator | Add service uptime metrics | 248 | 2 | 1 | Complete | Availability |
 | 250 | Orchestrator Development | orchestrator | Add error rate metrics | 249 | 2 | 1 | Complete | Failure tracking |
-| 251 | Orchestrator Development | orchestrator | Implement graceful shutdown sequence | 250 | 3 | 2 | Not Started | Clean exit |
+| 251 | Orchestrator Development | orchestrator | Implement graceful shutdown sequence | 250 | 3 | 2 | Complete | graceful_shutdown(), emergency_shutdown() in orchestrator.py |
 | 252 | Orchestrator Development | orchestrator | Add park on shutdown | 251 | 2 | 1 | Complete | Safety |
 | 253 | Orchestrator Development | orchestrator | Add close enclosure on shutdown | 252 | 2 | 1 | Complete | Safety |
 | 254 | Orchestrator Development | orchestrator | Add save session log on shutdown | 253 | 2 | 1 | Complete | Data preservation |
@@ -601,7 +601,7 @@ Create installation scripts, hardware integration guides, and prepare for Nevada
 | 513 | Hardware-in-Loop Simulation | docker | Add healthcheck for all services | 512 | 2 | 1 | Not Started | Startup wait |
 | 514 | Hardware-in-Loop Simulation | docker | Create docker-compose.prod.yml template | 513 | 2 | 2 | Not Started | Production config |
 | 515 | Hardware-in-Loop Simulation | docker | Write docker-compose validation test | 514 | 2 | 1 | Not Started | Syntax check |
-| 516 | Hardware-in-Loop Simulation | simulators | Create services/simulators/__init__.py | 501 | 1 | 1 | Not Started | Package |
+| 516 | Hardware-in-Loop Simulation | simulators | Create services/simulators/__init__.py | 501 | 1 | 1 | Complete | BaseSimulator, SimulatorConfig, SimulatorStats, FaultConfig classes |
 | 517 | Hardware-in-Loop Simulation | simulators | Create mount_simulator.py | 516 | 4 | 3 | Not Started | LX200 simulator |
 | 518 | Hardware-in-Loop Simulation | simulators | Implement LX200 command parsing | 517 | 3 | 2 | Not Started | Protocol handling |
 | 519 | Hardware-in-Loop Simulation | simulators | Add simulated position tracking | 518 | 3 | 2 | Not Started | Virtual mount |

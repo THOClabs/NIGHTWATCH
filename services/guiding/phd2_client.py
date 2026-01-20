@@ -110,6 +110,17 @@ class PHD2Client:
         self._settle_start_time: Optional[datetime] = None
         self._dither_settle_event = asyncio.Event()
 
+        # Step 196: Guide star loss recovery
+        self._star_lost: bool = False
+        self._star_lost_time: Optional[datetime] = None
+        self._star_lost_count: int = 0
+        self._auto_recover_enabled: bool = True
+        self._recovery_attempts: int = 0
+        self._max_recovery_attempts: int = 3
+        self._recovery_delay_sec: float = 2.0
+        self._star_lost_callback: Optional[Callable] = None
+        self._recovery_task: Optional[asyncio.Task] = None
+
         # Step 197: RMS trending and alerts
         self._rms_history: List[tuple] = []  # (timestamp, rms_total)
         self._rms_history_max_size: int = 1000
@@ -295,6 +306,29 @@ class PHD2Client:
         elif event_type == "StarLost":
             logger.warning("Guide star lost!")
             self._state = GuideState.LOST_LOCK
+            self._star_lost = True
+            self._star_lost_time = datetime.now()
+            self._star_lost_count += 1
+
+            # Notify callback
+            if self._star_lost_callback:
+                try:
+                    self._star_lost_callback(self._star_lost_count)
+                except Exception as e:
+                    logger.error(f"Star lost callback error: {e}")
+
+            # Trigger auto-recovery if enabled
+            if self._auto_recover_enabled and not self._recovery_task:
+                self._recovery_task = asyncio.create_task(self._auto_recover_star())
+
+        elif event_type == "StarSelected":
+            # Star was reselected (manually or via recovery)
+            logger.info("Guide star selected")
+            self._star_lost = False
+            self._recovery_attempts = 0
+            if self._recovery_task:
+                self._recovery_task.cancel()
+                self._recovery_task = None
 
         # Notify callbacks
         for callback in self._callbacks:
@@ -733,6 +767,150 @@ class PHD2Client:
         count = len(self._rms_history)
         self._rms_history.clear()
         return count
+
+    # =========================================================================
+    # GUIDE STAR LOSS RECOVERY (Step 196)
+    # =========================================================================
+
+    @property
+    def star_lost(self) -> bool:
+        """Check if guide star is currently lost."""
+        return self._star_lost
+
+    def enable_auto_recovery(self, enabled: bool = True) -> None:
+        """
+        Enable or disable automatic guide star recovery (Step 196).
+
+        Args:
+            enabled: Whether to automatically attempt recovery
+        """
+        self._auto_recover_enabled = enabled
+        logger.info(f"Auto guide star recovery {'enabled' if enabled else 'disabled'}")
+
+    def set_recovery_params(self, max_attempts: int = 3, delay_sec: float = 2.0) -> None:
+        """
+        Configure recovery parameters (Step 196).
+
+        Args:
+            max_attempts: Maximum recovery attempts before giving up
+            delay_sec: Delay between recovery attempts
+        """
+        self._max_recovery_attempts = max_attempts
+        self._recovery_delay_sec = delay_sec
+        logger.info(f"Recovery params: max_attempts={max_attempts}, delay={delay_sec}s")
+
+    def set_star_lost_callback(self, callback: Optional[Callable]) -> None:
+        """
+        Set callback for star lost events (Step 196).
+
+        Args:
+            callback: Function(loss_count) called when star is lost
+        """
+        self._star_lost_callback = callback
+
+    async def _auto_recover_star(self) -> None:
+        """
+        Automatic guide star recovery routine (Step 196).
+
+        Attempts to find and select a new guide star after star loss.
+        """
+        logger.info("Starting automatic guide star recovery...")
+
+        while self._star_lost and self._recovery_attempts < self._max_recovery_attempts:
+            self._recovery_attempts += 1
+            logger.info(f"Recovery attempt {self._recovery_attempts}/{self._max_recovery_attempts}")
+
+            # Wait before attempting recovery
+            await asyncio.sleep(self._recovery_delay_sec)
+
+            # Try to find a new star
+            try:
+                star = await self.auto_select_star()
+                if star:
+                    logger.info(f"Recovery: Found star at ({star.x:.1f}, {star.y:.1f})")
+
+                    # Try to resume guiding
+                    success = await self.start_guiding()
+                    if success:
+                        logger.info("Recovery successful - guiding resumed")
+                        self._star_lost = False
+                        break
+                    else:
+                        logger.warning("Recovery: Failed to restart guiding")
+                else:
+                    logger.warning("Recovery: No suitable guide star found")
+
+            except asyncio.CancelledError:
+                logger.info("Recovery cancelled")
+                break
+            except Exception as e:
+                logger.error(f"Recovery error: {e}")
+
+        if self._star_lost:
+            logger.error(f"Guide star recovery failed after {self._recovery_attempts} attempts")
+
+        self._recovery_task = None
+
+    async def manual_recover_star(self) -> bool:
+        """
+        Manually trigger guide star recovery (Step 196).
+
+        Returns:
+            True if recovery successful
+        """
+        logger.info("Manual guide star recovery requested")
+
+        # Cancel any existing auto-recovery
+        if self._recovery_task:
+            self._recovery_task.cancel()
+            self._recovery_task = None
+
+        self._recovery_attempts = 0
+
+        # Try to find a new star
+        star = await self.auto_select_star()
+        if not star:
+            logger.warning("Manual recovery: No guide star found")
+            return False
+
+        logger.info(f"Manual recovery: Found star at ({star.x:.1f}, {star.y:.1f})")
+
+        # Resume guiding
+        success = await self.start_guiding()
+        if success:
+            self._star_lost = False
+            logger.info("Manual recovery successful")
+        else:
+            logger.warning("Manual recovery: Failed to start guiding")
+
+        return success
+
+    def get_star_loss_status(self) -> dict:
+        """
+        Get guide star loss status (Step 196).
+
+        Returns:
+            Dict with star loss information
+        """
+        lost_duration = None
+        if self._star_lost_time and self._star_lost:
+            lost_duration = (datetime.now() - self._star_lost_time).total_seconds()
+
+        return {
+            "star_lost": self._star_lost,
+            "lost_duration_sec": lost_duration,
+            "total_lost_count": self._star_lost_count,
+            "recovery_attempts": self._recovery_attempts,
+            "max_recovery_attempts": self._max_recovery_attempts,
+            "auto_recover_enabled": self._auto_recover_enabled,
+            "recovery_in_progress": self._recovery_task is not None,
+        }
+
+    def reset_star_loss_stats(self) -> None:
+        """Reset star loss statistics (Step 196)."""
+        self._star_lost_count = 0
+        self._recovery_attempts = 0
+        logger.info("Star loss stats reset")
 
 
 # =============================================================================

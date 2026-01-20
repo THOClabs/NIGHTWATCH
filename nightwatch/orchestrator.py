@@ -995,13 +995,346 @@ class Orchestrator:
         logger.info(f"Observing session started: {session_id}")
         return True
 
-    async def end_session(self):
-        """End the current observing session."""
-        if self.session.is_observing:
-            self.session.is_observing = False
-            logger.info(f"Observing session ended: {self.session.session_id}")
-            logger.info(f"  Images captured: {self.session.images_captured}")
-            logger.info(f"  Total exposure: {self.session.total_exposure_sec:.1f}s")
+    async def end_session(self, park: bool = True, close: bool = True) -> bool:
+        """
+        End the current observing session (Step 232).
+
+        Performs safe shutdown of observing equipment:
+        - Stop any active guiding
+        - Park the telescope mount
+        - Close the enclosure/roof
+        - Save session log
+
+        Args:
+            park: Whether to park the mount (default True)
+            close: Whether to close the enclosure (default True)
+
+        Returns:
+            True if session ended successfully
+        """
+        if not self.session.is_observing:
+            logger.info("No active session to end")
+            return True
+
+        logger.info(f"Ending observing session: {self.session.session_id}")
+        success = True
+
+        # Stop guiding if active
+        if self.guiding:
+            try:
+                if hasattr(self.guiding, 'is_guiding') and self.guiding.is_guiding:
+                    logger.info("Stopping autoguiding...")
+                    await self.guiding.stop_guiding()
+            except Exception as e:
+                logger.error(f"Error stopping guiding: {e}")
+                success = False
+
+        # Park the mount (Step 232)
+        if park and self.mount:
+            try:
+                if hasattr(self.mount, 'is_parked') and not self.mount.is_parked:
+                    logger.info("Parking telescope mount...")
+                    await self.mount.park()
+                    await self.emit_event(
+                        EventType.MOUNT_PARKED,
+                        source="mount",
+                        message="Mount parked at end of session"
+                    )
+                    logger.info("Mount parked successfully")
+            except Exception as e:
+                logger.error(f"Failed to park mount: {e}")
+                self.record_service_error("mount")
+                success = False
+
+        # Close enclosure (Step 232)
+        if close and self.enclosure:
+            try:
+                if hasattr(self.enclosure, 'is_open') and self.enclosure.is_open:
+                    logger.info("Closing enclosure...")
+                    await self.enclosure.close()
+                    logger.info("Enclosure closed successfully")
+            except Exception as e:
+                logger.error(f"Failed to close enclosure: {e}")
+                self.record_service_error("enclosure")
+                success = False
+
+        # Save session log
+        await self._save_session_log()
+
+        # Update session state
+        self.session.is_observing = False
+        self.session.is_imaging = False
+
+        # Emit session ended event
+        await self.emit_event(
+            EventType.SESSION_ENDED,
+            source="orchestrator",
+            data={
+                "session_id": self.session.session_id,
+                "images_captured": self.session.images_captured,
+                "total_exposure_sec": self.session.total_exposure_sec,
+            },
+            message=f"Session {self.session.session_id} ended"
+        )
+
+        logger.info(f"Observing session ended: {self.session.session_id}")
+        logger.info(f"  Images captured: {self.session.images_captured}")
+        logger.info(f"  Total exposure: {self.session.total_exposure_sec:.1f}s")
+
+        return success
+
+    # =========================================================================
+    # Command Cancellation (Step 237)
+    # =========================================================================
+
+    def __init_command_tracking(self):
+        """Initialize command tracking for cancellation support."""
+        if not hasattr(self, '_active_commands'):
+            self._active_commands: Dict[str, asyncio.Task] = {}
+            self._command_counter = 0
+
+    def _get_next_command_id(self) -> str:
+        """Generate unique command ID."""
+        self.__init_command_tracking()
+        self._command_counter += 1
+        return f"cmd_{self._command_counter:06d}"
+
+    async def execute_cancellable(
+        self,
+        coro,
+        command_id: Optional[str] = None,
+        timeout: Optional[float] = None
+    ):
+        """
+        Execute a coroutine with cancellation support (Step 237).
+
+        Args:
+            coro: Coroutine to execute
+            command_id: Optional command identifier (auto-generated if not provided)
+            timeout: Optional timeout in seconds
+
+        Returns:
+            Result of the coroutine
+
+        Raises:
+            asyncio.CancelledError: If command was cancelled
+            asyncio.TimeoutError: If command timed out
+        """
+        self.__init_command_tracking()
+
+        if command_id is None:
+            command_id = self._get_next_command_id()
+
+        # Create task
+        task = asyncio.create_task(coro)
+        self._active_commands[command_id] = task
+
+        try:
+            if timeout:
+                result = await asyncio.wait_for(task, timeout=timeout)
+            else:
+                result = await task
+            return result
+        except asyncio.CancelledError:
+            logger.info(f"Command {command_id} was cancelled")
+            raise
+        except asyncio.TimeoutError:
+            logger.warning(f"Command {command_id} timed out after {timeout}s")
+            raise
+        finally:
+            # Clean up tracking
+            self._active_commands.pop(command_id, None)
+
+    async def cancel_command(self, command_id: str) -> bool:
+        """
+        Cancel an active command (Step 237).
+
+        Args:
+            command_id: ID of the command to cancel
+
+        Returns:
+            True if command was cancelled, False if not found
+        """
+        self.__init_command_tracking()
+
+        task = self._active_commands.get(command_id)
+        if task is None:
+            logger.warning(f"Command {command_id} not found or already completed")
+            return False
+
+        if task.done():
+            logger.info(f"Command {command_id} already completed")
+            return False
+
+        logger.info(f"Cancelling command {command_id}...")
+        task.cancel()
+
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+
+        return True
+
+    async def cancel_all_commands(self) -> int:
+        """
+        Cancel all active commands (Step 237).
+
+        Returns:
+            Number of commands cancelled
+        """
+        self.__init_command_tracking()
+
+        cancelled = 0
+        for command_id in list(self._active_commands.keys()):
+            if await self.cancel_command(command_id):
+                cancelled += 1
+
+        logger.info(f"Cancelled {cancelled} active commands")
+        return cancelled
+
+    def get_active_commands(self) -> List[str]:
+        """
+        Get list of active command IDs (Step 237).
+
+        Returns:
+            List of active command identifiers
+        """
+        self.__init_command_tracking()
+        return [
+            cmd_id for cmd_id, task in self._active_commands.items()
+            if not task.done()
+        ]
+
+    # =========================================================================
+    # Graceful Shutdown (Step 251)
+    # =========================================================================
+
+    async def graceful_shutdown(self, timeout: float = 30.0) -> bool:
+        """
+        Perform graceful shutdown sequence (Step 251).
+
+        This method ensures all operations complete safely:
+        1. Cancel all non-essential commands
+        2. Wait for essential operations to complete
+        3. End the observing session (park, close)
+        4. Stop all services
+        5. Save state
+
+        Args:
+            timeout: Maximum time to wait for operations to complete
+
+        Returns:
+            True if shutdown completed successfully
+        """
+        logger.info("Initiating graceful shutdown sequence...")
+
+        success = True
+
+        # Step 1: Cancel non-essential commands
+        try:
+            cancelled = await self.cancel_all_commands()
+            if cancelled > 0:
+                logger.info(f"Cancelled {cancelled} active commands")
+        except Exception as e:
+            logger.error(f"Error cancelling commands: {e}")
+
+        # Step 2: End observing session (includes park and close)
+        try:
+            if self.session.is_observing:
+                logger.info("Ending observing session...")
+                session_success = await asyncio.wait_for(
+                    self.end_session(park=True, close=True),
+                    timeout=timeout
+                )
+                if not session_success:
+                    success = False
+        except asyncio.TimeoutError:
+            logger.error(f"Session end timed out after {timeout}s")
+            success = False
+        except Exception as e:
+            logger.error(f"Error ending session: {e}")
+            success = False
+
+        # Step 3: Emit shutdown event
+        await self.emit_event(
+            EventType.SHUTDOWN_INITIATED,
+            source="orchestrator",
+            data={"graceful": True},
+            message="Graceful shutdown initiated"
+        )
+
+        # Step 4: Send alert if alerts service is available
+        if self.alerts:
+            try:
+                await self.alerts.send_alert(
+                    level="info",
+                    message="NIGHTWATCH graceful shutdown completed"
+                )
+            except Exception as e:
+                logger.warning(f"Could not send shutdown alert: {e}")
+
+        # Step 5: Full shutdown
+        await self.shutdown(safe=False)  # Safe ops already done above
+
+        logger.info("Graceful shutdown sequence complete")
+        return success
+
+    async def emergency_shutdown(self) -> bool:
+        """
+        Perform emergency shutdown (Step 251).
+
+        Immediately stops all operations and safely parks/closes
+        without waiting for commands to complete.
+
+        Returns:
+            True if emergency shutdown completed
+        """
+        logger.warning("EMERGENCY SHUTDOWN INITIATED")
+
+        # Immediately cancel all commands
+        try:
+            for cmd_id, task in list(getattr(self, '_active_commands', {}).items()):
+                task.cancel()
+        except Exception as e:
+            logger.error(f"Error cancelling commands: {e}")
+
+        # Stop guiding immediately
+        if self.guiding:
+            try:
+                await self.guiding.stop_guiding()
+            except Exception:
+                pass
+
+        # Park mount (critical safety)
+        if self.mount:
+            try:
+                await self.mount.park()
+                logger.info("Mount parked (emergency)")
+            except Exception as e:
+                logger.error(f"EMERGENCY: Failed to park mount: {e}")
+
+        # Close enclosure (critical safety)
+        if self.enclosure:
+            try:
+                await self.enclosure.close()
+                logger.info("Enclosure closed (emergency)")
+            except Exception as e:
+                logger.error(f"EMERGENCY: Failed to close enclosure: {e}")
+
+        # Send emergency alert
+        if self.alerts:
+            try:
+                await self.alerts.send_alert(
+                    level="critical",
+                    message="NIGHTWATCH EMERGENCY SHUTDOWN"
+                )
+            except Exception:
+                pass
+
+        self._running = False
+        logger.warning("Emergency shutdown complete")
+        return True
 
     # =========================================================================
     # Status and Information
