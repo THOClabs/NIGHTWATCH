@@ -610,6 +610,30 @@ TELESCOPE_TOOLS: List[Tool] = [
                 description="Capture duration in seconds (default 60)",
                 required=False,
                 default=60.0
+            ),
+            ToolParameter(
+                name="exposure_ms",
+                type="number",
+                description="Exposure time in milliseconds (default auto). "
+                            "Use 1-10ms for bright planets, 10-50ms for dim targets.",
+                required=False,
+                default=None
+            ),
+            ToolParameter(
+                name="gain",
+                type="number",
+                description="Camera gain (default auto). Higher gain = more sensitivity "
+                            "but more noise. Range typically 0-500.",
+                required=False,
+                default=None
+            ),
+            ToolParameter(
+                name="binning",
+                type="number",
+                description="Pixel binning (1, 2, or 4). Higher binning = faster capture "
+                            "but lower resolution. Default 1.",
+                required=False,
+                default=1
             )
         ]
     ),
@@ -706,7 +730,32 @@ TELESCOPE_TOOLS: List[Tool] = [
         description="Run automatic focus routine using HFD measurement. "
                     "Finds optimal focus position by sampling V-curve.",
         category=ToolCategory.FOCUS,
-        parameters=[]
+        parameters=[
+            ToolParameter(
+                name="algorithm",
+                type="string",
+                description="Focus algorithm to use: 'vcurve' (default, most accurate), "
+                            "'hfd' (faster), or 'contrast' (for extended objects).",
+                required=False,
+                default="vcurve"
+            ),
+            ToolParameter(
+                name="step_size",
+                type="number",
+                description="Step size for focus sampling (default auto). "
+                            "Smaller steps = more accurate but slower.",
+                required=False,
+                default=None
+            ),
+            ToolParameter(
+                name="samples",
+                type="number",
+                description="Number of samples per position (default 3). "
+                            "More samples = better accuracy in poor seeing.",
+                required=False,
+                default=3
+            )
+        ]
     ),
 
     Tool(

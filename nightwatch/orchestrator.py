@@ -75,6 +75,8 @@ __all__ = [
     "OrchestratorEvent",
     "OrchestratorMetrics",
     "CommandPriority",
+    "CommandQueue",
+    "QueuedCommand",
 ]
 
 
@@ -150,6 +152,198 @@ class CommandPriority(Enum):
 
         # Default to normal
         return cls.NORMAL
+
+
+# =============================================================================
+# Command Queue (Step 234)
+# =============================================================================
+
+
+@dataclass(order=True)
+class QueuedCommand:
+    """
+    A command in the command queue (Step 234).
+
+    Commands are ordered by priority (higher first), then by timestamp (older first).
+    """
+    priority: int = field(compare=True)  # Negative for max-heap behavior
+    timestamp: datetime = field(compare=True)
+    command_id: str = field(compare=False)
+    command_type: str = field(compare=False)
+    coro: Any = field(compare=False)  # The coroutine to execute
+    callback: Optional[Callable] = field(compare=False, default=None)
+    metadata: Dict[str, Any] = field(compare=False, default_factory=dict)
+
+
+class CommandQueue:
+    """
+    Priority command queue for the orchestrator (Step 234).
+
+    Features:
+    - Priority-based ordering (higher priority first)
+    - FIFO within same priority
+    - Max queue size to prevent memory issues
+    - Queue statistics and monitoring
+    """
+
+    def __init__(self, max_size: int = 100):
+        """
+        Initialize command queue.
+
+        Args:
+            max_size: Maximum number of commands in queue
+        """
+        self._queue: List[QueuedCommand] = []
+        self._max_size = max_size
+        self._command_counter = 0
+        self._lock = asyncio.Lock()
+
+        # Statistics
+        self._total_enqueued = 0
+        self._total_processed = 0
+        self._total_dropped = 0
+
+    def _get_next_id(self) -> str:
+        """Generate unique command ID."""
+        self._command_counter += 1
+        return f"q_{self._command_counter:06d}"
+
+    async def enqueue(
+        self,
+        coro,
+        priority: CommandPriority = CommandPriority.NORMAL,
+        command_type: str = "unknown",
+        callback: Optional[Callable] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> Optional[str]:
+        """
+        Add a command to the queue (Step 234).
+
+        Args:
+            coro: Coroutine to execute
+            priority: Command priority level
+            command_type: Type of command for logging
+            callback: Optional callback when complete
+            metadata: Additional command metadata
+
+        Returns:
+            Command ID if enqueued, None if queue full
+        """
+        async with self._lock:
+            if len(self._queue) >= self._max_size:
+                self._total_dropped += 1
+                logger.warning(f"Command queue full, dropping {command_type}")
+                return None
+
+            command_id = self._get_next_id()
+            cmd = QueuedCommand(
+                priority=-priority.value,  # Negative for max-heap
+                timestamp=datetime.now(),
+                command_id=command_id,
+                command_type=command_type,
+                coro=coro,
+                callback=callback,
+                metadata=metadata or {},
+            )
+
+            # Insert in sorted position (heapq for efficiency)
+            import heapq
+            heapq.heappush(self._queue, cmd)
+
+            self._total_enqueued += 1
+            logger.debug(f"Enqueued command {command_id} ({command_type}) priority={priority.name}")
+
+            return command_id
+
+    async def dequeue(self) -> Optional[QueuedCommand]:
+        """
+        Get the next command from the queue (Step 234).
+
+        Returns:
+            Next command or None if queue empty
+        """
+        async with self._lock:
+            if not self._queue:
+                return None
+
+            import heapq
+            cmd = heapq.heappop(self._queue)
+            self._total_processed += 1
+            return cmd
+
+    async def peek(self) -> Optional[QueuedCommand]:
+        """Peek at the next command without removing it."""
+        async with self._lock:
+            if not self._queue:
+                return None
+            return self._queue[0]
+
+    def size(self) -> int:
+        """Get current queue size."""
+        return len(self._queue)
+
+    def is_empty(self) -> bool:
+        """Check if queue is empty."""
+        return len(self._queue) == 0
+
+    def is_full(self) -> bool:
+        """Check if queue is full."""
+        return len(self._queue) >= self._max_size
+
+    async def clear(self) -> int:
+        """
+        Clear all commands from queue.
+
+        Returns:
+            Number of commands cleared
+        """
+        async with self._lock:
+            count = len(self._queue)
+            self._queue.clear()
+            self._total_dropped += count
+            return count
+
+    async def remove(self, command_id: str) -> bool:
+        """
+        Remove a specific command from queue.
+
+        Args:
+            command_id: ID of command to remove
+
+        Returns:
+            True if removed, False if not found
+        """
+        async with self._lock:
+            for i, cmd in enumerate(self._queue):
+                if cmd.command_id == command_id:
+                    self._queue.pop(i)
+                    import heapq
+                    heapq.heapify(self._queue)
+                    return True
+            return False
+
+    def get_stats(self) -> Dict[str, Any]:
+        """Get queue statistics."""
+        return {
+            "current_size": len(self._queue),
+            "max_size": self._max_size,
+            "total_enqueued": self._total_enqueued,
+            "total_processed": self._total_processed,
+            "total_dropped": self._total_dropped,
+        }
+
+    def list_pending(self) -> List[Dict[str, Any]]:
+        """List all pending commands."""
+        return [
+            {
+                "command_id": cmd.command_id,
+                "command_type": cmd.command_type,
+                "priority": -cmd.priority,
+                "queued_at": cmd.timestamp.isoformat(),
+                "metadata": cmd.metadata,
+            }
+            for cmd in sorted(self._queue)
+        ]
 
 
 # =============================================================================

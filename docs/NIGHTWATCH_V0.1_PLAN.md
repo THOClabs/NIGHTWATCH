@@ -319,7 +319,7 @@ Create installation scripts, hardware integration guides, and prepare for Nevada
 | 231 | Orchestrator Development | orchestrator | Implement session start logic | 230 | 2 | 1 | Complete | start_session(), end_session() |
 | 232 | Orchestrator Development | orchestrator | Implement session end logic (park, close) | 231 | 3 | 2 | Complete | end_session() with park, close, guiding stop in orchestrator.py |
 | 233 | Orchestrator Development | orchestrator | Add observation log recording | 232 | 3 | 2 | Complete | ObservationLogEntry, log_observation(), log_target_acquired(), log_image_captured() in orchestrator.py |
-| 234 | Orchestrator Development | orchestrator | Implement command queue | 233 | 3 | 2 | Not Started | Async command handling |
+| 234 | Orchestrator Development | orchestrator | Implement command queue | 233 | 3 | 2 | Complete | CommandQueue, QueuedCommand with priority ordering in orchestrator.py |
 | 235 | Orchestrator Development | orchestrator | Add command priority levels | 234 | 2 | 1 | Complete | CommandPriority enum in orchestrator.py |
 | 236 | Orchestrator Development | orchestrator | Implement command timeout handling | 235 | 3 | 2 | Complete | execute_with_timeout(), execute_slew_with_timeout(), DEFAULT_TIMEOUTS in orchestrator.py |
 | 237 | Orchestrator Development | orchestrator | Add command cancellation support | 236 | 2 | 2 | Complete | execute_cancellable(), cancel_command(), cancel_all_commands() in orchestrator.py |
@@ -487,7 +487,7 @@ Create installation scripts, hardware integration guides, and prepare for Nevada
 | 399 | Tool Handler Implementation | guiding_tools | Add dither amount parameter | 398 | 2 | 1 | Complete | pixels, ra_only, wait_settle params for dither in telescope_tools.py |
 | 400 | Tool Handler Implementation | guiding_tools | Write unit tests for guiding tool handlers | 399 | 2 | 2 | Complete | TestGuidingToolHandlers in test_telescope_tools.py (5 tests) |
 | 401 | Tool Handler Implementation | camera_tools | Implement start_capture handler | 257 | 3 | 2 | Not Started | Begin imaging |
-| 402 | Tool Handler Implementation | camera_tools | Add exposure and gain parameters | 401 | 2 | 1 | Not Started | Capture settings |
+| 402 | Tool Handler Implementation | camera_tools | Add exposure and gain parameters | 401 | 2 | 1 | Complete | exposure_ms, gain, binning params for start_capture in telescope_tools.py |
 | 403 | Tool Handler Implementation | camera_tools | Implement stop_capture handler | 402 | 2 | 1 | Complete | stop_capture() with abort_exposure fallback |
 | 404 | Tool Handler Implementation | camera_tools | Implement get_camera_status handler | 403 | 2 | 1 | Complete | get_camera_status() with settings and progress |
 | 405 | Tool Handler Implementation | camera_tools | Add temperature and cooling status | 404 | 2 | 1 | Complete | Temperature, cooler power, target temp in status |
@@ -497,7 +497,7 @@ Create installation scripts, hardware integration guides, and prepare for Nevada
 | 409 | Tool Handler Implementation | camera_tools | Add exposure range validation | 408 | 2 | 1 | Complete | Dynamic range check via get_exposure_range |
 | 410 | Tool Handler Implementation | camera_tools | Write unit tests for camera tool handlers | 409 | 2 | 2 | Complete | TestCameraToolHandlers in test_telescope_tools.py (5 tests) |
 | 411 | Tool Handler Implementation | focus_tools | Implement auto_focus handler | 257 | 3 | 2 | Not Started | Begin focus |
-| 412 | Tool Handler Implementation | focus_tools | Add algorithm selection parameter | 411 | 2 | 1 | Not Started | V-curve, HFD |
+| 412 | Tool Handler Implementation | focus_tools | Add algorithm selection parameter | 411 | 2 | 1 | Complete | algorithm (vcurve/hfd/contrast), step_size, samples params in telescope_tools.py |
 | 413 | Tool Handler Implementation | focus_tools | Implement get_focus_status handler | 412 | 2 | 1 | Complete | get_focus_status() with position, temp, HFD |
 | 414 | Tool Handler Implementation | focus_tools | Add current position and temperature | 413 | 2 | 1 | Complete | Position, temp, temp_comp, HFD/FWHM in status |
 | 415 | Tool Handler Implementation | focus_tools | Implement move_focus handler | 414 | 2 | 1 | Complete | move_focus() relative/absolute with validation |
@@ -656,8 +656,8 @@ Create installation scripts, hardware integration guides, and prepare for Nevada
 | 568 | Testing & Quality Assurance | integration_tests | Create tests/integration/test_safety_enclosure.py | 480,433 | 3 | 2 | Not Started | Safety+enclosure |
 | 569 | Testing & Quality Assurance | integration_tests | Create tests/integration/test_orchestrator_services.py | 256,547 | 3 | 3 | Not Started | Full orchestration |
 | 570 | Testing & Quality Assurance | integration_tests | Create tests/integration/test_full_pipeline.py | 312,569 | 4 | 3 | Not Started | End-to-end |
-| 571 | Testing & Quality Assurance | integration_tests | Add simulator startup helper | 570 | 2 | 1 | Not Started | Test setup |
-| 572 | Testing & Quality Assurance | integration_tests | Add simulator shutdown helper | 571 | 2 | 1 | Not Started | Test teardown |
+| 571 | Testing & Quality Assurance | integration_tests | Add simulator startup helper | 570 | 2 | 1 | Complete | SimulatorManager.start(), start_simulators() in tests/integration/__init__.py |
+| 572 | Testing & Quality Assurance | integration_tests | Add simulator shutdown helper | 571 | 2 | 1 | Complete | SimulatorManager.stop(), stop_simulators() in tests/integration/__init__.py |
 | 573 | Testing & Quality Assurance | e2e_tests | Create tests/e2e/__init__.py | 570 | 1 | 1 | Complete | E2E test package with pytest markers for e2e, requires_simulators, slow |
 | 574 | Testing & Quality Assurance | e2e_tests | Create tests/e2e/test_goto_object.py | 573 | 3 | 2 | Not Started | Voice to slew |
 | 575 | Testing & Quality Assurance | e2e_tests | Create tests/e2e/test_park_unpark.py | 574 | 3 | 2 | Not Started | Park cycle |
@@ -667,8 +667,8 @@ Create installation scripts, hardware integration guides, and prepare for Nevada
 | 579 | Testing & Quality Assurance | e2e_tests | Create tests/e2e/test_emergency_shutdown.py | 578 | 3 | 2 | Not Started | Emergency flow |
 | 580 | Testing & Quality Assurance | e2e_tests | Add audio fixture files for voice tests | 579 | 2 | 2 | Not Started | Test audio |
 | 581 | Testing & Quality Assurance | ci_cd | Review .github/workflows/ci.yml | None | 2 | 1 | Complete | Has unit tests, integration, lint, docker validation |
-| 582 | Testing & Quality Assurance | ci_cd | Add unit test job with coverage | 581 | 2 | 1 | Not Started | pytest-cov |
-| 583 | Testing & Quality Assurance | ci_cd | Add coverage threshold check (80%) | 582 | 2 | 1 | Not Started | Quality gate |
+| 582 | Testing & Quality Assurance | ci_cd | Add unit test job with coverage | 581 | 2 | 1 | Complete | pytest --cov with XML/HTML reports in ci.yml |
+| 583 | Testing & Quality Assurance | ci_cd | Add coverage threshold check (80%) | 582 | 2 | 1 | Complete | Coverage threshold check step in ci.yml with warning on <80% |
 | 584 | Testing & Quality Assurance | ci_cd | Add integration test job with simulators | 583 | 3 | 2 | Not Started | Docker tests |
 | 585 | Testing & Quality Assurance | ci_cd | Add e2e test job | 584 | 3 | 2 | Not Started | Full tests |
 | 586 | Testing & Quality Assurance | ci_cd | Add type checking job (mypy) | 585 | 2 | 1 | Not Started | Type safety |
