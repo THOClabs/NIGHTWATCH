@@ -21,6 +21,14 @@ from .clarification import (
     get_clarification_service,
 )
 
+from .suggestions import (
+    SuggestionService,
+    Suggestion,
+    SuggestionType,
+    SuggestionPriority,
+    get_suggestion_service,
+)
+
 __all__ = [
     # Conversation Context
     "ConversationContext",
@@ -35,4 +43,10 @@ __all__ = [
     "AmbiguityType",
     "ClarificationOption",
     "get_clarification_service",
+    # Suggestions
+    "SuggestionService",
+    "Suggestion",
+    "SuggestionType",
+    "SuggestionPriority",
+    "get_suggestion_service",
 ]
