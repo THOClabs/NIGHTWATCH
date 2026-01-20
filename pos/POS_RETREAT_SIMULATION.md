@@ -3183,6 +3183,71 @@ Phase 4: Integration (Weeks 13-16)
 
 ---
 
+## v0.1 Implementation Status (Step 615)
+
+*Updated: January 2026*
+
+This section documents the implementation status of POS design decisions in the NIGHTWATCH v0.1 release.
+
+### Implementation Summary
+
+| Design Area | POS Day | v0.1 Status | Notes |
+|-------------|---------|-------------|-------|
+| OnStepX Integration | Day 1 | ✓ Complete | LX200 client, extended commands |
+| Voice Pipeline | Day 1, 4-6 | ✓ Complete | faster-whisper, Piper TTS, Wyoming |
+| Encoder Bridge | Day 2 | ✓ Complete | AS5600 magnetic encoder support |
+| Safety System | Day 4, 7-8 | ✓ Complete | Weather, rain, wind, altitude limits |
+| INDI Integration | Day 3 | ✓ Complete | pyindi-client adapters |
+| Alpaca Support | Day 3 | ✓ Complete | alpyca client integration |
+| Tool Registry | Day 5-6 | 90% Complete | 44+ voice commands implemented |
+| Emergency Response | Day 7-8 | ✓ Complete | Park, close, alert escalation |
+| Power Management | Day 9 | 80% Complete | NUT client, UPS monitoring |
+| Docker Infrastructure | Day 10 | ✓ Complete | Dev, test, prod compose files |
+
+### Key Decisions Implemented
+
+**Voice/LLM Architecture (Michael Clive, Day 4-6):**
+- Adopted local LLM approach with Mistral 7B
+- Implemented <500ms latency target
+- Added Wyoming protocol for Home Assistant compatibility
+- Documented rationale in ADR-001
+
+**Safety Design (Antonio García, Day 7-8):**
+- 30-minute rain holdoff as recommended
+- Hysteresis on all weather thresholds
+- Immediate response to rain detection
+- Mount park verification before roof operations
+
+**Integration Strategy (Bob Denny, Day 3):**
+- Dual support for INDI and Alpaca protocols
+- Protocol-agnostic device abstraction layer
+- Simulator infrastructure for testing
+
+### Deferred to v0.2
+
+The following POS recommendations are deferred to future versions:
+
+1. **Plate Solving Integration** - Core solver integration complete, camera pipeline pending
+2. **All-Sky Camera** - Hardware-dependent feature
+3. **Spectroscopy Support** - Advanced science feature
+4. **Multi-Site Coordination** - Foundation ready, implementation deferred
+5. **Social Media Integration** - Non-critical feature
+
+### Implementation Notes
+
+**Lessons Learned:**
+- Wyoming protocol simplified voice service integration significantly
+- Docker simulators essential for CI/CD without hardware
+- Safety system complexity exceeded initial estimates (positive outcome)
+- LLM tool calling more reliable than expected
+
+**Architecture Changes from POS Design:**
+- Added correlation ID tracing (not in original design)
+- Expanded tool confirmation requirements
+- More granular safety thresholds
+
+---
+
 ## Retreat Conclusion (v3.0)
 
 The Panel of Specialists has completed a comprehensive 30-day design retreat for NIGHTWATCH v3.0. This final phase establishes NIGHTWATCH as a fully autonomous, infrastructure-complete observatory capable of unattended operation.

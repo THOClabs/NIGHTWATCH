@@ -650,10 +650,10 @@ Create installation scripts, hardware integration guides, and prepare for Nevada
 | 562 | Testing & Quality Assurance | unit_tests | Expand tests/unit/test_power.py | 157 | 2 | 2 | Complete | Created with NUT client, PowerManager, PDU tests |
 | 563 | Testing & Quality Assurance | unit_tests | Expand tests/unit/test_enclosure.py | 178 | 2 | 2 | Complete | Created with GPIO, RoofController, safety tests |
 | 564 | Testing & Quality Assurance | unit_tests | Expand tests/unit/test_focus.py | 191 | 2 | 2 | Complete | Created with config, state, metrics tests |
-| 565 | Testing & Quality Assurance | integration_tests | Create tests/integration/test_mount_catalog.py | 351,358 | 3 | 2 | Not Started | Mount+catalog |
+| 565 | Testing & Quality Assurance | integration_tests | Create tests/integration/test_mount_catalog.py | 351,358 | 3 | 2 | Complete | Mount+catalog |
 | 566 | Testing & Quality Assurance | integration_tests | Create tests/integration/test_voice_mount.py | 312,351 | 3 | 3 | Not Started | Voice+mount |
-| 567 | Testing & Quality Assurance | integration_tests | Create tests/integration/test_safety_mount.py | 480,351 | 3 | 2 | Not Started | Safety+mount |
-| 568 | Testing & Quality Assurance | integration_tests | Create tests/integration/test_safety_enclosure.py | 480,433 | 3 | 2 | Not Started | Safety+enclosure |
+| 567 | Testing & Quality Assurance | integration_tests | Create tests/integration/test_safety_mount.py | 480,351 | 3 | 2 | Complete | Safety+mount |
+| 568 | Testing & Quality Assurance | integration_tests | Create tests/integration/test_safety_enclosure.py | 480,433 | 3 | 2 | Complete | Safety+enclosure |
 | 569 | Testing & Quality Assurance | integration_tests | Create tests/integration/test_orchestrator_services.py | 256,547 | 3 | 3 | Not Started | Full orchestration |
 | 570 | Testing & Quality Assurance | integration_tests | Create tests/integration/test_full_pipeline.py | 312,569 | 4 | 3 | Not Started | End-to-end |
 | 571 | Testing & Quality Assurance | integration_tests | Add simulator startup helper | 570 | 2 | 1 | Complete | SimulatorManager.start(), start_simulators() in tests/integration/__init__.py |
@@ -665,7 +665,7 @@ Create installation scripts, hardware integration guides, and prepare for Nevada
 | 577 | Testing & Quality Assurance | e2e_tests | Create tests/e2e/test_weather_response.py | 576 | 3 | 2 | Not Started | Weather query |
 | 578 | Testing & Quality Assurance | e2e_tests | Create tests/e2e/test_session_flow.py | 577 | 4 | 3 | Not Started | Full session |
 | 579 | Testing & Quality Assurance | e2e_tests | Create tests/e2e/test_emergency_shutdown.py | 578 | 3 | 2 | Not Started | Emergency flow |
-| 580 | Testing & Quality Assurance | e2e_tests | Add audio fixture files for voice tests | 579 | 2 | 2 | Not Started | Test audio |
+| 580 | Testing & Quality Assurance | e2e_tests | Add audio fixture files for voice tests | 579 | 2 | 2 | Complete | Test audio |
 | 581 | Testing & Quality Assurance | ci_cd | Review .github/workflows/ci.yml | None | 2 | 1 | Complete | Has unit tests, integration, lint, docker validation |
 | 582 | Testing & Quality Assurance | ci_cd | Add unit test job with coverage | 581 | 2 | 1 | Complete | pytest --cov with XML/HTML reports in ci.yml |
 | 583 | Testing & Quality Assurance | ci_cd | Add coverage threshold check (80%) | 582 | 2 | 1 | Complete | Coverage threshold check step in ci.yml with warning on <80% |
@@ -700,7 +700,7 @@ Create installation scripts, hardware integration guides, and prepare for Nevada
 | 612 | Documentation & POS | pos | Document LLM model selection rationale | 611 | 2 | 1 | Complete | Decision record |
 | 613 | Documentation & POS | pos | Create POS deliberation for tool confirmation | 612 | 3 | 2 | Not Started | Safety design |
 | 614 | Documentation & POS | pos | Create POS deliberation for emergency response | 613 | 3 | 2 | Not Started | Safety design |
-| 615 | Documentation & POS | pos | Update POS_RETREAT_SIMULATION.md with v0.1 decisions | 614 | 2 | 2 | Not Started | Record keeping |
+| 615 | Documentation & POS | pos | Update POS_RETREAT_SIMULATION.md with v0.1 decisions | 614 | 2 | 2 | Complete | Record keeping |
 | 616 | Deployment Preparation | install | Create install.sh installation script | None | 3 | 2 | Complete | Full installer with all steps |
 | 617 | Deployment Preparation | install | Add Python version check | 616 | 2 | 1 | Complete | Min 3.10, recommended 3.11 |
 | 618 | Deployment Preparation | install | Add system dependency installation | 617 | 2 | 1 | Complete | Debian/Fedora/macOS support |
