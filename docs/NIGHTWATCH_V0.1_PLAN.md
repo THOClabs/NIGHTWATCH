@@ -237,7 +237,7 @@ Create installation scripts, hardware integration guides, and prepare for Nevada
 | 149 | Core Service Completion | power | Implement park-at-threshold (50%) logic | 148 | 3 | 2 | Complete | park_threshold_pct in _process_status |
 | 150 | Core Service Completion | power | Implement shutdown-at-threshold (20%) logic | 149 | 3 | 2 | Complete | emergency_threshold_pct, _emergency_shutdown |
 | 151 | Core Service Completion | power | Add power event logging | 150 | 2 | 1 | Complete | _log_event, PowerEvent dataclass |
-| 152 | Core Service Completion | power | Implement smart PDU port control (optional) | 151 | 4 | 3 | Not Started | Device power cycling |
+| 152 | Core Service Completion | power | Implement smart PDU port control (optional) | 151 | 4 | 3 | Complete | PDU integration in PowerManager with config |
 | 153 | Core Service Completion | power | Add PDU HTTP/SNMP interface | 152 | 3 | 2 | Complete | PDUClient class with HTTP/SNMP protocols |
 | 154 | Core Service Completion | power | Implement sequenced power-on order | 153 | 3 | 2 | Complete | sequenced_power_on() in power_manager.py |
 | 155 | Core Service Completion | power | Implement sequenced power-off order | 154 | 3 | 2 | Complete | sequenced_power_off() in power_manager.py |
@@ -292,11 +292,11 @@ Create installation scripts, hardware integration guides, and prepare for Nevada
 | 204 | Core Service Completion | weather | Add rain sensor reading | 203 | 2 | 1 | Complete | get_rain_sensor_reading() in ecowitt.py |
 | 205 | Core Service Completion | weather | Add ambient temperature reading | 204 | 2 | 1 | Complete | get_ambient_temperature() in ecowitt.py |
 | 206 | Core Service Completion | weather | Implement cloud threshold calibration | 205 | 3 | 2 | Complete | CloudThresholds class, calibrate_clear_sky(), calibrate_rain_sensor() |
-| 207 | Core Service Completion | weather | Add seeing estimation (FWHM proxy) | 206 | 4 | 3 | Not Started | Image quality prediction |
+| 207 | Core Service Completion | weather | Add seeing estimation (FWHM proxy) | 206 | 4 | 3 | Complete | _estimate_seeing() with wind/humidity/cloud factors |
 | 208 | Core Service Completion | weather | Create unified weather interface | 207 | 3 | 2 | Complete | services/weather/unified.py - UnifiedWeatherService, combines Ecowitt+CloudWatcher |
 | 209 | Core Service Completion | weather | Write unit tests for weather service | 208 | 2 | 2 | Complete | tests/unit/test_weather.py |
 | 210 | Core Service Completion | ephemeris | Review skyfield_service.py current implementation | None | 2 | 1 | Complete | Full Skyfield integration, J2000/JNow, planets, twilight |
-| 211 | Core Service Completion | ephemeris | Add proper motion correction for stars | 210 | 4 | 3 | Not Started | Epoch adjustment |
+| 211 | Core Service Completion | ephemeris | Add proper motion correction for stars | 210 | 4 | 3 | Complete | StarData class, get_star_position_with_proper_motion(), apply_proper_motion() |
 | 212 | Core Service Completion | Orchestrator Development | orchestrator | Create nightwatch/orchestrator.py module skeleton | 21 | 3 | 2 | Complete | Central orchestrator with protocols |
 | 213 | Orchestrator Development | orchestrator | Define Orchestrator class with config injection | 212 | 2 | 1 | Complete | Config-based initialization |
 | 214 | Orchestrator Development | orchestrator | Implement service registry for dependency injection | 213 | 3 | 2 | Complete | ServiceRegistry class |

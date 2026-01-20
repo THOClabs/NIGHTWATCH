@@ -798,6 +798,16 @@ class PowerConfig:
     port_focuser: int = 3
     port_computer: int = 4
 
+    # Smart PDU configuration (Step 152)
+    pdu_enabled: bool = False               # Enable smart PDU control
+    pdu_protocol: str = "simulation"        # "http", "snmp", or "simulation"
+    pdu_host: str = "192.168.1.100"         # PDU IP address
+    pdu_port: int = 80                      # PDU port (80 for HTTP, 161 for SNMP)
+    pdu_username: str = "admin"             # PDU HTTP username
+    pdu_password: str = "admin"             # PDU HTTP password
+    pdu_snmp_community: str = "private"     # SNMP write community
+    pdu_num_outlets: int = 8                # Number of PDU outlets
+
 
 @dataclass
 class UPSStatus:
@@ -897,6 +907,10 @@ class PowerManager:
         self._nut_connected = False
         self._use_simulation = False  # Set True for testing without NUT
 
+        # Smart PDU client (Step 152)
+        self._pdu_client: Optional[PDUClient] = None
+        self._pdu_connected = False
+
         # State tracking
         self._was_on_mains = True
         self._power_lost_time: Optional[datetime] = None
@@ -932,9 +946,33 @@ class PowerManager:
                 logger.warning("NUT server not available, using simulation mode")
                 self._use_simulation = True
 
+        # Initialize Smart PDU client (Step 152)
+        if self.config.pdu_enabled:
+            pdu_config = PDUConfig(
+                protocol=PDUProtocol(self.config.pdu_protocol),
+                host=self.config.pdu_host,
+                port=self.config.pdu_port,
+                http_username=self.config.pdu_username,
+                http_password=self.config.pdu_password,
+                snmp_community=self.config.pdu_snmp_community,
+                port_names={
+                    self.config.port_mount: "mount",
+                    self.config.port_camera: "camera",
+                    self.config.port_focuser: "focuser",
+                    self.config.port_computer: "computer",
+                },
+                num_outlets=self.config.pdu_num_outlets,
+            )
+            self._pdu_client = PDUClient(pdu_config)
+            self._pdu_connected = await self._pdu_client.connect()
+            if self._pdu_connected:
+                logger.info(f"Smart PDU connected at {self.config.pdu_host}")
+            else:
+                logger.warning("Smart PDU connection failed, port control unavailable")
+
         self._running = True
         self._monitor_task = asyncio.create_task(self._monitor_loop())
-        logger.info(f"Power manager started (simulation={self._use_simulation})")
+        logger.info(f"Power manager started (simulation={self._use_simulation}, pdu={self._pdu_connected})")
 
     async def stop(self):
         """Stop power monitoring."""
@@ -951,6 +989,12 @@ class PowerManager:
             self._nut_client.disconnect()
             self._nut_client = None
             self._nut_connected = False
+
+        # Disconnect PDU client (Step 152)
+        if self._pdu_client:
+            await self._pdu_client.disconnect()
+            self._pdu_client = None
+            self._pdu_connected = False
 
         logger.info("Power manager stopped")
 
@@ -1540,21 +1584,28 @@ class PowerManager:
                           f"Set confirmed=True or provide confirmation_code.",
             }
 
-        # In real implementation, would control PDU via SNMP or HTTP
-        logger.info(f"PDU port {port}: {action} (confirmed)")
+        # Step 152: Use Smart PDU client for actual port control
+        success = False
+        if self._pdu_client and self._pdu_connected:
+            success = await self._pdu_client.set_outlet(port, on)
+            logger.info(f"PDU port {port}: {action} via smart PDU (success={success})")
+        else:
+            # Simulation mode - just track state
+            logger.info(f"PDU port {port}: {action} (simulated, no PDU client)")
+            success = True
 
         # Log the event
         self._log_event(
             f"PORT_{action}",
-            f"Port {port} powered {action} (confirmed)"
+            f"Port {port} powered {action} (confirmed, success={success})"
         )
 
         return {
-            "success": True,
+            "success": success,
             "requires_confirmation": False,
             "port": port,
             "action": action,
-            "message": f"Port {port} powered {action}",
+            "message": f"Port {port} powered {action}" if success else f"Failed to power {action} port {port}",
         }
 
     async def power_cycle_port(

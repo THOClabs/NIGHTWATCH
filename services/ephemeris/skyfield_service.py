@@ -65,6 +65,11 @@ class Position:
     ra_apparent: Optional[float] = None
     dec_apparent: Optional[float] = None
 
+    # Proper motion corrected position (Step 211)
+    ra_corrected: Optional[float] = None
+    dec_corrected: Optional[float] = None
+    epoch_corrected: Optional[str] = None  # Epoch of corrected coords
+
     @property
     def ra_hms(self) -> str:
         """RA in HH:MM:SS format."""
@@ -113,6 +118,36 @@ class RiseTransitSet:
     rise_azimuth: Optional[float] = None
     transit_altitude: Optional[float] = None
     set_azimuth: Optional[float] = None
+
+
+@dataclass
+class StarData:
+    """
+    Star data with proper motion for epoch correction (Step 211).
+
+    Proper motion values are typically from star catalogs like Hipparcos
+    or Gaia. Units are milliarcseconds per year (mas/yr).
+
+    Example bright stars:
+    - Sirius: pmra=-546.05 mas/yr, pmdec=-1223.14 mas/yr
+    - Vega: pmra=200.94 mas/yr, pmdec=286.23 mas/yr
+    - Polaris: pmra=44.22 mas/yr, pmdec=-11.74 mas/yr
+    """
+    name: str                           # Star name
+    ra_hours: float                     # J2000 RA in hours
+    dec_degrees: float                  # J2000 Dec in degrees
+    pmra_mas_per_year: float = 0.0      # Proper motion in RA (mas/yr)
+    pmdec_mas_per_year: float = 0.0     # Proper motion in Dec (mas/yr)
+    parallax_mas: float = 0.0           # Parallax in mas (distance)
+    radial_velocity_km_s: float = 0.0   # Radial velocity (km/s)
+    epoch: float = 2000.0               # Catalog epoch (J2000 = 2000.0)
+
+    @property
+    def distance_pc(self) -> Optional[float]:
+        """Distance in parsecs from parallax."""
+        if self.parallax_mas > 0:
+            return 1000.0 / self.parallax_mas
+        return None
 
 
 @dataclass
@@ -499,6 +534,213 @@ class EphemerisService:
 
         ra, dec, _ = astrometric.radec(epoch='J2000')
         return (ra.hours, dec.degrees)
+
+    # =========================================================================
+    # PROPER MOTION CORRECTION (Step 211)
+    # =========================================================================
+
+    def get_star_position_with_proper_motion(
+        self,
+        star_data: StarData,
+        when: Optional[datetime] = None
+    ) -> Position:
+        """
+        Get star position with proper motion correction (Step 211).
+
+        Applies proper motion, parallax, and radial velocity corrections
+        to compute the star's position at the specified time.
+
+        This is critical for high-precision pointing, especially for:
+        - Nearby stars with large proper motion
+        - Long time differences from catalog epoch
+        - Astrometric calibration
+
+        Args:
+            star_data: StarData object with proper motion values
+            when: Time for calculation (default: now)
+
+        Returns:
+            Position with corrected coordinates
+        """
+        self._ensure_initialized()
+        t = self._get_time(when)
+
+        # Create Skyfield Star with proper motion
+        star = Star(
+            ra_hours=star_data.ra_hours,
+            dec_degrees=star_data.dec_degrees,
+            ra_mas_per_year=star_data.pmra_mas_per_year,
+            dec_mas_per_year=star_data.pmdec_mas_per_year,
+            parallax_mas=star_data.parallax_mas if star_data.parallax_mas > 0 else 0.0,
+            radial_km_per_s=star_data.radial_velocity_km_s,
+        )
+
+        # Observe from our location
+        astrometric = self._observer.at(t).observe(star)
+        apparent = astrometric.apparent()
+
+        # Get apparent (JNow) position with all corrections
+        ra_app, dec_app, dist = apparent.radec()
+
+        # Get J2000 position (useful for comparison)
+        ra_j2000, dec_j2000, _ = astrometric.radec(epoch='J2000')
+
+        return Position(
+            ra_hours=ra_j2000.hours,
+            dec_degrees=dec_j2000.degrees,
+            distance_au=dist.au,
+            ra_apparent=ra_app.hours,
+            dec_apparent=dec_app.degrees,
+            ra_corrected=ra_app.hours,
+            dec_corrected=dec_app.degrees,
+            epoch_corrected=f"J{t.J:.3f}",
+        )
+
+    def apply_proper_motion(
+        self,
+        ra_hours: float,
+        dec_degrees: float,
+        pmra_mas_per_year: float,
+        pmdec_mas_per_year: float,
+        from_epoch: float = 2000.0,
+        to_epoch: Optional[float] = None,
+        when: Optional[datetime] = None
+    ) -> Tuple[float, float]:
+        """
+        Apply proper motion correction to coordinates (Step 211).
+
+        Simple linear proper motion correction for quick calculations
+        without full Skyfield observation. For highest precision, use
+        get_star_position_with_proper_motion() instead.
+
+        Args:
+            ra_hours: Right Ascension in hours
+            dec_degrees: Declination in degrees
+            pmra_mas_per_year: Proper motion in RA (mas/yr)
+            pmdec_mas_per_year: Proper motion in Dec (mas/yr)
+            from_epoch: Source epoch (default J2000.0)
+            to_epoch: Target epoch (default: current Julian year)
+            when: Time for target epoch (used if to_epoch not specified)
+
+        Returns:
+            Tuple of (ra_hours, dec_degrees) at target epoch
+        """
+        self._ensure_initialized()
+
+        # Determine target epoch
+        if to_epoch is None:
+            t = self._get_time(when)
+            to_epoch = t.J  # Julian year
+
+        # Time difference in years
+        dt_years = to_epoch - from_epoch
+
+        # Convert proper motion from mas/yr to degrees/yr
+        pmra_deg_per_year = pmra_mas_per_year / 3600000.0
+        pmdec_deg_per_year = pmdec_mas_per_year / 3600000.0
+
+        # Apply correction
+        # Note: RA proper motion must be corrected for declination
+        cos_dec = math.cos(math.radians(dec_degrees))
+        if cos_dec > 0.001:  # Avoid division by near-zero at poles
+            ra_correction_deg = (pmra_deg_per_year / cos_dec) * dt_years
+        else:
+            ra_correction_deg = 0.0
+
+        dec_correction_deg = pmdec_deg_per_year * dt_years
+
+        # Apply corrections
+        new_ra_hours = ra_hours + (ra_correction_deg / 15.0)  # degrees to hours
+        new_dec_degrees = dec_degrees + dec_correction_deg
+
+        # Normalize RA to 0-24 range
+        new_ra_hours = new_ra_hours % 24.0
+
+        # Clamp Dec to -90 to +90
+        new_dec_degrees = max(-90.0, min(90.0, new_dec_degrees))
+
+        return (new_ra_hours, new_dec_degrees)
+
+    def get_proper_motion_displacement(
+        self,
+        pmra_mas_per_year: float,
+        pmdec_mas_per_year: float,
+        years: float
+    ) -> Tuple[float, float]:
+        """
+        Calculate total proper motion displacement (Step 211).
+
+        Useful for understanding how much a star has moved
+        from its catalog position.
+
+        Args:
+            pmra_mas_per_year: Proper motion in RA (mas/yr)
+            pmdec_mas_per_year: Proper motion in Dec (mas/yr)
+            years: Time span in years
+
+        Returns:
+            Tuple of (ra_displacement_arcsec, dec_displacement_arcsec)
+        """
+        # Convert mas to arcsec
+        ra_displacement = (pmra_mas_per_year * years) / 1000.0
+        dec_displacement = (pmdec_mas_per_year * years) / 1000.0
+
+        return (ra_displacement, dec_displacement)
+
+    def calculate_total_proper_motion(
+        self,
+        pmra_mas_per_year: float,
+        pmdec_mas_per_year: float
+    ) -> float:
+        """
+        Calculate total proper motion magnitude (Step 211).
+
+        Args:
+            pmra_mas_per_year: Proper motion in RA (mas/yr)
+            pmdec_mas_per_year: Proper motion in Dec (mas/yr)
+
+        Returns:
+            Total proper motion in mas/yr
+        """
+        return math.sqrt(pmra_mas_per_year**2 + pmdec_mas_per_year**2)
+
+    def get_star_altaz_with_proper_motion(
+        self,
+        star_data: StarData,
+        when: Optional[datetime] = None
+    ) -> HorizontalPosition:
+        """
+        Get altitude/azimuth for a star with proper motion (Step 211).
+
+        Args:
+            star_data: StarData object with proper motion values
+            when: Time for calculation (default: now)
+
+        Returns:
+            HorizontalPosition with alt/az
+        """
+        self._ensure_initialized()
+        t = self._get_time(when)
+
+        # Create Star with proper motion
+        star = Star(
+            ra_hours=star_data.ra_hours,
+            dec_degrees=star_data.dec_degrees,
+            ra_mas_per_year=star_data.pmra_mas_per_year,
+            dec_mas_per_year=star_data.pmdec_mas_per_year,
+            parallax_mas=star_data.parallax_mas if star_data.parallax_mas > 0 else 0.0,
+            radial_km_per_s=star_data.radial_velocity_km_s,
+        )
+
+        astrometric = self._observer.at(t).observe(star)
+        apparent = astrometric.apparent()
+
+        alt, az, _ = apparent.altaz()
+
+        return HorizontalPosition(
+            altitude_degrees=alt.degrees,
+            azimuth_degrees=az.degrees
+        )
 
     def format_planet_info(self, body: CelestialBody, when: Optional[datetime] = None) -> str:
         """

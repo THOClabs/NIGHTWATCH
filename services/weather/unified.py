@@ -96,6 +96,12 @@ class UnifiedConditions:
     safety_level: SafetyLevel = SafetyLevel.UNSAFE
     safety_reasons: List[str] = field(default_factory=list)
 
+    # Seeing estimation (Step 207)
+    estimated_seeing_arcsec: Optional[float] = None  # Estimated FWHM in arcsec
+    seeing_category: str = "unknown"                  # "excellent", "good", "moderate", "poor", "bad"
+    scintillation_index: Optional[float] = None      # 0-1 scale of atmospheric stability
+    jet_stream_factor: float = 1.0                   # Multiplier from wind aloft (1.0 = neutral)
+
     # Raw data references
     ecowitt_data: Optional[WeatherData] = None
     cloudwatcher_data: Optional[CloudWatcherData] = None
@@ -324,6 +330,9 @@ class UnifiedWeatherService:
         # Perform safety assessment
         self._assess_safety(conditions)
 
+        # Estimate seeing conditions (Step 207)
+        self._estimate_seeing(conditions)
+
         return conditions
 
     def _assess_safety(self, conditions: UnifiedConditions):
@@ -394,6 +403,254 @@ class UnifiedWeatherService:
         conditions.safety_level = level
         conditions.safe_to_observe = level in [SafetyLevel.SAFE, SafetyLevel.MARGINAL]
         conditions.safety_reasons = reasons
+
+    # =========================================================================
+    # SEEING ESTIMATION (Step 207)
+    # =========================================================================
+
+    def _estimate_seeing(self, conditions: UnifiedConditions):
+        """
+        Estimate astronomical seeing from weather data (Step 207).
+
+        This uses empirical relationships between ground-level weather
+        conditions and expected seeing. The estimation is a PROXY only -
+        actual seeing depends on upper atmosphere conditions that cannot
+        be measured from the ground without specialized equipment.
+
+        The algorithm considers:
+        1. Surface wind speed - correlates with ground layer turbulence
+        2. Temperature gradient - thermal instability
+        3. Humidity - atmospheric scintillation
+        4. Cloud cover - stability indicator
+
+        Typical seeing values:
+        - Excellent: < 1.0 arcsec
+        - Good: 1.0 - 1.5 arcsec
+        - Moderate: 1.5 - 2.5 arcsec
+        - Poor: 2.5 - 4.0 arcsec
+        - Bad: > 4.0 arcsec
+        """
+        # Base seeing estimate (median site seeing in arcsec)
+        base_seeing = 2.0  # Conservative default for typical amateur site
+
+        # Start with base and apply correction factors
+        seeing = base_seeing
+
+        # Wind speed correction
+        # Higher wind = more ground layer turbulence
+        if conditions.wind_speed_mph is not None:
+            wind_factor = self._wind_seeing_factor(conditions.wind_speed_mph)
+            seeing *= wind_factor
+
+        # Wind gust correction (gusty = unstable)
+        if conditions.wind_gust_mph is not None and conditions.wind_speed_mph is not None:
+            gust_delta = conditions.wind_gust_mph - conditions.wind_speed_mph
+            if gust_delta > 10:
+                seeing *= 1.3  # Significant gusting degrades seeing
+            elif gust_delta > 5:
+                seeing *= 1.15
+
+        # Temperature/humidity correction
+        # High humidity near dew point = more scintillation
+        if conditions.humidity_percent is not None:
+            humidity_factor = self._humidity_seeing_factor(conditions.humidity_percent)
+            seeing *= humidity_factor
+
+        # Thermal stability (temp vs dew point)
+        if conditions.temperature_c is not None and conditions.dew_point_c is not None:
+            dew_margin = conditions.temperature_c - conditions.dew_point_c
+            if dew_margin < 5:
+                # Near dew point - moisture turbulence
+                seeing *= 1.2
+            elif dew_margin > 15:
+                # Very dry - good thermal stability
+                seeing *= 0.9
+
+        # Cloud cover influence
+        if conditions.cloud_condition == CloudCondition.CLEAR:
+            seeing *= 0.9  # Clear skies often indicate stable atmosphere
+        elif conditions.cloud_condition == CloudCondition.CLOUDY:
+            seeing *= 1.2  # Patchy clouds indicate instability
+        elif conditions.cloud_condition == CloudCondition.OVERCAST:
+            seeing *= 1.5  # Overcast generally poor seeing
+
+        # Calculate scintillation index (0-1, lower is better)
+        scintillation = self._calculate_scintillation(conditions)
+
+        # Categorize seeing
+        category = self._categorize_seeing(seeing)
+
+        # Update conditions
+        conditions.estimated_seeing_arcsec = round(seeing, 2)
+        conditions.seeing_category = category
+        conditions.scintillation_index = scintillation
+
+    def _wind_seeing_factor(self, wind_mph: float) -> float:
+        """
+        Calculate seeing degradation factor from wind speed.
+
+        Based on empirical studies showing ground layer seeing
+        correlates with surface wind.
+
+        Args:
+            wind_mph: Wind speed in mph
+
+        Returns:
+            Multiplication factor for seeing (1.0 = neutral)
+        """
+        if wind_mph < 5:
+            return 0.85  # Calm - usually good seeing
+        elif wind_mph < 10:
+            return 0.95  # Light wind - slightly better
+        elif wind_mph < 15:
+            return 1.0   # Moderate - neutral
+        elif wind_mph < 20:
+            return 1.15  # Fresh breeze - slight degradation
+        elif wind_mph < 25:
+            return 1.3   # Strong breeze - noticeable degradation
+        else:
+            return 1.5   # High wind - significant degradation
+
+    def _humidity_seeing_factor(self, humidity: float) -> float:
+        """
+        Calculate seeing factor from humidity.
+
+        High humidity increases atmospheric scintillation.
+
+        Args:
+            humidity: Relative humidity percentage
+
+        Returns:
+            Multiplication factor for seeing (1.0 = neutral)
+        """
+        if humidity < 40:
+            return 0.9   # Dry air - good stability
+        elif humidity < 60:
+            return 1.0   # Moderate - neutral
+        elif humidity < 75:
+            return 1.1   # Humid - slight degradation
+        elif humidity < 85:
+            return 1.25  # Very humid - noticeable degradation
+        else:
+            return 1.4   # Near saturation - poor seeing
+
+    def _calculate_scintillation(self, conditions: UnifiedConditions) -> float:
+        """
+        Calculate scintillation index from conditions.
+
+        Scintillation is the rapid fluctuation of star brightness
+        (twinkling) caused by atmospheric turbulence.
+
+        Returns:
+            Float from 0 (no scintillation) to 1 (severe scintillation)
+        """
+        scintillation = 0.3  # Base value
+
+        # Wind contribution
+        if conditions.wind_speed_mph is not None:
+            if conditions.wind_speed_mph > 20:
+                scintillation += 0.3
+            elif conditions.wind_speed_mph > 10:
+                scintillation += 0.15
+
+        # Humidity contribution
+        if conditions.humidity_percent is not None:
+            if conditions.humidity_percent > 80:
+                scintillation += 0.2
+            elif conditions.humidity_percent > 60:
+                scintillation += 0.1
+
+        # Temperature proximity to dew point
+        if conditions.temperature_c and conditions.dew_point_c:
+            margin = conditions.temperature_c - conditions.dew_point_c
+            if margin < 3:
+                scintillation += 0.2
+            elif margin < 5:
+                scintillation += 0.1
+
+        return min(1.0, scintillation)
+
+    def _categorize_seeing(self, seeing_arcsec: float) -> str:
+        """
+        Categorize seeing value into descriptive class.
+
+        Args:
+            seeing_arcsec: Estimated seeing in arcseconds
+
+        Returns:
+            Category string
+        """
+        if seeing_arcsec < 1.0:
+            return "excellent"
+        elif seeing_arcsec < 1.5:
+            return "good"
+        elif seeing_arcsec < 2.5:
+            return "moderate"
+        elif seeing_arcsec < 4.0:
+            return "poor"
+        else:
+            return "bad"
+
+    async def get_seeing_estimate(self) -> Dict[str, Any]:
+        """
+        Get current seeing estimate (Step 207).
+
+        Returns a dictionary with seeing information suitable for
+        display or logging.
+
+        Returns:
+            Dict with seeing estimation data
+        """
+        conditions = await self.get_conditions()
+
+        return {
+            "estimated_fwhm_arcsec": conditions.estimated_seeing_arcsec,
+            "category": conditions.seeing_category,
+            "scintillation_index": conditions.scintillation_index,
+            "jet_stream_factor": conditions.jet_stream_factor,
+            "timestamp": conditions.timestamp.isoformat(),
+            "data_sources": {
+                "ecowitt": conditions.ecowitt_available,
+                "cloudwatcher": conditions.cloudwatcher_available,
+            },
+            "contributing_factors": {
+                "wind_mph": conditions.wind_speed_mph,
+                "humidity_pct": conditions.humidity_percent,
+                "temp_c": conditions.temperature_c,
+                "dew_point_c": conditions.dew_point_c,
+                "cloud_condition": conditions.cloud_condition.value if conditions.cloud_condition else None,
+            }
+        }
+
+    async def get_seeing_summary(self) -> str:
+        """
+        Get human-readable seeing summary for voice output.
+
+        Returns:
+            Descriptive string about current seeing conditions
+        """
+        conditions = await self.get_conditions()
+
+        if conditions.estimated_seeing_arcsec is None:
+            return "Unable to estimate seeing conditions - insufficient sensor data."
+
+        seeing = conditions.estimated_seeing_arcsec
+        category = conditions.seeing_category
+
+        response = f"Estimated seeing is {seeing:.1f} arcseconds, which is {category}. "
+
+        if category == "excellent":
+            response += "Great conditions for high-resolution imaging and planetary work."
+        elif category == "good":
+            response += "Good conditions for most deep sky imaging."
+        elif category == "moderate":
+            response += "Acceptable for wide field imaging but not ideal for planets."
+        elif category == "poor":
+            response += "Consider shorter exposures or wider field targets."
+        else:
+            response += "Poor conditions - visual observing may still be enjoyable."
+
+        return response
 
     def register_callback(self, callback: Callable):
         """Register callback for condition updates."""
