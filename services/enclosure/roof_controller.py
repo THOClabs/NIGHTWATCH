@@ -576,6 +576,67 @@ class RoofController:
                 remaining = self.config.rain_holdoff_min - elapsed
                 logger.debug(f"Rain holdoff: {remaining:.1f} minutes remaining")
 
+    def get_rain_holdoff_status(self) -> dict:
+        """
+        Get current rain holdoff status (Step 174).
+
+        The 30-minute rain holdoff timer ensures the observatory
+        doesn't reopen immediately after rain stops, allowing
+        surfaces to dry and conditions to stabilize.
+
+        Returns:
+            Dict with holdoff status:
+            - active: True if holdoff is in effect
+            - remaining_minutes: Minutes until holdoff expires (None if not active)
+            - last_rain_time: Timestamp of last rain detection
+            - holdoff_duration_minutes: Configured holdoff duration
+        """
+        if self._last_rain_time is None:
+            return {
+                "active": False,
+                "remaining_minutes": None,
+                "last_rain_time": None,
+                "holdoff_duration_minutes": self.config.rain_holdoff_min,
+            }
+
+        elapsed = (datetime.now() - self._last_rain_time).total_seconds() / 60.0
+        holdoff_complete = elapsed >= self.config.rain_holdoff_min
+
+        if holdoff_complete:
+            return {
+                "active": False,
+                "remaining_minutes": 0.0,
+                "last_rain_time": self._last_rain_time.isoformat(),
+                "holdoff_duration_minutes": self.config.rain_holdoff_min,
+                "elapsed_minutes": elapsed,
+            }
+
+        remaining = self.config.rain_holdoff_min - elapsed
+        return {
+            "active": True,
+            "remaining_minutes": remaining,
+            "last_rain_time": self._last_rain_time.isoformat(),
+            "holdoff_duration_minutes": self.config.rain_holdoff_min,
+            "elapsed_minutes": elapsed,
+        }
+
+    def reset_rain_holdoff(self) -> bool:
+        """
+        Reset rain holdoff timer (Step 174).
+
+        Use with caution - this bypasses the safety holdoff.
+        Should only be used when manually verifying conditions are safe.
+
+        Returns:
+            True if holdoff was reset
+        """
+        if self._last_rain_time is not None:
+            logger.warning("Rain holdoff timer manually reset")
+            self._last_rain_time = None
+            self._safety[SafetyCondition.RAIN_HOLDOFF] = True
+            return True
+        return False
+
     def set_hardware_interlock(self, safe: bool):
         """
         Set hardware interlock status.

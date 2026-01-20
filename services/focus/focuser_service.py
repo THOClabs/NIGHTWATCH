@@ -89,6 +89,16 @@ class FocusRun:
     error: Optional[str] = None
 
 
+@dataclass
+class FocusPositionRecord:
+    """Record of a focus position change (Step 188)."""
+    timestamp: datetime
+    position: int
+    temperature_c: float
+    reason: str  # e.g., "manual", "auto_focus", "temp_compensation"
+    hfd: Optional[float] = None  # HFD at this position if measured
+
+
 class FocuserService:
     """
     Temperature-compensated auto-focus for NIGHTWATCH.
@@ -99,6 +109,7 @@ class FocuserService:
     - V-curve auto-focus with HFD metric
     - Backlash compensation
     - Focus history and trending
+    - Position history tracking (Step 188)
 
     Usage:
         focuser = FocuserService()
@@ -125,6 +136,10 @@ class FocuserService:
         self._temp_comp_enabled = False
         self._temp_monitor_task: Optional[asyncio.Task] = None
         self._callbacks: List[Callable] = []
+
+        # Step 188: Position history tracking
+        self._position_history: List[FocusPositionRecord] = []
+        self._position_history_max_size: int = 1000  # Keep last 1000 records
 
     @property
     def connected(self) -> bool:
@@ -191,13 +206,14 @@ class FocuserService:
     # MOVEMENT
     # =========================================================================
 
-    async def move_to(self, position: int, compensate_backlash: bool = True) -> bool:
+    async def move_to(self, position: int, compensate_backlash: bool = True, reason: str = "manual") -> bool:
         """
         Move focuser to absolute position.
 
         Args:
             position: Target position in steps
             compensate_backlash: Apply backlash compensation
+            reason: Reason for move (for history tracking, Step 188)
 
         Returns:
             True if move completed successfully
@@ -228,6 +244,10 @@ class FocuserService:
             await self._do_move(position)
 
         self._state = FocuserState.IDLE
+
+        # Step 188: Record position in history
+        self._record_position(reason)
+
         return True
 
     async def _do_move(self, position: int):
@@ -268,6 +288,105 @@ class FocuserService:
         # In real implementation, would send halt command
         self._state = FocuserState.IDLE
         logger.info("Focuser halted")
+
+    # =========================================================================
+    # POSITION HISTORY TRACKING (Step 188)
+    # =========================================================================
+
+    def _record_position(self, reason: str, hfd: Optional[float] = None) -> None:
+        """
+        Record current position to history (Step 188).
+
+        Args:
+            reason: Reason for position change
+            hfd: HFD measurement at this position if available
+        """
+        record = FocusPositionRecord(
+            timestamp=datetime.now(),
+            position=self._position,
+            temperature_c=self._temperature,
+            reason=reason,
+            hfd=hfd,
+        )
+        self._position_history.append(record)
+
+        # Trim history if too large
+        if len(self._position_history) > self._position_history_max_size:
+            self._position_history = self._position_history[-self._position_history_max_size:]
+
+        logger.debug(f"Position recorded: {self._position} ({reason})")
+
+    def get_position_history(self, limit: int = 100) -> List[FocusPositionRecord]:
+        """
+        Get focus position history (Step 188).
+
+        Args:
+            limit: Maximum number of records to return
+
+        Returns:
+            List of position records, most recent first
+        """
+        history = self._position_history[-limit:] if len(self._position_history) > limit else self._position_history
+        return list(reversed(history))
+
+    def get_position_history_since(self, since: datetime) -> List[FocusPositionRecord]:
+        """
+        Get position history since a given time (Step 188).
+
+        Args:
+            since: Start time for history
+
+        Returns:
+            List of position records after the given time
+        """
+        return [r for r in self._position_history if r.timestamp >= since]
+
+    def get_position_stats(self) -> dict:
+        """
+        Get statistics about focus position history (Step 188).
+
+        Returns:
+            Dict with position statistics
+        """
+        if not self._position_history:
+            return {
+                "record_count": 0,
+                "min_position": None,
+                "max_position": None,
+                "avg_position": None,
+                "temp_range_c": None,
+            }
+
+        positions = [r.position for r in self._position_history]
+        temps = [r.temperature_c for r in self._position_history]
+        hfds = [r.hfd for r in self._position_history if r.hfd is not None]
+
+        return {
+            "record_count": len(self._position_history),
+            "min_position": min(positions),
+            "max_position": max(positions),
+            "avg_position": sum(positions) / len(positions),
+            "position_range": max(positions) - min(positions),
+            "temp_range_c": max(temps) - min(temps),
+            "min_temp_c": min(temps),
+            "max_temp_c": max(temps),
+            "avg_hfd": sum(hfds) / len(hfds) if hfds else None,
+            "best_hfd": min(hfds) if hfds else None,
+            "oldest_record": self._position_history[0].timestamp.isoformat() if self._position_history else None,
+            "newest_record": self._position_history[-1].timestamp.isoformat() if self._position_history else None,
+        }
+
+    def clear_position_history(self) -> int:
+        """
+        Clear position history (Step 188).
+
+        Returns:
+            Number of records cleared
+        """
+        count = len(self._position_history)
+        self._position_history.clear()
+        logger.info(f"Position history cleared ({count} records)")
+        return count
 
     # =========================================================================
     # AUTO-FOCUS
@@ -375,13 +494,16 @@ class FocuserService:
         best_pos = self._fit_vcurve(positions, hfds)
 
         # Move to best position
-        await self.move_to(best_pos)
+        await self.move_to(best_pos, reason="auto_focus")
 
         # Verify focus
         final_hfd = await self._measure_hfd(camera)
 
         run.final_position = best_pos
         run.best_hfd = final_hfd
+
+        # Step 188: Record final position with HFD
+        self._record_position("auto_focus_complete", hfd=final_hfd)
 
     async def _hfd_focus(self, run: FocusRun, camera):
         """HFD minimization auto-focus."""
@@ -435,7 +557,7 @@ class FocuserService:
                 best_pos = self._position
             else:
                 # Passed the minimum, go back
-                await self.move_to(best_pos)
+                await self.move_to(best_pos, reason="auto_focus")
                 break
 
             # Safety limit
@@ -444,6 +566,9 @@ class FocuserService:
 
         run.final_position = best_pos
         run.best_hfd = best_hfd
+
+        # Step 188: Record final position with HFD
+        self._record_position("auto_focus_complete", hfd=best_hfd)
 
     async def _measure_hfd(self, camera) -> float:
         """
@@ -552,7 +677,11 @@ class FocuserService:
                         if steps != 0:
                             logger.info(f"Temperature compensation: {temp_change:.1f}°C "
                                        f"-> {steps} steps")
-                            await self.move_relative(steps)
+                            # Step 188: Record reason for move
+                            await self.move_to(
+                                self._position + steps,
+                                reason=f"temp_compensation ({temp_change:+.1f}C)"
+                            )
                             self._last_focus_temp = new_temp
 
                 self._temperature = new_temp

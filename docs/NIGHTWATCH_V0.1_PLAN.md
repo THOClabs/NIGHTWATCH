@@ -259,7 +259,7 @@ Create installation scripts, hardware integration guides, and prepare for Nevada
 | 171 | Core Service Completion | enclosure | Add emergency stop input | 170 | 2 | 1 | Complete | emergency_stop() in roof_controller.py |
 | 172 | Core Service Completion | enclosure | Implement position estimation (percentage) | 171 | 3 | 2 | Not Started | Partial open support |
 | 173 | Core Service Completion | enclosure | Add mount park verification before open | 172 | 3 | 2 | Not Started | Safety interlock |
-| 174 | Core Service Completion | enclosure | Implement 30-minute rain holdoff timer | 173 | 2 | 2 | Not Started | Per POS Day 4 |
+| 174 | Core Service Completion | enclosure | Implement 30-minute rain holdoff timer | 173 | 2 | 2 | Complete | get_rain_holdoff_status(), reset_rain_holdoff() in roof_controller.py |
 | 175 | Core Service Completion | enclosure | Add power loss brake engagement | 174 | 3 | 2 | Not Started | Failsafe |
 | 176 | Core Service Completion | enclosure | Implement status callbacks (opening, open, closing, closed) | 175 | 2 | 1 | Complete | register_status_callback() in roof_controller.py |
 | 177 | Core Service Completion | enclosure | Create mock GPIO for testing | 176 | 2 | 2 | Complete | tests/mocks/mock_gpio.py |
@@ -273,9 +273,9 @@ Create installation scripts, hardware integration guides, and prepare for Nevada
 | 185 | Core Service Completion | focus | Implement temperature compensation calibration | 184 | 4 | 3 | Not Started | Auto-adjust for temp |
 | 186 | Core Service Completion | focus | Add temperature coefficient storage | 185 | 2 | 1 | Complete | save/load_temp_coefficient() in focuser_service.py |
 | 187 | Core Service Completion | focus | Implement backlash compensation | 186 | 3 | 2 | Not Started | Consistent positioning |
-| 188 | Core Service Completion | focus | Add focus position history tracking | 187 | 2 | 2 | Not Started | Session logging |
+| 188 | Core Service Completion | focus | Add focus position history tracking | 187 | 2 | 2 | Complete | FocusPositionRecord, get_position_history(), get_position_stats() in focuser_service.py |
 | 189 | Core Service Completion | focus | Implement focus run database | 188 | 3 | 2 | Not Started | Analysis data |
-| 190 | Core Service Completion | focus | Create mock focuser for testing | 189 | 2 | 2 | Not Started | Simulation mode |
+| 190 | Core Service Completion | focus | Create mock focuser for testing | 189 | 2 | 2 | Complete | tests/mocks/mock_focuser.py with error injection |
 | 191 | Core Service Completion | focus | Write unit tests for autofocus algorithms | 190 | 3 | 2 | Not Started | Test coverage |
 | 192 | Core Service Completion | focus | Write integration test with camera | 191 | 3 | 2 | Not Started | End-to-end test |
 | 193 | Core Service Completion | guiding | Review phd2_client.py current implementation | None | 2 | 1 | Complete | Full JSON-RPC client, dither, calibration, events |
@@ -284,7 +284,7 @@ Create installation scripts, hardware integration guides, and prepare for Nevada
 | 196 | Core Service Completion | guiding | Implement guide star loss recovery | 195 | 3 | 2 | Not Started | Auto-reselect |
 | 197 | Core Service Completion | guiding | Add RMS trending and alerts | 196 | 3 | 2 | Not Started | Quality monitoring |
 | 198 | Core Service Completion | guiding | Implement guide log parsing | 197 | 3 | 2 | Not Started | Session analysis |
-| 199 | Core Service Completion | guiding | Write unit tests for PHD2 client | 198 | 2 | 2 | Not Started | Test coverage |
+| 199 | Core Service Completion | guiding | Write unit tests for PHD2 client | 198 | 2 | 2 | Complete | tests/unit/test_phd2_client.py (18 tests) |
 | 200 | Core Service Completion | weather | Review ecowitt.py current implementation | None | 2 | 1 | Complete | Full WS90 integration, safety thresholds |
 | 201 | Core Service Completion | weather | Add AAG CloudWatcher integration | 200 | 4 | 3 | Not Started | Cloud sensing |
 | 202 | Core Service Completion | weather | Implement CloudWatcher serial protocol | 201 | 3 | 2 | Not Started | Data parsing |
@@ -524,7 +524,7 @@ Create installation scripts, hardware integration guides, and prepare for Nevada
 | 436 | Tool Handler Implementation | power_tools | Implement get_power_events handler | 435 | 2 | 1 | Complete | get_power_events() with history |
 | 437 | Tool Handler Implementation | power_tools | Add filtering by event type | 436 | 2 | 1 | Complete | event_type parameter for filtering |
 | 438 | Tool Handler Implementation | power_tools | Implement emergency_shutdown handler | 437 | 3 | 2 | Not Started | Critical action |
-| 439 | Tool Handler Implementation | power_tools | Add confirmation requirement | 438 | 2 | 1 | Not Started | Safety |
+| 439 | Tool Handler Implementation | power_tools | Add confirmation requirement | 438 | 2 | 1 | Complete | confirmed param in set_port_power(), power_cycle_port() |
 | 440 | Tool Handler Implementation | power_tools | Write unit tests for power tool handlers | 439 | 2 | 2 | Complete | TestPowerToolHandlers in test_telescope_tools.py (4 tests) |
 | 441 | Tool Handler Implementation | indi_tools | Implement indi_discover_devices handler | 257 | 3 | 2 | Not Started | Device scan |
 | 442 | Tool Handler Implementation | indi_tools | Implement indi_connect_device handler | 441 | 2 | 1 | Not Started | Connect device |
@@ -576,7 +576,7 @@ Create installation scripts, hardware integration guides, and prepare for Nevada
 | 488 | Safety System Hardening | emergency_response | Add rain emergency response | 487 | 3 | 2 | Complete | respond_to_rain() with park+close+alerts |
 | 489 | Safety System Hardening | emergency_response | Implement network failure response | 488 | 3 | 2 | Not Started | Lose connectivity |
 | 490 | Safety System Hardening | emergency_response | Add alert escalation during emergency | 489 | 2 | 1 | Complete | _send_alert() and escalate_alert() |
-| 491 | Safety System Hardening | emergency_response | Write unit tests for emergency response | 490 | 2 | 2 | Not Started | Test coverage |
+| 491 | Safety System Hardening | emergency_response | Write unit tests for emergency response | 490 | 2 | 2 | Complete | tests/unit/test_emergency_response.py (40 tests) |
 | 492 | Safety System Hardening | watchdog | Create nightwatch/watchdog.py module | 457 | 3 | 2 | Complete | System health |
 | 493 | Safety System Hardening | watchdog | Implement service heartbeat monitoring | 492 | 3 | 2 | Complete | Detect hangs |
 | 494 | Safety System Hardening | watchdog | Add mount communication watchdog | 493 | 2 | 1 | Complete | Mount health |
@@ -641,7 +641,7 @@ Create installation scripts, hardware integration guides, and prepare for Nevada
 | 553 | Testing & Quality Assurance | unit_tests | Create tests/unit/test_llm_client.py | 292 | 3 | 2 | Complete | 402 lines, LLM tests |
 | 554 | Testing & Quality Assurance | unit_tests | Create tests/unit/test_voice_pipeline.py | 311 | 3 | 2 | Complete | 660 lines, 55+ tests |
 | 555 | Testing & Quality Assurance | unit_tests | Create tests/unit/test_safety_interlock.py | 480 | 2 | 2 | Complete | 539 lines, 46+ tests |
-| 556 | Testing & Quality Assurance | unit_tests | Create tests/unit/test_emergency_response.py | 491 | 2 | 2 | Not Started | Emergency tests |
+| 556 | Testing & Quality Assurance | unit_tests | Create tests/unit/test_emergency_response.py | 491 | 2 | 2 | Complete | 40 tests for emergency response |
 | 557 | Testing & Quality Assurance | unit_tests | Create tests/unit/test_watchdog.py | 500 | 2 | 2 | Complete | 666 lines, watchdog tests |
 | 558 | Testing & Quality Assurance | unit_tests | Expand tests/unit/test_catalog.py | 81 | 2 | 2 | Complete | Added edge cases, formatting tests |
 | 559 | Testing & Quality Assurance | unit_tests | Expand tests/unit/test_camera.py | 100 | 2 | 2 | Complete | Created with enums, settings, presets tests |

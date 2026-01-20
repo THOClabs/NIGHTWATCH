@@ -823,35 +823,132 @@ class PowerManager:
     # PDU CONTROL (Optional)
     # =========================================================================
 
-    async def set_port_power(self, port: int, on: bool) -> bool:
+    async def set_port_power(
+        self,
+        port: int,
+        on: bool,
+        confirmed: bool = False,
+        confirmation_code: str = None,
+    ) -> dict:
         """
-        Control smart PDU port.
+        Control smart PDU port (Step 439: Requires confirmation).
+
+        Power operations are potentially destructive and require explicit
+        confirmation to prevent accidental power cycling of critical equipment.
 
         Args:
             port: Port number
             on: True to power on
+            confirmed: Must be True to execute (safety check)
+            confirmation_code: Optional confirmation code for automation
 
         Returns:
-            True if successful
+            Dict with result:
+            - success: True if power change executed
+            - requires_confirmation: True if confirmation needed
+            - port: Port number
+            - action: Action requested
+            - message: Status message
         """
-        # In real implementation, would control PDU via SNMP or HTTP
         action = "ON" if on else "OFF"
-        logger.info(f"PDU port {port}: {action}")
-        return True
 
-    async def power_cycle_port(self, port: int, delay_sec: float = 5.0):
+        # Step 439: Require confirmation for power operations
+        if not confirmed and confirmation_code != "NIGHTWATCH_POWER_CONFIRM":
+            logger.warning(f"PDU port {port} {action} requested but not confirmed")
+            return {
+                "success": False,
+                "requires_confirmation": True,
+                "port": port,
+                "action": action,
+                "message": f"Power {action} for port {port} requires confirmation. "
+                          f"Set confirmed=True or provide confirmation_code.",
+            }
+
+        # In real implementation, would control PDU via SNMP or HTTP
+        logger.info(f"PDU port {port}: {action} (confirmed)")
+
+        # Log the event
+        self._log_event(
+            f"PORT_{action}",
+            f"Port {port} powered {action} (confirmed)"
+        )
+
+        return {
+            "success": True,
+            "requires_confirmation": False,
+            "port": port,
+            "action": action,
+            "message": f"Port {port} powered {action}",
+        }
+
+    async def power_cycle_port(
+        self,
+        port: int,
+        delay_sec: float = 5.0,
+        confirmed: bool = False,
+        confirmation_code: str = None,
+    ) -> dict:
         """
-        Power cycle a PDU port.
+        Power cycle a PDU port (Step 439: Requires confirmation).
+
+        Power cycling is potentially destructive and requires explicit
+        confirmation to prevent accidental cycling of critical equipment.
 
         Args:
             port: Port number
             delay_sec: Time to wait before powering back on
+            confirmed: Must be True to execute (safety check)
+            confirmation_code: Optional confirmation code for automation
+
+        Returns:
+            Dict with result:
+            - success: True if power cycle completed
+            - requires_confirmation: True if confirmation needed
+            - port: Port number
+            - message: Status message
         """
-        logger.info(f"Power cycling port {port}...")
-        await self.set_port_power(port, False)
+        # Step 439: Require confirmation for power operations
+        if not confirmed and confirmation_code != "NIGHTWATCH_POWER_CONFIRM":
+            logger.warning(f"Power cycle port {port} requested but not confirmed")
+            return {
+                "success": False,
+                "requires_confirmation": True,
+                "port": port,
+                "message": f"Power cycle for port {port} requires confirmation. "
+                          f"Set confirmed=True or provide confirmation_code.",
+            }
+
+        logger.info(f"Power cycling port {port} (confirmed)...")
+
+        # Execute power cycle
+        off_result = await self.set_port_power(port, False, confirmed=True)
+        if not off_result["success"]:
+            return {
+                "success": False,
+                "requires_confirmation": False,
+                "port": port,
+                "message": f"Failed to power off port {port}",
+            }
+
         await asyncio.sleep(delay_sec)
-        await self.set_port_power(port, True)
-        logger.info(f"Port {port} power cycled")
+
+        on_result = await self.set_port_power(port, True, confirmed=True)
+        if not on_result["success"]:
+            return {
+                "success": False,
+                "requires_confirmation": False,
+                "port": port,
+                "message": f"Failed to power on port {port} after cycle",
+            }
+
+        logger.info(f"Port {port} power cycled successfully")
+        return {
+            "success": True,
+            "requires_confirmation": False,
+            "port": port,
+            "delay_sec": delay_sec,
+            "message": f"Port {port} power cycled successfully",
+        }
 
     # =========================================================================
     # EVENT LOGGING
