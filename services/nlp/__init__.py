@@ -13,11 +13,26 @@ from .conversation_context import (
     get_context_manager,
 )
 
+from .clarification import (
+    ClarificationService,
+    ClarificationResult,
+    AmbiguityType,
+    ClarificationOption,
+    get_clarification_service,
+)
+
 __all__ = [
+    # Conversation Context
     "ConversationContext",
     "EntityType",
     "TrackedEntity",
     "ContextMessage",
     "UserIntent",
     "get_context_manager",
+    # Clarification
+    "ClarificationService",
+    "ClarificationResult",
+    "AmbiguityType",
+    "ClarificationOption",
+    "get_clarification_service",
 ]
