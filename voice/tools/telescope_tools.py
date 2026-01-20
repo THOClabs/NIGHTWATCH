@@ -4678,6 +4678,146 @@ def create_default_handlers(
 
     handlers["get_pointing_error"] = get_pointing_error
 
+    async def center_object(
+        object_name: Optional[str] = None,
+        ra: Optional[float] = None,
+        dec: Optional[float] = None,
+        tolerance_arcsec: float = 30.0,
+        max_iterations: int = 3,
+        timeout_per_solve: float = 60.0
+    ) -> str:
+        """Center object precisely using iterative plate solving (Steps 423-424).
+
+        Uses plate solving to measure pointing error and iteratively
+        corrects until the target is centered within tolerance.
+
+        Args:
+            object_name: Name of object to center (uses catalog lookup)
+            ra: Target RA in hours (alternative to object_name)
+            dec: Target Dec in degrees (alternative to object_name)
+            tolerance_arcsec: Acceptable centering error (default 30")
+            max_iterations: Maximum solve/correct cycles (default 3)
+            timeout_per_solve: Timeout for each plate solve (default 60s)
+        """
+        # Validate inputs
+        if not object_name and (ra is None or dec is None):
+            return "Specify object_name or both ra and dec coordinates"
+
+        if not mount_client:
+            return "Mount not available"
+
+        if not astrometry_service:
+            return "Astrometry service not available for plate solving"
+
+        if not camera_client:
+            return "Camera not available for plate solving"
+
+        # Get target coordinates
+        target_ra = ra
+        target_dec = dec
+
+        if object_name:
+            # Look up object coordinates
+            if catalog_service:
+                try:
+                    result = catalog_service.lookup(object_name)
+                    if result:
+                        target_ra = result.ra_hours
+                        target_dec = result.dec_degrees
+                    else:
+                        return f"Object '{object_name}' not found in catalog"
+                except Exception as e:
+                    return f"Catalog lookup failed: {e}"
+            else:
+                return "Catalog service not available for object lookup"
+
+        results = []
+        results.append(f"Centering on {'object ' + object_name if object_name else 'coordinates'}")
+        results.append(f"Target: RA {target_ra:.4f}h, Dec {target_dec:.4f}°")
+        results.append(f"Tolerance: {tolerance_arcsec}\"")
+
+        # Iterative centering loop
+        for iteration in range(1, max_iterations + 1):
+            results.append(f"\n--- Iteration {iteration}/{max_iterations} ---")
+
+            try:
+                # Take image and plate solve
+                if hasattr(camera_client, 'capture_for_solve'):
+                    image_data = await asyncio.wait_for(
+                        camera_client.capture_for_solve(),
+                        timeout=30.0
+                    )
+                elif hasattr(camera_client, 'start_exposure'):
+                    camera_client.start_exposure(2.0)  # 2 second exposure
+                    await asyncio.sleep(3.0)
+                    if hasattr(camera_client, 'get_image'):
+                        image_data = camera_client.get_image()
+                    else:
+                        image_data = None
+                else:
+                    return "Camera does not support capture for solving"
+
+                # Plate solve with hint
+                solve_result = await asyncio.wait_for(
+                    astrometry_service.solve(
+                        image_data,
+                        ra_hint=target_ra * 15,  # Convert hours to degrees
+                        dec_hint=target_dec,
+                        radius_hint=2.0  # Search within 2 degrees
+                    ),
+                    timeout=timeout_per_solve
+                )
+
+                if not solve_result or not solve_result.success:
+                    results.append("  Plate solve failed - check exposure/focus")
+                    continue
+
+                # Calculate error
+                solved_ra_hours = solve_result.ra_degrees / 15.0
+                error_ra_arcsec = (solved_ra_hours - target_ra) * 15 * 3600 * math.cos(math.radians(target_dec))
+                error_dec_arcsec = (solve_result.dec_degrees - target_dec) * 3600
+                total_error = math.sqrt(error_ra_arcsec**2 + error_dec_arcsec**2)
+
+                results.append(f"  Solved: RA {solved_ra_hours:.4f}h, Dec {solve_result.dec_degrees:.4f}°")
+                results.append(f"  Error: {total_error:.1f}\" (RA: {error_ra_arcsec:.1f}\", Dec: {error_dec_arcsec:.1f}\")")
+
+                # Check if within tolerance
+                if total_error <= tolerance_arcsec:
+                    results.append(f"\n✓ Centered within {tolerance_arcsec}\" tolerance")
+                    return "\n".join(results)
+
+                # Apply correction
+                if hasattr(mount_client, 'sync_to_coordinates'):
+                    # Sync mount to solved position, then slew to target
+                    mount_client.sync_to_coordinates(solved_ra_hours, solve_result.dec_degrees)
+                    results.append("  Synced mount to solved position")
+
+                # Small slew to target
+                if hasattr(mount_client, 'slew_to_coordinates'):
+                    mount_client.slew_to_coordinates(target_ra, target_dec)
+                    results.append("  Slewing to target...")
+
+                    # Wait for slew to complete
+                    for _ in range(30):  # 30 second max wait
+                        await asyncio.sleep(1.0)
+                        if hasattr(mount_client, 'is_slewing'):
+                            if not mount_client.is_slewing():
+                                break
+
+            except asyncio.TimeoutError:
+                results.append(f"  Timeout during iteration {iteration}")
+                continue
+            except Exception as e:
+                results.append(f"  Error: {e}")
+                continue
+
+        # Max iterations reached
+        results.append(f"\n⚠ Max iterations ({max_iterations}) reached")
+        results.append("Object may not be precisely centered")
+        return "\n".join(results)
+
+    handlers["center_object"] = center_object
+
     # Guiding handlers (Step 393)
     async def start_guiding(
         settle_time: float = 10.0,
