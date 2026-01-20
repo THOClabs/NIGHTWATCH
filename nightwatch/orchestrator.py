@@ -1963,6 +1963,341 @@ class Orchestrator:
         """
         self.metrics.record_error(service)
 
+    # =========================================================================
+    # Enhanced Metrics Collection (Step 247)
+    # =========================================================================
+
+    def collect_metrics(self) -> Dict[str, Any]:
+        """
+        Collect comprehensive metrics from all services (Step 247).
+
+        Returns:
+            Dict containing all collected metrics
+        """
+        metrics = {
+            "orchestrator": self.metrics.to_dict(),
+            "services": {},
+            "session": {
+                "images_captured": self.session.images_captured,
+                "total_exposure_sec": self.session.total_exposure_sec,
+                "error_count": self.session.error_count,
+                "targets_observed": len(self.session.targets_observed),
+            },
+            "timestamp": datetime.now().isoformat(),
+        }
+
+        # Collect per-service metrics
+        for name in self.registry.list_services():
+            service = self.registry.get(name)
+            info = self.registry._services.get(name)
+
+            service_metrics = {
+                "status": info.status.value if info else "unknown",
+                "uptime_sec": self.metrics.get_service_uptime(name),
+                "error_count": self.metrics.errors_by_service.get(name, 0),
+            }
+
+            # Get service-specific metrics if available
+            if service and hasattr(service, 'get_metrics'):
+                try:
+                    service_metrics["custom"] = service.get_metrics()
+                except Exception as e:
+                    service_metrics["custom_error"] = str(e)
+
+            metrics["services"][name] = service_metrics
+
+        return metrics
+
+    def get_error_rate(self, service: Optional[str] = None) -> float:
+        """
+        Calculate error rate for a service or overall (Step 247).
+
+        Args:
+            service: Optional service name (None for overall)
+
+        Returns:
+            Error rate as errors per command (0.0-1.0)
+        """
+        total_commands = self.metrics.commands_executed
+        if total_commands == 0:
+            return 0.0
+
+        if service:
+            errors = self.metrics.errors_by_service.get(service, 0)
+        else:
+            errors = self.metrics.error_count
+
+        return errors / total_commands
+
+    def get_availability(self, service: str) -> float:
+        """
+        Calculate service availability percentage (Step 247).
+
+        Args:
+            service: Service name
+
+        Returns:
+            Availability percentage (0.0-100.0)
+        """
+        info = self.registry._services.get(service)
+        if not info or not info.last_check:
+            return 0.0
+
+        uptime = self.metrics.get_service_uptime(service)
+        if uptime <= 0:
+            return 0.0
+
+        # Calculate availability based on error count and uptime
+        error_count = self.metrics.errors_by_service.get(service, 0)
+        # Assume each error causes ~30s downtime
+        estimated_downtime = error_count * 30
+
+        if uptime <= estimated_downtime:
+            return 0.0
+
+        return ((uptime - estimated_downtime) / uptime) * 100
+
+    # =========================================================================
+    # Error Recovery Strategies (Steps 238-241)
+    # =========================================================================
+
+    async def recover_mount(self, max_retries: int = 3, retry_delay: float = 5.0) -> bool:
+        """
+        Attempt to recover mount connection (Step 239).
+
+        Tries to reconnect to the mount service when connection is lost.
+
+        Args:
+            max_retries: Maximum number of reconnection attempts
+            retry_delay: Delay between retries in seconds
+
+        Returns:
+            True if recovery successful, False otherwise
+        """
+        if not self.mount:
+            logger.warning("No mount service registered for recovery")
+            return False
+
+        logger.info("Attempting mount recovery...")
+
+        for attempt in range(1, max_retries + 1):
+            try:
+                logger.info(f"Mount reconnection attempt {attempt}/{max_retries}")
+
+                # Try to stop and restart the service
+                if hasattr(self.mount, 'stop'):
+                    try:
+                        await self.mount.stop()
+                    except Exception:
+                        pass  # Ignore stop errors
+
+                await asyncio.sleep(retry_delay)
+
+                if hasattr(self.mount, 'start'):
+                    await self.mount.start()
+
+                # Verify connection
+                if hasattr(self.mount, 'is_running') and self.mount.is_running:
+                    logger.info("Mount recovery successful")
+                    self.registry.set_status("mount", ServiceStatus.RUNNING)
+                    await self.emit_event(
+                        EventType.SERVICE_STARTED,
+                        source="mount",
+                        data={"recovery": True, "attempt": attempt},
+                        message="Mount recovered after connection loss"
+                    )
+                    return True
+
+            except Exception as e:
+                logger.warning(f"Mount recovery attempt {attempt} failed: {e}")
+                self.record_service_error("mount")
+
+            await asyncio.sleep(retry_delay)
+
+        logger.error(f"Mount recovery failed after {max_retries} attempts")
+        self.registry.set_status("mount", ServiceStatus.ERROR, "Recovery failed")
+        return False
+
+    async def recover_weather(self, use_cache: bool = True, cache_max_age_sec: float = 300.0) -> bool:
+        """
+        Attempt to recover weather service with cached data fallback (Step 240).
+
+        When weather service is unavailable, can fall back to cached data
+        for a limited time to prevent unnecessary shutdowns.
+
+        Args:
+            use_cache: Whether to use cached data as fallback
+            cache_max_age_sec: Maximum age of cached data to use
+
+        Returns:
+            True if recovery successful (or cache valid), False otherwise
+        """
+        if not self.weather:
+            logger.warning("No weather service registered for recovery")
+            return False
+
+        logger.info("Attempting weather service recovery...")
+
+        # Try to reconnect
+        try:
+            if hasattr(self.weather, 'stop'):
+                try:
+                    await self.weather.stop()
+                except Exception:
+                    pass
+
+            await asyncio.sleep(2.0)
+
+            if hasattr(self.weather, 'start'):
+                await self.weather.start()
+
+            if hasattr(self.weather, 'is_running') and self.weather.is_running:
+                logger.info("Weather service recovery successful")
+                self.registry.set_status("weather", ServiceStatus.RUNNING)
+                return True
+
+        except Exception as e:
+            logger.warning(f"Weather service reconnection failed: {e}")
+
+        # Fall back to cached data if available
+        if use_cache and hasattr(self.weather, '_last_conditions'):
+            last_update = getattr(self.weather, '_last_update', None)
+            if last_update:
+                age = (datetime.now() - last_update).total_seconds()
+                if age < cache_max_age_sec:
+                    logger.warning(
+                        f"Weather service unavailable - using cached data "
+                        f"(age: {age:.0f}s, max: {cache_max_age_sec:.0f}s)"
+                    )
+                    self.registry.set_status("weather", ServiceStatus.DEGRADED,
+                                            f"Using cached data (age: {age:.0f}s)")
+                    return True
+                else:
+                    logger.warning(f"Cached weather data too old ({age:.0f}s)")
+
+        logger.error("Weather service recovery failed - no valid data available")
+        self.registry.set_status("weather", ServiceStatus.ERROR, "Recovery failed")
+        return False
+
+    async def recover_camera(self, reset_device: bool = True) -> bool:
+        """
+        Attempt to recover camera after capture failure (Step 241).
+
+        Tries to reset and reinitialize the camera device.
+
+        Args:
+            reset_device: Whether to attempt a device reset
+
+        Returns:
+            True if recovery successful, False otherwise
+        """
+        if not self.camera:
+            logger.warning("No camera service registered for recovery")
+            return False
+
+        logger.info("Attempting camera recovery...")
+
+        try:
+            # Abort any pending exposure
+            if hasattr(self.camera, 'abort_exposure'):
+                try:
+                    await self.camera.abort_exposure()
+                    logger.info("Aborted pending camera exposure")
+                except Exception as e:
+                    logger.warning(f"Failed to abort exposure: {e}")
+
+            # Stop the service
+            if hasattr(self.camera, 'stop'):
+                try:
+                    await self.camera.stop()
+                except Exception:
+                    pass
+
+            await asyncio.sleep(2.0)
+
+            # Reset device if requested
+            if reset_device and hasattr(self.camera, 'reset'):
+                try:
+                    await self.camera.reset()
+                    logger.info("Camera device reset")
+                except Exception as e:
+                    logger.warning(f"Camera reset failed: {e}")
+
+            await asyncio.sleep(1.0)
+
+            # Restart the service
+            if hasattr(self.camera, 'start'):
+                await self.camera.start()
+
+            # Verify camera is operational
+            if hasattr(self.camera, 'is_running') and self.camera.is_running:
+                logger.info("Camera recovery successful")
+                self.registry.set_status("camera", ServiceStatus.RUNNING)
+                await self.emit_event(
+                    EventType.SERVICE_STARTED,
+                    source="camera",
+                    data={"recovery": True},
+                    message="Camera recovered after failure"
+                )
+                return True
+
+        except Exception as e:
+            logger.error(f"Camera recovery failed: {e}")
+            self.record_service_error("camera")
+
+        logger.error("Camera recovery failed")
+        self.registry.set_status("camera", ServiceStatus.ERROR, "Recovery failed")
+        return False
+
+    async def auto_recover_service(self, service_name: str) -> bool:
+        """
+        Automatically attempt to recover a failed service (Step 238).
+
+        Routes to the appropriate recovery method based on service type.
+
+        Args:
+            service_name: Name of the service to recover
+
+        Returns:
+            True if recovery successful, False otherwise
+        """
+        logger.info(f"Auto-recovery initiated for service: {service_name}")
+
+        recovery_methods = {
+            "mount": self.recover_mount,
+            "weather": self.recover_weather,
+            "camera": self.recover_camera,
+        }
+
+        recovery_method = recovery_methods.get(service_name)
+        if recovery_method:
+            return await recovery_method()
+
+        # Generic recovery for other services
+        service = self.registry.get(service_name)
+        if not service:
+            logger.warning(f"Service {service_name} not found")
+            return False
+
+        try:
+            if hasattr(service, 'stop'):
+                await service.stop()
+            await asyncio.sleep(2.0)
+            if hasattr(service, 'start'):
+                await service.start()
+
+            if hasattr(service, 'is_running') and service.is_running:
+                logger.info(f"Service {service_name} recovered")
+                self.registry.set_status(service_name, ServiceStatus.RUNNING)
+                return True
+
+        except Exception as e:
+            logger.error(f"Service {service_name} recovery failed: {e}")
+            self.record_service_error(service_name)
+
+        self.registry.set_status(service_name, ServiceStatus.ERROR, "Recovery failed")
+        return False
+
 
 # =============================================================================
 # Factory Function

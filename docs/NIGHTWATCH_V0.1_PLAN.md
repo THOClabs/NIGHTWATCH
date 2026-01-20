@@ -323,16 +323,16 @@ Create installation scripts, hardware integration guides, and prepare for Nevada
 | 235 | Orchestrator Development | orchestrator | Add command priority levels | 234 | 2 | 1 | Complete | CommandPriority enum in orchestrator.py |
 | 236 | Orchestrator Development | orchestrator | Implement command timeout handling | 235 | 3 | 2 | Complete | execute_with_timeout(), execute_slew_with_timeout(), DEFAULT_TIMEOUTS in orchestrator.py |
 | 237 | Orchestrator Development | orchestrator | Add command cancellation support | 236 | 2 | 2 | Complete | execute_cancellable(), cancel_command(), cancel_all_commands() in orchestrator.py |
-| 238 | Orchestrator Development | orchestrator | Implement error recovery strategies | 237 | 4 | 3 | Not Started | Graceful degradation |
-| 239 | Orchestrator Development | orchestrator | Add mount error recovery (reconnect) | 238 | 3 | 2 | Not Started | Connection lost |
-| 240 | Orchestrator Development | orchestrator | Add weather error recovery (cache) | 239 | 3 | 2 | Not Started | Data unavailable |
-| 241 | Orchestrator Development | orchestrator | Add camera error recovery (reset) | 240 | 3 | 2 | Not Started | Capture failure |
+| 238 | Orchestrator Development | orchestrator | Implement error recovery strategies | 237 | 4 | 3 | Complete | auto_recover_service() routing to service-specific recovery in orchestrator.py |
+| 239 | Orchestrator Development | orchestrator | Add mount error recovery (reconnect) | 238 | 3 | 2 | Complete | recover_mount() with retry in orchestrator.py |
+| 240 | Orchestrator Development | orchestrator | Add weather error recovery (cache) | 239 | 3 | 2 | Complete | recover_weather() with cache fallback in orchestrator.py |
+| 241 | Orchestrator Development | orchestrator | Add camera error recovery (reset) | 240 | 3 | 2 | Complete | recover_camera() with device reset in orchestrator.py |
 | 242 | Orchestrator Development | orchestrator | Implement event bus for inter-service communication | 241 | 4 | 3 | Not Started | Loose coupling |
 | 243 | Orchestrator Development | orchestrator | Add mount position changed event | 242 | 2 | 1 | Complete | Position updates |
 | 244 | Orchestrator Development | orchestrator | Add weather changed event | 243 | 2 | 1 | Complete | Weather updates |
 | 245 | Orchestrator Development | orchestrator | Add safety state changed event | 244 | 2 | 1 | Complete | Safety alerts |
 | 246 | Orchestrator Development | orchestrator | Add guiding state changed event | 245 | 2 | 1 | Complete | Guide status |
-| 247 | Orchestrator Development | orchestrator | Implement metrics collection | 246 | 3 | 2 | Not Started | Performance data |
+| 247 | Orchestrator Development | orchestrator | Implement metrics collection | 246 | 3 | 2 | Complete | collect_metrics(), get_error_rate(), get_availability() in orchestrator.py |
 | 248 | Orchestrator Development | orchestrator | Add command latency metrics | 247 | 2 | 1 | Complete | Timing data |
 | 249 | Orchestrator Development | orchestrator | Add service uptime metrics | 248 | 2 | 1 | Complete | Availability |
 | 250 | Orchestrator Development | orchestrator | Add error rate metrics | 249 | 2 | 1 | Complete | Failure tracking |
@@ -680,7 +680,7 @@ Create installation scripts, hardware integration guides, and prepare for Nevada
 | 592 | Testing & Quality Assurance | ci_cd | Create pull request template | 591 | 2 | 1 | Complete | Safety checklist included |
 | 593 | Testing & Quality Assurance | ci_cd | Add branch protection rules documentation | 592 | 2 | 1 | Complete | In CONTRIBUTING.md |
 | 594 | Documentation & POS | docs | Update README.md with v0.1 quickstart | None | 3 | 2 | Not Started | Entry point |
-| 595 | Documentation & POS | docs | Add installation section | 594 | 2 | 1 | Not Started | Setup guide |
+| 595 | Documentation & POS | docs | Add installation section | 594 | 2 | 1 | Complete | INSTALLATION.md comprehensive guide exists |
 | 596 | Documentation & POS | docs | Add configuration section | 595 | 2 | 1 | Not Started | Config guide |
 | 597 | Documentation & POS | docs | Add voice command examples | 596 | 2 | 1 | Not Started | Usage examples |
 | 598 | Documentation & POS | docs | Create docs/QUICKSTART.md | 597 | 3 | 2 | Not Started | Fast setup |
