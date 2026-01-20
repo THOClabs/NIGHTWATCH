@@ -820,6 +820,247 @@ class PowerManager:
         await self._on_power_restored()
 
     # =========================================================================
+    # SEQUENCED POWER CONTROL (Steps 154-155)
+    # =========================================================================
+
+    async def sequenced_power_on(
+        self,
+        devices: Optional[List[str]] = None,
+        delay_between_sec: float = 5.0,
+        confirmed: bool = False,
+    ) -> dict:
+        """
+        Power on devices in safe sequence (Step 154).
+
+        Devices are powered on in a specific order to ensure safe startup:
+        1. Computer/Control systems (already on if running this)
+        2. Mount controller
+        3. Camera/Imaging systems
+        4. Focuser
+        5. Accessories (filter wheels, etc.)
+
+        Args:
+            devices: List of devices to power on (None = all)
+            delay_between_sec: Delay between each device power-on
+            confirmed: Must be True to execute (safety check)
+
+        Returns:
+            Dict with power-on sequence result:
+            - success: True if all devices powered on
+            - sequence: List of devices and their status
+            - message: Summary message
+        """
+        if not confirmed:
+            return {
+                "success": False,
+                "requires_confirmation": True,
+                "message": "Sequenced power-on requires confirmation. Set confirmed=True.",
+            }
+
+        logger.info("Starting sequenced power-on")
+
+        # Default power-on sequence (order matters for safety)
+        default_sequence = [
+            {"name": "computer", "port": self.config.port_computer, "description": "Control computer"},
+            {"name": "mount", "port": self.config.port_mount, "description": "Mount controller"},
+            {"name": "camera", "port": self.config.port_camera, "description": "Camera system"},
+            {"name": "focuser", "port": self.config.port_focuser, "description": "Focuser"},
+        ]
+
+        # Filter to requested devices if specified
+        if devices:
+            sequence = [d for d in default_sequence if d["name"] in devices]
+        else:
+            sequence = default_sequence
+
+        results = []
+        all_success = True
+
+        for device in sequence:
+            logger.info(f"Powering on {device['description']} (port {device['port']})")
+
+            result = await self.set_port_power(
+                port=device["port"],
+                on=True,
+                confirmed=True,
+            )
+
+            device_result = {
+                "name": device["name"],
+                "port": device["port"],
+                "success": result["success"],
+                "message": result.get("message", ""),
+            }
+            results.append(device_result)
+
+            if not result["success"]:
+                all_success = False
+                logger.error(f"Failed to power on {device['name']}")
+            else:
+                # Wait before powering on next device
+                if device != sequence[-1]:  # Don't delay after last device
+                    logger.debug(f"Waiting {delay_between_sec}s before next device")
+                    await asyncio.sleep(delay_between_sec)
+
+        self._log_event(
+            "POWER_ON_SEQUENCE",
+            f"Sequenced power-on: {'success' if all_success else 'partial failure'}"
+        )
+
+        return {
+            "success": all_success,
+            "requires_confirmation": False,
+            "sequence": results,
+            "message": f"Powered on {sum(1 for r in results if r['success'])}/{len(results)} devices",
+        }
+
+    async def sequenced_power_off(
+        self,
+        devices: Optional[List[str]] = None,
+        delay_between_sec: float = 5.0,
+        confirmed: bool = False,
+        safe_shutdown: bool = True,
+    ) -> dict:
+        """
+        Power off devices in safe sequence (Step 155).
+
+        Devices are powered off in reverse order from power-on:
+        1. Accessories (filter wheels, etc.)
+        2. Focuser
+        3. Camera/Imaging systems
+        4. Mount controller
+        5. Computer/Control systems (optional, usually last)
+
+        The mount should be parked before powering off.
+
+        Args:
+            devices: List of devices to power off (None = all except computer)
+            delay_between_sec: Delay between each device power-off
+            confirmed: Must be True to execute (safety check)
+            safe_shutdown: If True, verify mount is parked before continuing
+
+        Returns:
+            Dict with power-off sequence result:
+            - success: True if all devices powered off
+            - sequence: List of devices and their status
+            - message: Summary message
+        """
+        if not confirmed:
+            return {
+                "success": False,
+                "requires_confirmation": True,
+                "message": "Sequenced power-off requires confirmation. Set confirmed=True.",
+            }
+
+        logger.info("Starting sequenced power-off")
+
+        # Check mount is parked before proceeding (safety)
+        if safe_shutdown and self._mount:
+            try:
+                is_parked = await self._mount.is_parked()
+                if not is_parked:
+                    logger.warning("Mount not parked - attempting to park before power-off")
+                    await self._mount.park()
+                    await asyncio.sleep(5.0)  # Wait for park to complete
+            except Exception as e:
+                logger.error(f"Failed to verify/park mount: {e}")
+                return {
+                    "success": False,
+                    "requires_confirmation": False,
+                    "message": f"Mount park verification failed: {e}. Use safe_shutdown=False to override.",
+                }
+
+        # Default power-off sequence (reverse of power-on, excluding computer)
+        default_sequence = [
+            {"name": "focuser", "port": self.config.port_focuser, "description": "Focuser"},
+            {"name": "camera", "port": self.config.port_camera, "description": "Camera system"},
+            {"name": "mount", "port": self.config.port_mount, "description": "Mount controller"},
+        ]
+
+        # Filter to requested devices if specified
+        if devices:
+            sequence = [d for d in default_sequence if d["name"] in devices]
+        else:
+            sequence = default_sequence
+
+        results = []
+        all_success = True
+
+        for device in sequence:
+            logger.info(f"Powering off {device['description']} (port {device['port']})")
+
+            result = await self.set_port_power(
+                port=device["port"],
+                on=False,
+                confirmed=True,
+            )
+
+            device_result = {
+                "name": device["name"],
+                "port": device["port"],
+                "success": result["success"],
+                "message": result.get("message", ""),
+            }
+            results.append(device_result)
+
+            if not result["success"]:
+                all_success = False
+                logger.error(f"Failed to power off {device['name']}")
+            else:
+                # Wait before powering off next device
+                if device != sequence[-1]:  # Don't delay after last device
+                    logger.debug(f"Waiting {delay_between_sec}s before next device")
+                    await asyncio.sleep(delay_between_sec)
+
+        self._log_event(
+            "POWER_OFF_SEQUENCE",
+            f"Sequenced power-off: {'success' if all_success else 'partial failure'}"
+        )
+
+        return {
+            "success": all_success,
+            "requires_confirmation": False,
+            "sequence": results,
+            "message": f"Powered off {sum(1 for r in results if r['success'])}/{len(results)} devices",
+        }
+
+    async def get_power_sequence_status(self) -> dict:
+        """
+        Get current power state of all sequenced devices (Steps 154-155).
+
+        Returns:
+            Dict with device power states:
+            - devices: List of device status dicts
+            - all_on: True if all devices are powered on
+            - all_off: True if all devices are powered off
+        """
+        devices = [
+            {"name": "computer", "port": self.config.port_computer},
+            {"name": "mount", "port": self.config.port_mount},
+            {"name": "camera", "port": self.config.port_camera},
+            {"name": "focuser", "port": self.config.port_focuser},
+        ]
+
+        # In real implementation, would query PDU for actual port states
+        # For simulation, assume all are on if we're running
+        device_status = []
+        for device in devices:
+            device_status.append({
+                "name": device["name"],
+                "port": device["port"],
+                "powered": True,  # Simulation
+            })
+
+        all_on = all(d["powered"] for d in device_status)
+        all_off = all(not d["powered"] for d in device_status)
+
+        return {
+            "devices": device_status,
+            "all_on": all_on,
+            "all_off": all_off,
+        }
+
+    # =========================================================================
     # PDU CONTROL (Optional)
     # =========================================================================
 

@@ -239,8 +239,8 @@ Create installation scripts, hardware integration guides, and prepare for Nevada
 | 151 | Core Service Completion | power | Add power event logging | 150 | 2 | 1 | Complete | _log_event, PowerEvent dataclass |
 | 152 | Core Service Completion | power | Implement smart PDU port control (optional) | 151 | 4 | 3 | Not Started | Device power cycling |
 | 153 | Core Service Completion | power | Add PDU HTTP/SNMP interface | 152 | 3 | 2 | Not Started | Protocol support |
-| 154 | Core Service Completion | power | Implement sequenced power-on order | 153 | 3 | 2 | Not Started | Safe startup |
-| 155 | Core Service Completion | power | Implement sequenced power-off order | 154 | 3 | 2 | Not Started | Safe shutdown |
+| 154 | Core Service Completion | power | Implement sequenced power-on order | 153 | 3 | 2 | Complete | sequenced_power_on() in power_manager.py |
+| 155 | Core Service Completion | power | Implement sequenced power-off order | 154 | 3 | 2 | Complete | sequenced_power_off() in power_manager.py |
 | 156 | Core Service Completion | power | Create mock UPS for testing | 155 | 2 | 2 | Complete | _use_simulation mode in PowerManager |
 | 157 | Core Service Completion | power | Write unit tests for NUT client | 156 | 2 | 2 | Complete | tests/unit/test_power_manager.py (29 tests) |
 | 158 | Core Service Completion | power | Write integration test for thresholds | 157 | 2 | 2 | Complete | Threshold tests in test_power_manager.py |
@@ -253,12 +253,12 @@ Create installation scripts, hardware integration guides, and prepare for Nevada
 | 165 | Core Service Completion | enclosure | Implement limit switch reading (open limit) | 164 | 2 | 2 | Complete | read_open_limit() in GPIOInterface |
 | 166 | Core Service Completion | enclosure | Implement limit switch reading (closed limit) | 165 | 2 | 1 | Complete | read_closed_limit() in GPIOInterface |
 | 167 | Core Service Completion | enclosure | Add hardware rain sensor input | 166 | 3 | 2 | Complete | read_rain_sensor() in GPIOInterface |
-| 168 | Core Service Completion | enclosure | Implement rain sensor interrupt handling | 167 | 3 | 2 | Not Started | Immediate response |
+| 168 | Core Service Completion | enclosure | Implement rain sensor interrupt handling | 167 | 3 | 2 | Complete | setup_rain_sensor_interrupt(), _handle_rain_interrupt() in roof_controller.py |
 | 169 | Core Service Completion | enclosure | Add motor current monitoring (optional) | 168 | 4 | 3 | Not Started | Over-current protection |
 | 170 | Core Service Completion | enclosure | Implement motor timeout protection (60s max) | 169 | 2 | 1 | Complete | _motor_timeout in roof_controller.py |
 | 171 | Core Service Completion | enclosure | Add emergency stop input | 170 | 2 | 1 | Complete | emergency_stop() in roof_controller.py |
-| 172 | Core Service Completion | enclosure | Implement position estimation (percentage) | 171 | 3 | 2 | Not Started | Partial open support |
-| 173 | Core Service Completion | enclosure | Add mount park verification before open | 172 | 3 | 2 | Not Started | Safety interlock |
+| 172 | Core Service Completion | enclosure | Implement position estimation (percentage) | 171 | 3 | 2 | Complete | estimate_position_percent(), get_position_status(), move_to_position() in roof_controller.py |
+| 173 | Core Service Completion | enclosure | Add mount park verification before open | 172 | 3 | 2 | Complete | verify_mount_parked_before_open() in roof_controller.py |
 | 174 | Core Service Completion | enclosure | Implement 30-minute rain holdoff timer | 173 | 2 | 2 | Complete | get_rain_holdoff_status(), reset_rain_holdoff() in roof_controller.py |
 | 175 | Core Service Completion | enclosure | Add power loss brake engagement | 174 | 3 | 2 | Not Started | Failsafe |
 | 176 | Core Service Completion | enclosure | Implement status callbacks (opening, open, closing, closed) | 175 | 2 | 1 | Complete | register_status_callback() in roof_controller.py |

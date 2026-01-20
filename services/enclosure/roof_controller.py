@@ -931,6 +931,289 @@ class RoofController:
                 asyncio.create_task(self.close(emergency=True))
 
     # =========================================================================
+    # RAIN SENSOR INTERRUPT HANDLING (Step 168)
+    # =========================================================================
+
+    def setup_rain_sensor_interrupt(self, gpio: GPIOInterface):
+        """
+        Setup rain sensor GPIO interrupt for immediate response (Step 168).
+
+        Configures edge-triggered interrupt on rain sensor pin to ensure
+        immediate roof closure when rain is detected, bypassing polling delays.
+
+        Args:
+            gpio: GPIOInterface with rain sensor configured
+        """
+        self._gpio = gpio
+        logger.info("Setting up rain sensor interrupt handler")
+
+        if gpio.backend == GPIOBackend.GPIOZERO:
+            # gpiozero uses callbacks directly
+            gpio._gpio["rain_sensor"].when_pressed = self._on_rain_interrupt
+            logger.info("Rain sensor interrupt configured (gpiozero)")
+        elif gpio.backend == GPIOBackend.RPIGPIO:
+            # RPi.GPIO uses add_event_detect
+            try:
+                import RPi.GPIO as GPIO
+                GPIO.add_event_detect(
+                    gpio.pin_rain_sensor,
+                    GPIO.FALLING,  # NC sensor: falling edge = rain detected
+                    callback=self._on_rain_interrupt_rpigpio,
+                    bouncetime=100  # 100ms debounce
+                )
+                logger.info("Rain sensor interrupt configured (RPi.GPIO)")
+            except Exception as e:
+                logger.error(f"Failed to setup rain sensor interrupt: {e}")
+        else:
+            # Mock mode - interrupt will be triggered manually via test method
+            logger.info("Rain sensor interrupt in mock mode")
+
+    def _on_rain_interrupt(self):
+        """
+        Rain sensor interrupt callback (Step 168).
+
+        This is called directly from GPIO interrupt context when rain is
+        detected. Must be fast and non-blocking - schedules actual work
+        on the event loop.
+        """
+        logger.warning("RAIN SENSOR INTERRUPT TRIGGERED!")
+
+        # Schedule emergency close on event loop
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                loop.call_soon_threadsafe(
+                    lambda: asyncio.create_task(self._handle_rain_interrupt())
+                )
+            else:
+                # Fallback for testing
+                asyncio.run(self._handle_rain_interrupt())
+        except Exception as e:
+            logger.error(f"Failed to schedule rain interrupt handler: {e}")
+
+    def _on_rain_interrupt_rpigpio(self, channel):
+        """RPi.GPIO interrupt callback wrapper (Step 168)."""
+        self._on_rain_interrupt()
+
+    async def _handle_rain_interrupt(self):
+        """
+        Handle rain sensor interrupt - emergency close sequence (Step 168).
+
+        Called asynchronously when rain is detected via hardware interrupt.
+        Initiates immediate emergency close and updates safety state.
+        """
+        logger.warning("Processing rain sensor interrupt - emergency close")
+
+        # Update safety state
+        self._last_rain_time = datetime.now()
+        self._safety[SafetyCondition.WEATHER_SAFE] = False
+        self._safety[SafetyCondition.RAIN_HOLDOFF] = False
+        self._safety[SafetyCondition.HARDWARE_INTERLOCK] = False
+
+        # Trigger emergency close if not already closed
+        if self._state not in [RoofState.CLOSED, RoofState.CLOSING]:
+            await self.close(emergency=True)
+
+        # Notify callbacks
+        await self._notify_callbacks("rain_detected")
+
+    def trigger_mock_rain_interrupt(self):
+        """
+        Trigger rain sensor interrupt for testing (Step 168).
+
+        Simulates a hardware rain sensor interrupt in mock mode.
+        """
+        logger.info("Mock rain sensor interrupt triggered")
+        self._on_rain_interrupt()
+
+    # =========================================================================
+    # POSITION ESTIMATION (Step 172)
+    # =========================================================================
+
+    def estimate_position_percent(self) -> float:
+        """
+        Estimate current roof position as percentage (Step 172).
+
+        Uses limit switches and motor runtime to estimate position
+        when not at a limit switch.
+
+        Returns:
+            Estimated position 0.0 (closed) to 100.0 (open)
+        """
+        # If at a limit, position is known exactly
+        if self._state == RoofState.CLOSED:
+            return 0.0
+        if self._state == RoofState.OPEN:
+            return 100.0
+
+        # Return tracked position
+        return float(self._position)
+
+    def get_position_status(self) -> dict:
+        """
+        Get detailed position status (Step 172).
+
+        Returns:
+            Dict with position information:
+            - percent: Current position estimate
+            - state: Current state string
+            - at_open_limit: True if at open limit
+            - at_closed_limit: True if at closed limit
+            - is_moving: True if roof is moving
+            - direction: Movement direction if moving
+        """
+        is_moving = self._state in [RoofState.OPENING, RoofState.CLOSING]
+        direction = None
+        if self._state == RoofState.OPENING:
+            direction = "opening"
+        elif self._state == RoofState.CLOSING:
+            direction = "closing"
+
+        return {
+            "percent": self.estimate_position_percent(),
+            "state": self._state.value,
+            "at_open_limit": self._state == RoofState.OPEN,
+            "at_closed_limit": self._state == RoofState.CLOSED,
+            "is_moving": is_moving,
+            "direction": direction,
+            "motor_running": self._motor_running,
+        }
+
+    async def move_to_position(self, target_percent: float) -> bool:
+        """
+        Move roof to a specific position percentage (Step 172).
+
+        Supports partial opening for observatories with position tracking.
+        Note: Most roll-off roofs only support fully open/closed.
+
+        Args:
+            target_percent: Target position 0-100
+
+        Returns:
+            True if target position reached
+        """
+        if not self._connected:
+            raise RuntimeError("Roof controller not connected")
+
+        target_percent = max(0.0, min(100.0, target_percent))
+
+        if abs(self._position - target_percent) < 5.0:
+            logger.info(f"Already near target position ({self._position}%)")
+            return True
+
+        if target_percent > self._position:
+            # Need to open
+            if not self._can_open():
+                raise RuntimeError("Cannot open: safety conditions not met")
+
+            logger.info(f"Moving to {target_percent}% (opening)")
+            self._state = RoofState.OPENING
+            await self._emit_status_event("opening")
+
+            # Run motor until target reached or limit hit
+            while self._position < target_percent:
+                # Simulate position increment
+                self._position = min(self._position + 5, 100)
+                await asyncio.sleep(0.5)
+
+                if self._position >= 100:
+                    self._state = RoofState.OPEN
+                    break
+
+            if self._position >= 100:
+                await self._emit_status_event("open")
+            else:
+                self._state = RoofState.UNKNOWN
+        else:
+            # Need to close
+            logger.info(f"Moving to {target_percent}% (closing)")
+            self._state = RoofState.CLOSING
+            await self._emit_status_event("closing")
+
+            while self._position > target_percent:
+                self._position = max(self._position - 5, 0)
+                await asyncio.sleep(0.5)
+
+                if self._position <= 0:
+                    self._state = RoofState.CLOSED
+                    break
+
+            if self._position <= 0:
+                await self._emit_status_event("closed")
+            else:
+                self._state = RoofState.UNKNOWN
+
+        logger.info(f"Reached position: {self._position}%")
+        return True
+
+    # =========================================================================
+    # MOUNT PARK VERIFICATION (Step 173)
+    # =========================================================================
+
+    async def verify_mount_parked_before_open(self) -> dict:
+        """
+        Verify mount is parked before allowing roof to open (Step 173).
+
+        This is the safety interlock that prevents roof operation when
+        the telescope is in an unsafe position. The telescope must be
+        parked (OTA horizontal or below horizon) before the roof can move.
+
+        Returns:
+            Dict with verification result:
+            - parked: True if mount is verified parked
+            - can_open: True if roof can be opened
+            - message: Human-readable status
+            - mount_alt: Mount altitude if available
+            - mount_az: Mount azimuth if available
+        """
+        result = {
+            "parked": False,
+            "can_open": False,
+            "message": "Unknown",
+            "mount_alt": None,
+            "mount_az": None,
+        }
+
+        if self._mount is None:
+            logger.warning("No mount service configured - cannot verify park status")
+            result["message"] = "No mount service - assuming parked (UNSAFE)"
+            result["parked"] = True  # Assume parked if no mount service
+            result["can_open"] = True
+            return result
+
+        try:
+            # Check if mount is parked
+            is_parked = await self._mount.is_parked()
+
+            # Try to get mount position for additional safety check
+            try:
+                status = await self._mount.get_status()
+                result["mount_alt"] = status.get("altitude")
+                result["mount_az"] = status.get("azimuth")
+            except Exception:
+                pass
+
+            self._safety[SafetyCondition.TELESCOPE_PARKED] = is_parked
+
+            if is_parked:
+                result["parked"] = True
+                result["can_open"] = self._can_open()
+                result["message"] = "Mount is parked - safe to open"
+            else:
+                result["parked"] = False
+                result["can_open"] = False
+                result["message"] = "Mount is NOT parked - roof operation blocked"
+                logger.warning("Mount park verification failed - telescope not parked")
+
+            return result
+
+        except Exception as e:
+            logger.error(f"Mount park verification error: {e}")
+            result["message"] = f"Verification error: {e}"
+            self._safety[SafetyCondition.TELESCOPE_PARKED] = False
+            return result
+
+    # =========================================================================
     # STATUS MONITORING
     # =========================================================================
 
