@@ -46,3 +46,12 @@ from nightwatch.orchestrator import (
     SessionState,
     create_orchestrator,
 )
+
+# Conversation Context (Step 128) - imported from services to avoid circular deps
+# from services.nlp import (
+#     ConversationContext,
+#     EntityType,
+#     TrackedEntity,
+#     UserIntent,
+#     get_context_manager,
+# )
