@@ -877,3 +877,253 @@ class TestSafeShutdown:
         assert "metrics" in loaded
 
         await orchestrator.shutdown(safe=False)
+
+
+# =============================================================================
+# Command Priority and Queue Tests (Step 255)
+# =============================================================================
+
+from nightwatch.orchestrator import CommandPriority, CommandQueue, QueuedCommand
+
+
+class TestCommandPriority:
+    """Tests for command priority system (Step 235)."""
+
+    def test_priority_ordering(self):
+        """Test that priorities have correct relative ordering."""
+        assert CommandPriority.EMERGENCY.value > CommandPriority.SAFETY.value
+        assert CommandPriority.SAFETY.value > CommandPriority.HIGH.value
+        assert CommandPriority.HIGH.value > CommandPriority.NORMAL.value
+        assert CommandPriority.NORMAL.value > CommandPriority.LOW.value
+        assert CommandPriority.LOW.value > CommandPriority.BACKGROUND.value
+
+    def test_priority_values(self):
+        """Test priority value assignments."""
+        assert CommandPriority.EMERGENCY.value == 100
+        assert CommandPriority.SAFETY.value == 80
+        assert CommandPriority.HIGH.value == 60
+        assert CommandPriority.NORMAL.value == 40
+        assert CommandPriority.LOW.value == 20
+        assert CommandPriority.BACKGROUND.value == 0
+
+    def test_from_command_emergency(self):
+        """Test emergency command detection."""
+        emergency_commands = [
+            "emergency stop",
+            "STOP the mount",
+            "abort exposure",
+            "halt all operations",
+        ]
+        for cmd in emergency_commands:
+            priority = CommandPriority.from_command(cmd)
+            assert priority == CommandPriority.EMERGENCY, f"Failed for: {cmd}"
+
+    def test_from_command_safety(self):
+        """Test safety command detection."""
+        safety_commands = [
+            "park the mount",
+            "close roof now",
+            "weather is unsafe",
+            "weather alert active",
+        ]
+        for cmd in safety_commands:
+            priority = CommandPriority.from_command(cmd)
+            assert priority == CommandPriority.SAFETY, f"Failed for: {cmd}"
+
+    def test_from_command_high(self):
+        """Test high priority command detection."""
+        high_commands = [
+            "slew to M31",
+            "goto Vega",
+            "move to home",
+            "track the target",
+        ]
+        for cmd in high_commands:
+            priority = CommandPriority.from_command(cmd)
+            assert priority == CommandPriority.HIGH, f"Failed for: {cmd}"
+
+    def test_from_command_normal(self):
+        """Test normal priority command detection."""
+        normal_commands = [
+            "capture 30 second exposure",
+            "expose for 60 seconds",
+            "focus the telescope",
+            "start guiding",
+        ]
+        for cmd in normal_commands:
+            priority = CommandPriority.from_command(cmd)
+            assert priority == CommandPriority.NORMAL, f"Failed for: {cmd}"
+
+    def test_from_command_low(self):
+        """Test low priority command detection."""
+        low_commands = [
+            "status please",
+            "what is the temperature",
+            "where is the telescope pointing",
+            "report current settings",
+        ]
+        for cmd in low_commands:
+            priority = CommandPriority.from_command(cmd)
+            assert priority == CommandPriority.LOW, f"Failed for: {cmd}"
+
+    def test_from_command_default(self):
+        """Test default priority for unknown commands."""
+        unknown_commands = ["do something", "hello there"]
+        for cmd in unknown_commands:
+            priority = CommandPriority.from_command(cmd)
+            assert priority == CommandPriority.NORMAL, f"Failed for: {cmd}"
+
+
+class TestCommandQueue:
+    """Tests for command queue functionality (Step 234)."""
+
+    @pytest.mark.asyncio
+    async def test_queue_creation(self):
+        """Test creating a command queue."""
+        queue = CommandQueue(max_size=50)
+        assert queue._max_size == 50
+        assert queue.size() == 0
+        assert queue.is_empty() is True
+        assert queue.is_full() is False
+
+    @pytest.mark.asyncio
+    async def test_enqueue_basic(self):
+        """Test basic command enqueueing."""
+        queue = CommandQueue()
+
+        async def dummy_coro():
+            pass
+
+        cmd_id = await queue.enqueue(
+            dummy_coro(),
+            priority=CommandPriority.NORMAL,
+            command_type="test",
+        )
+        assert cmd_id is not None
+        assert cmd_id.startswith("q_")
+        assert queue.size() == 1
+
+    @pytest.mark.asyncio
+    async def test_dequeue_basic(self):
+        """Test basic command dequeuing."""
+        queue = CommandQueue()
+
+        async def dummy_coro():
+            return "result"
+
+        await queue.enqueue(dummy_coro(), command_type="test")
+        assert queue.size() == 1
+
+        cmd = await queue.dequeue()
+        assert cmd is not None
+        assert cmd.command_type == "test"
+        assert queue.size() == 0
+
+    @pytest.mark.asyncio
+    async def test_priority_ordering(self):
+        """Test that commands are dequeued by priority."""
+        queue = CommandQueue()
+
+        async def dummy():
+            pass
+
+        await queue.enqueue(dummy(), CommandPriority.LOW, "low")
+        await queue.enqueue(dummy(), CommandPriority.EMERGENCY, "emergency")
+        await queue.enqueue(dummy(), CommandPriority.NORMAL, "normal")
+        await queue.enqueue(dummy(), CommandPriority.HIGH, "high")
+
+        # Dequeue should be in priority order
+        cmd1 = await queue.dequeue()
+        assert cmd1.command_type == "emergency"
+        cmd2 = await queue.dequeue()
+        assert cmd2.command_type == "high"
+        cmd3 = await queue.dequeue()
+        assert cmd3.command_type == "normal"
+        cmd4 = await queue.dequeue()
+        assert cmd4.command_type == "low"
+
+    @pytest.mark.asyncio
+    async def test_queue_full_handling(self):
+        """Test handling when queue is full."""
+        queue = CommandQueue(max_size=3)
+
+        async def dummy():
+            pass
+
+        await queue.enqueue(dummy(), command_type="cmd1")
+        await queue.enqueue(dummy(), command_type="cmd2")
+        await queue.enqueue(dummy(), command_type="cmd3")
+
+        assert queue.is_full() is True
+
+        result = await queue.enqueue(dummy(), command_type="cmd4")
+        assert result is None
+        assert queue.size() == 3
+
+    @pytest.mark.asyncio
+    async def test_peek(self):
+        """Test peeking at next command without removing."""
+        queue = CommandQueue()
+
+        async def dummy():
+            pass
+
+        await queue.enqueue(dummy(), CommandPriority.HIGH, "high")
+        await queue.enqueue(dummy(), CommandPriority.LOW, "low")
+
+        cmd = await queue.peek()
+        assert cmd.command_type == "high"
+        assert queue.size() == 2
+
+    @pytest.mark.asyncio
+    async def test_clear(self):
+        """Test clearing the queue."""
+        queue = CommandQueue()
+
+        async def dummy():
+            pass
+
+        await queue.enqueue(dummy(), command_type="cmd1")
+        await queue.enqueue(dummy(), command_type="cmd2")
+
+        cleared = await queue.clear()
+        assert cleared == 2
+        assert queue.is_empty() is True
+
+    @pytest.mark.asyncio
+    async def test_get_stats(self):
+        """Test getting queue statistics."""
+        queue = CommandQueue(max_size=10)
+
+        async def dummy():
+            pass
+
+        await queue.enqueue(dummy(), command_type="cmd1")
+        await queue.enqueue(dummy(), command_type="cmd2")
+        await queue.dequeue()
+
+        stats = queue.get_stats()
+        assert stats["current_size"] == 1
+        assert stats["max_size"] == 10
+        assert stats["total_enqueued"] == 2
+        assert stats["total_processed"] == 1
+
+    @pytest.mark.asyncio
+    async def test_list_pending(self):
+        """Test listing pending commands."""
+        queue = CommandQueue()
+
+        async def dummy():
+            pass
+
+        await queue.enqueue(
+            dummy(),
+            CommandPriority.HIGH,
+            "slew",
+            metadata={"target": "M31"}
+        )
+
+        pending = queue.list_pending()
+        assert len(pending) == 1
+        assert pending[0]["command_type"] == "slew"
+        assert pending[0]["metadata"]["target"] == "M31"

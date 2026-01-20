@@ -205,7 +205,7 @@ Create installation scripts, hardware integration guides, and prepare for Nevada
 | 117 | Core Service Completion | astrometry | Add center_on_object() sync method | 116 | 3 | 2 | Complete | solve_and_sync() in plate_solver.py |
 | 118 | Core Service Completion | astrometry | Create mock solver for testing | 117 | 3 | 2 | Complete | tests/mocks/mock_solver.py with error injection |
 | 119 | Core Service Completion | astrometry | Write unit tests for solver backends | 118 | 2 | 2 | Complete | test_plate_solver.py (21 tests) |
-| 120 | Core Service Completion | astrometry | Write integration test with camera | 119 | 3 | 2 | Not Started | End-to-end test |
+| 120 | Core Service Completion | astrometry | Write integration test with camera | 119 | 3 | 2 | Complete | tests/integration/test_astrometry_camera.py (17 tests) |
 | 121 | Core Service Completion | alerts | Review alert_manager.py current implementation | None | 2 | 1 | Complete | Understand gaps |
 | 122 | Core Service Completion | alerts | Implement SMTP email notification channel | 121 | 3 | 2 | Complete | Email alerts |
 | 123 | Core Service Completion | alerts | Add email template system (HTML + plain text) | 122 | 3 | 2 | Complete | Formatted emails |
@@ -277,7 +277,7 @@ Create installation scripts, hardware integration guides, and prepare for Nevada
 | 189 | Core Service Completion | focus | Implement focus run database | 188 | 3 | 2 | Complete | FocusRunDatabase class with SQLite persistence in focuser_service.py |
 | 190 | Core Service Completion | focus | Create mock focuser for testing | 189 | 2 | 2 | Complete | tests/mocks/mock_focuser.py with error injection |
 | 191 | Core Service Completion | focus | Write unit tests for autofocus algorithms | 190 | 3 | 2 | Complete | tests/unit/test_focuser_service.py (35 tests) |
-| 192 | Core Service Completion | focus | Write integration test with camera | 191 | 3 | 2 | Not Started | End-to-end test |
+| 192 | Core Service Completion | focus | Write integration test with camera | 191 | 3 | 2 | Complete | tests/integration/test_focus_camera.py (24 tests) |
 | 193 | Core Service Completion | guiding | Review phd2_client.py current implementation | None | 2 | 1 | Complete | Full JSON-RPC client, dither, calibration, events |
 | 194 | Core Service Completion | guiding | Complete dither implementation | 193 | 3 | 2 | Complete | dither_and_wait() with settle detection in phd2_client.py |
 | 195 | Core Service Completion | guiding | Add settling detection with timeout | 194 | 3 | 2 | Complete | wait_for_settle(), get_settle_status(), is_settling property in phd2_client.py |
@@ -340,7 +340,7 @@ Create installation scripts, hardware integration guides, and prepare for Nevada
 | 252 | Orchestrator Development | orchestrator | Add park on shutdown | 251 | 2 | 1 | Complete | Safety |
 | 253 | Orchestrator Development | orchestrator | Add close enclosure on shutdown | 252 | 2 | 1 | Complete | Safety |
 | 254 | Orchestrator Development | orchestrator | Add save session log on shutdown | 253 | 2 | 1 | Complete | Data preservation |
-| 255 | Orchestrator Development | orchestrator | Write unit tests for orchestrator | 254 | 3 | 3 | Not Started | Test coverage |
+| 255 | Orchestrator Development | orchestrator | Write unit tests for orchestrator | 254 | 3 | 3 | Complete | tests/unit/test_orchestrator.py (86 tests, added CommandQueue/Priority) |
 | 256 | Orchestrator Development | orchestrator | Write integration test with mock services | 255 | 3 | 2 | Not Started | End-to-end test |
 | 257 | Orchestrator Development | tool_executor | Create nightwatch/tool_executor.py module | 212 | 3 | 2 | Complete | Full tool executor with handlers |
 | 258 | Orchestrator Development | tool_executor | Define ToolExecutor class with orchestrator reference | 257 | 2 | 1 | Complete | Constructor with DI |
