@@ -386,7 +386,7 @@ Create installation scripts, hardware integration guides, and prepare for Nevada
 | 298 | Voice Pipeline Integration | voice_pipeline | Add wake word detection (pymicro-vad as trigger) | 297 | 4 | 3 | Not Started | Voice activation |
 | 299 | Voice Pipeline Integration | voice_pipeline | Implement STT transcription call | 298 | 2 | 1 | Complete | Speech to text |
 | 300 | Voice Pipeline Integration | voice_pipeline | Add transcription post-processing (normalization) | 299 | 2 | 1 | Complete | normalize_transcript(), ASTRONOMY_NORMALIZATIONS |
-| 301 | Voice Pipeline Integration | voice_pipeline | Implement LLM tool selection call | 300 | 3 | 2 | Not Started | Intent to tool |
+| 301 | Voice Pipeline Integration | voice_pipeline | Implement LLM tool selection call | 300 | 3 | 2 | Complete | select_tool_from_intent(), get_tool_for_command() with quick matching |
 | 302 | Voice Pipeline Integration | voice_pipeline | Add tool execution via orchestrator | 301 | 2 | 1 | Complete | Execute command |
 | 303 | Voice Pipeline Integration | voice_pipeline | Implement response formatting call | 302 | 2 | 1 | Complete | Human text |
 | 304 | Voice Pipeline Integration | voice_pipeline | Add TTS synthesis call | 303 | 2 | 1 | Complete | Text to speech |
@@ -400,14 +400,14 @@ Create installation scripts, hardware integration guides, and prepare for Nevada
 | 312 | Voice Pipeline Integration | voice_pipeline | Write integration test end-to-end | 311 | 3 | 3 | Not Started | Full flow test |
 | 313 | Voice Pipeline Integration | stt_integration | Integrate WhisperSTT with voice pipeline | 293 | 2 | 1 | Complete | STTInterface wraps faster-whisper |
 | 314 | Voice Pipeline Integration | stt_integration | Configure DGX Spark optimized settings | 313 | 2 | 1 | Complete | beam_size, best_of, patience in VoiceConfig |
-| 315 | Voice Pipeline Integration | stt_integration | Add audio preprocessing (noise reduction) | 314 | 3 | 2 | Not Started | Clean audio |
+| 315 | Voice Pipeline Integration | stt_integration | Add audio preprocessing (noise reduction) | 314 | 3 | 2 | Complete | AudioCapture.preprocess_audio() with high-pass filter, noise gate |
 | 316 | Voice Pipeline Integration | stt_integration | Implement audio buffering for continuous mode | 315 | 3 | 2 | Not Started | Smooth capture |
 | 317 | Voice Pipeline Integration | stt_integration | Add transcription confidence filtering | 316 | 2 | 1 | Complete | confidence_threshold in WyomingSTTServer (default 0.6) |
-| 318 | Voice Pipeline Integration | stt_integration | Implement astronomy vocabulary boost | 317 | 3 | 2 | Not Started | Domain accuracy |
+| 318 | Voice Pipeline Integration | stt_integration | Implement astronomy vocabulary boost | 317 | 3 | 2 | Complete | ASTRONOMY_VOCABULARY list, initial_prompt for Whisper |
 | 319 | Voice Pipeline Integration | stt_integration | Add multi-language support preparation | 318 | 2 | 1 | Complete | SUPPORTED_LANGUAGES, STT_SUPPORTED_LANGUAGES dicts in tts/stt servers |
 | 320 | Voice Pipeline Integration | tts_integration | Integrate PiperTTS with voice pipeline | 293 | 2 | 1 | Complete | TTSInterface wraps piper-tts |
 | 321 | Voice Pipeline Integration | tts_integration | Configure DGX Spark CUDA acceleration | 320 | 2 | 1 | Complete | cuda_device, cuda_memory_fraction in TTSConfig |
-| 322 | Voice Pipeline Integration | tts_integration | Add response phrase caching | 321 | 3 | 2 | Not Started | Common responses |
+| 322 | Voice Pipeline Integration | tts_integration | Add response phrase caching | 321 | 3 | 2 | Complete | ResponsePhraseCache class with LRU eviction, preload_common_phrases() |
 | 323 | Voice Pipeline Integration | tts_integration | Implement dynamic speech rate based on urgency | 322 | 2 | 1 | Complete | detect_urgency(), get_urgency_rate() in tts_server.py |
 | 324 | Voice Pipeline Integration | tts_integration | Add audio ducking (lower volume for background) | 323 | 3 | 2 | Not Started | Audio mix |
 | 325 | Voice Pipeline Integration | wyoming_integration | Configure Wyoming STT server startup | 293 | 2 | 1 | Complete | WyomingManager.start_stt_server(), wyoming_* config fields |

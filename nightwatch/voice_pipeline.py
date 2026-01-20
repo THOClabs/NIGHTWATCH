@@ -45,6 +45,8 @@ __all__ = [
     "AudioPlayer",
     "AudioCapture",
     "LEDIndicator",
+    "ResponsePhraseCache",
+    "ASTRONOMY_VOCABULARY",
     "create_voice_pipeline",
     "normalize_transcript",
 ]
@@ -144,6 +146,37 @@ class VoicePipelineConfig:
 # =============================================================================
 # Transcription Normalization (Step 300)
 # =============================================================================
+
+
+# =============================================================================
+# Astronomy Vocabulary Boost (Step 318)
+# =============================================================================
+
+# Astronomy terms to boost in speech recognition
+ASTRONOMY_VOCABULARY = [
+    # Messier objects
+    "M1", "M13", "M31", "M42", "M45", "M51", "M57", "M101",
+    "Messier", "nebula", "galaxy", "cluster",
+    # NGC/IC objects
+    "NGC", "IC", "Caldwell",
+    # Stars
+    "Polaris", "Vega", "Sirius", "Betelgeuse", "Rigel", "Arcturus",
+    "Aldebaran", "Antares", "Deneb", "Altair", "Capella", "Procyon",
+    # Constellations
+    "Orion", "Andromeda", "Cassiopeia", "Ursa", "Cygnus", "Lyra",
+    "Sagittarius", "Scorpius", "Leo", "Gemini", "Taurus", "Perseus",
+    # Planets
+    "Mercury", "Venus", "Mars", "Jupiter", "Saturn", "Uranus", "Neptune",
+    # Commands
+    "slew", "goto", "track", "park", "unpark", "sync", "focus",
+    "exposure", "capture", "abort", "stop", "calibrate",
+    # Equipment
+    "telescope", "mount", "camera", "focuser", "filter", "guider",
+    "autoguider", "dome", "roof", "flat", "dark", "bias",
+    # Coordinates
+    "right ascension", "declination", "altitude", "azimuth",
+    "RA", "Dec", "Alt", "Az", "epoch", "J2000",
+]
 
 
 # Common astronomy word mappings for speech recognition
@@ -581,6 +614,193 @@ class AudioCapture:
         """Stop ongoing capture."""
         self._capturing = False
 
+    @staticmethod
+    def preprocess_audio(audio_data: bytes, sample_rate: int = 16000) -> bytes:
+        """
+        Preprocess audio for better transcription (Step 315).
+
+        Applies:
+        - Noise reduction (simple spectral gating)
+        - Normalization
+        - High-pass filter (remove low-frequency rumble)
+
+        Args:
+            audio_data: Raw audio bytes (16-bit PCM)
+            sample_rate: Audio sample rate
+
+        Returns:
+            Preprocessed audio bytes
+        """
+        try:
+            import numpy as np
+
+            # Convert bytes to numpy array
+            audio = np.frombuffer(audio_data, dtype=np.int16).astype(np.float32)
+
+            if len(audio) == 0:
+                return audio_data
+
+            # Normalize to [-1, 1]
+            max_val = np.max(np.abs(audio))
+            if max_val > 0:
+                audio = audio / max_val
+
+            # Simple high-pass filter (remove DC and low frequency rumble)
+            # Using first-order difference as simple high-pass
+            alpha = 0.97  # High-pass coefficient
+            filtered = np.zeros_like(audio)
+            filtered[0] = audio[0]
+            for i in range(1, len(audio)):
+                filtered[i] = alpha * (filtered[i-1] + audio[i] - audio[i-1])
+
+            # Simple noise gate (reduce quiet sections)
+            threshold = 0.02
+            gate = np.abs(filtered) > threshold
+            # Smooth the gate to avoid clicks
+            from scipy.ndimage import uniform_filter1d
+            try:
+                gate_smooth = uniform_filter1d(gate.astype(float), size=int(sample_rate * 0.01))
+            except ImportError:
+                gate_smooth = gate.astype(float)
+            filtered = filtered * gate_smooth
+
+            # Normalize again
+            max_val = np.max(np.abs(filtered))
+            if max_val > 0:
+                filtered = filtered / max_val * 0.9  # Leave some headroom
+
+            # Convert back to int16
+            result = (filtered * 32767).astype(np.int16)
+            return result.tobytes()
+
+        except ImportError:
+            logger.warning("numpy not available for audio preprocessing")
+            return audio_data
+        except Exception as e:
+            logger.warning(f"Audio preprocessing failed: {e}")
+            return audio_data
+
+
+# =============================================================================
+# Response Phrase Caching (Step 322)
+# =============================================================================
+
+
+class ResponsePhraseCache:
+    """
+    Cache for common TTS responses (Step 322).
+
+    Caches synthesized audio for frequently used phrases to reduce
+    TTS latency for common responses.
+
+    Usage:
+        cache = ResponsePhraseCache(tts_interface)
+        await cache.preload_common_phrases()
+        audio = await cache.get_or_synthesize("Command acknowledged")
+    """
+
+    # Common phrases to pre-cache
+    COMMON_PHRASES = [
+        "Command acknowledged.",
+        "I'm on it.",
+        "Working on that now.",
+        "Slewing to target.",
+        "Telescope parked.",
+        "Telescope unparked.",
+        "Tracking started.",
+        "Tracking stopped.",
+        "Exposure started.",
+        "Exposure complete.",
+        "Focus adjustment complete.",
+        "Conditions are safe for observing.",
+        "Weather conditions are unsafe.",
+        "Roof is opening.",
+        "Roof is closing.",
+        "Roof open.",
+        "Roof closed.",
+        "I didn't catch that. Could you repeat?",
+        "Sorry, an error occurred.",
+        "Command completed successfully.",
+        "Please confirm this action.",
+    ]
+
+    def __init__(self, tts: "TTSInterface", max_cache_size: int = 100):
+        """
+        Initialize phrase cache.
+
+        Args:
+            tts: TTS interface for synthesis
+            max_cache_size: Maximum cached phrases
+        """
+        self._tts = tts
+        self._max_size = max_cache_size
+        self._cache: Dict[str, bytes] = {}
+        self._access_count: Dict[str, int] = {}
+
+    async def preload_common_phrases(self):
+        """Preload common phrases into cache."""
+        logger.info(f"Preloading {len(self.COMMON_PHRASES)} common phrases")
+        for phrase in self.COMMON_PHRASES:
+            try:
+                audio = await self._tts.synthesize(phrase)
+                self._cache[phrase] = audio
+                self._access_count[phrase] = 0
+            except Exception as e:
+                logger.warning(f"Failed to cache phrase '{phrase}': {e}")
+        logger.info(f"Cached {len(self._cache)} phrases")
+
+    async def get_or_synthesize(self, text: str) -> bytes:
+        """
+        Get cached audio or synthesize new (Step 322).
+
+        Args:
+            text: Text to synthesize
+
+        Returns:
+            Audio bytes
+        """
+        # Normalize text for cache lookup
+        cache_key = text.strip().lower()
+
+        # Check cache
+        if cache_key in self._cache:
+            self._access_count[cache_key] = self._access_count.get(cache_key, 0) + 1
+            logger.debug(f"Cache hit for: {text[:30]}...")
+            return self._cache[cache_key]
+
+        # Synthesize and cache
+        audio = await self._tts.synthesize(text)
+
+        # Add to cache if not full
+        if len(self._cache) < self._max_size:
+            self._cache[cache_key] = audio
+            self._access_count[cache_key] = 1
+        else:
+            # Evict least accessed phrase
+            if self._access_count:
+                min_key = min(self._access_count, key=self._access_count.get)
+                del self._cache[min_key]
+                del self._access_count[min_key]
+                self._cache[cache_key] = audio
+                self._access_count[cache_key] = 1
+
+        return audio
+
+    def clear(self):
+        """Clear the cache."""
+        self._cache.clear()
+        self._access_count.clear()
+
+    def get_stats(self) -> Dict[str, Any]:
+        """Get cache statistics."""
+        return {
+            "cached_phrases": len(self._cache),
+            "max_size": self._max_size,
+            "total_accesses": sum(self._access_count.values()),
+            "most_accessed": max(self._access_count.items(), key=lambda x: x[1])[0]
+            if self._access_count else None,
+        }
+
 
 # =============================================================================
 # LED Indicator Support (Step 310)
@@ -777,7 +997,7 @@ class STTInterface:
     """
     Speech-to-Text interface.
 
-    Wraps faster-whisper for local transcription.
+    Wraps faster-whisper for local transcription with astronomy vocabulary boost.
     """
 
     def __init__(
@@ -785,12 +1005,23 @@ class STTInterface:
         model_size: str = "base",
         device: str = "cuda",
         compute_type: str = "float16",
+        vocabulary_boost: bool = True,
     ):
         self.model_size = model_size
         self.device = device
         self.compute_type = compute_type
+        self.vocabulary_boost = vocabulary_boost
         self._model = None
         self._loaded = False
+
+        # Step 318: Build astronomy vocabulary prompt for Whisper
+        self._vocabulary_prompt = self._build_vocabulary_prompt() if vocabulary_boost else None
+
+    def _build_vocabulary_prompt(self) -> str:
+        """Build vocabulary boost prompt for Whisper (Step 318)."""
+        # Whisper's initial_prompt helps bias recognition toward these terms
+        prompt_terms = ASTRONOMY_VOCABULARY[:50]  # Limit to avoid token overflow
+        return "Astronomy commands: " + ", ".join(prompt_terms) + "."
 
     async def _ensure_loaded(self):
         """Lazily load the STT model."""
@@ -813,12 +1044,13 @@ class STTInterface:
             self._model = None
             self._loaded = True
 
-    async def transcribe(self, audio_data: bytes) -> str:
+    async def transcribe(self, audio_data: bytes, preprocess: bool = True) -> str:
         """
         Transcribe audio to text (Step 299).
 
         Args:
             audio_data: Raw audio bytes (16kHz, 16-bit, mono)
+            preprocess: Apply audio preprocessing (Step 315)
 
         Returns:
             Transcribed text
@@ -832,17 +1064,28 @@ class STTInterface:
 
         try:
             import numpy as np
-            import io
+
+            # Step 315: Apply audio preprocessing if enabled
+            if preprocess:
+                audio_data = AudioCapture.preprocess_audio(audio_data)
 
             # Convert bytes to numpy array
             audio_array = np.frombuffer(audio_data, dtype=np.int16).astype(np.float32) / 32768.0
 
-            # Transcribe
+            # Step 318: Transcribe with vocabulary boost
+            transcribe_kwargs = {
+                "beam_size": 5,
+                "language": "en",
+                "vad_filter": True,
+            }
+
+            # Add vocabulary prompt if enabled
+            if self._vocabulary_prompt:
+                transcribe_kwargs["initial_prompt"] = self._vocabulary_prompt
+
             segments, info = self._model.transcribe(
                 audio_array,
-                beam_size=5,
-                language="en",
-                vad_filter=True,
+                **transcribe_kwargs,
             )
 
             # Combine segments
@@ -1377,6 +1620,100 @@ class VoicePipeline:
         except ImportError:
             logger.warning("telescope_tools not available")
             return None
+
+    async def select_tool_from_intent(self, user_text: str) -> Optional[Dict[str, Any]]:
+        """
+        Select appropriate tool based on user intent (Step 301).
+
+        Uses LLM to determine which tool should be called for the user's
+        command and extracts the required arguments.
+
+        Args:
+            user_text: User's command text
+
+        Returns:
+            Dict with 'tool_name' and 'arguments', or None if no tool matches
+        """
+        tools = self._get_tools()
+        if not tools:
+            return None
+
+        # Use LLM to select tool
+        try:
+            response = await self.llm_client.chat(
+                message=user_text,
+                tools=tools,
+                temperature=0.3,  # Lower temperature for more deterministic selection
+            )
+
+            if response.has_tool_calls:
+                # Return first tool call
+                tc = response.tool_calls[0]
+                return {
+                    "tool_name": tc.name,
+                    "arguments": tc.arguments,
+                    "confidence": response.confidence_score,
+                }
+
+            return None
+
+        except Exception as e:
+            logger.error(f"Tool selection failed: {e}")
+            return None
+
+    def get_tool_for_command(self, command: str) -> Optional[str]:
+        """
+        Quick lookup of tool name for common commands (Step 301).
+
+        Uses pattern matching for common command phrases.
+        Falls back to LLM for complex commands.
+
+        Args:
+            command: User command text
+
+        Returns:
+            Tool name or None
+        """
+        command_lower = command.lower()
+
+        # Direct command mappings
+        command_tool_map = {
+            # Telescope control
+            "point to": "goto_object",
+            "slew to": "goto_object",
+            "go to": "goto_object",
+            "track": "start_tracking",
+            "stop tracking": "stop_tracking",
+            "park": "park_telescope",
+            "unpark": "unpark_telescope",
+            "stop": "stop_telescope",
+            # Status queries
+            "status": "get_status",
+            "where": "get_position",
+            "position": "get_position",
+            "weather": "get_weather",
+            "conditions": "get_weather",
+            # Enclosure
+            "open roof": "open_roof",
+            "close roof": "close_roof",
+            "open dome": "open_roof",
+            "close dome": "close_roof",
+            # Camera
+            "take": "capture_image",
+            "capture": "capture_image",
+            "expose": "capture_image",
+            "exposure": "capture_image",
+            # Focus
+            "focus": "auto_focus",
+            "autofocus": "auto_focus",
+        }
+
+        for phrase, tool in command_tool_map.items():
+            if phrase in command_lower:
+                logger.debug(f"Quick matched '{phrase}' to tool '{tool}'")
+                return tool
+
+        return None
 
     def register_callback(self, callback: Callable[[PipelineState], None]):
         """Register callback for state changes."""
