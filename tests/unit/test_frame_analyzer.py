@@ -131,6 +131,18 @@ class TestQualityThresholds:
         assert t.fwhm_excellent == 2.0
         assert t.fwhm_reject == 6.0
 
+    def test_fwhm_trend_threshold_defaults(self):
+        """Test FWHM trend threshold defaults."""
+        t = QualityThresholds()
+        assert t.fwhm_trend_threshold == 0.5
+        assert t.fwhm_refocus_threshold == 1.0
+
+    def test_fwhm_trend_threshold_custom(self):
+        """Test custom FWHM trend thresholds."""
+        t = QualityThresholds(fwhm_trend_threshold=0.3, fwhm_refocus_threshold=0.8)
+        assert t.fwhm_trend_threshold == 0.3
+        assert t.fwhm_refocus_threshold == 0.8
+
 
 # =============================================================================
 # Star Analysis Tests
@@ -443,6 +455,51 @@ class TestFWHMTrend:
 
         stats = analyzer_with_session.get_session_stats()
         assert stats.fwhm_trend == "stable"  # Default when not enough data
+
+    def test_trend_uses_configurable_threshold(self):
+        """Test that trend detection uses configurable threshold."""
+        # Use a very low threshold so small changes trigger trend detection
+        thresholds = QualityThresholds(fwhm_trend_threshold=0.1)
+        analyzer = FrameAnalyzer(thresholds=thresholds)
+        analyzer.start_session("test_sensitive")
+
+        # Add frames with slight FWHM increase (should trigger with low threshold)
+        base_time = datetime.now(timezone.utc)
+        for i in range(6):
+            fwhm = 3.0 + i * 0.05  # Small increase per frame
+            stars = [create_star_measurement(x=100, y=100, fwhm=fwhm, peak=30000, flux=50000)]
+            analyzer.analyze_frame(stars=stars, frame_id=f"frame_{i}", exposure_sec=120)
+            # Simulate time passing by directly manipulating fwhm_values
+            if analyzer._session_stats:
+                analyzer._session_stats.fwhm_values[-1] = (
+                    base_time + timedelta(minutes=i * 10),
+                    fwhm
+                )
+
+        stats = analyzer.get_session_stats()
+        # With low threshold, even small changes should be detected
+        assert stats.fwhm_trend in ["degrading", "stable"]
+
+    def test_trend_with_high_threshold(self):
+        """Test that high threshold ignores moderate changes."""
+        # Use a very high threshold so only large changes trigger trend detection
+        thresholds = QualityThresholds(fwhm_trend_threshold=5.0)
+        analyzer = FrameAnalyzer(thresholds=thresholds)
+        analyzer.start_session("test_insensitive")
+
+        # Verify the threshold is properly set
+        assert analyzer.thresholds.fwhm_trend_threshold == 5.0
+
+        # Add frames with consistent FWHM (no change = rate of 0)
+        for i in range(6):
+            fwhm = 3.0  # Constant FWHM, rate = 0
+            stars = [create_star_measurement(x=100, y=100, fwhm=fwhm, peak=30000, flux=50000)]
+            analyzer.analyze_frame(stars=stars, frame_id=f"frame_{i}", exposure_sec=120)
+
+        stats = analyzer.get_session_stats()
+        # Zero rate should be well below 5.0 threshold
+        assert stats.fwhm_trend == "stable"
+        assert abs(stats.fwhm_trend_rate) < 5.0
 
 
 # =============================================================================

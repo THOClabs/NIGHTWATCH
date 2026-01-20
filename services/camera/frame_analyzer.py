@@ -158,6 +158,10 @@ class QualityThresholds:
     # Gradient (normalized 0-1)
     gradient_reject: float = 0.2       # > this = significant gradient
 
+    # FWHM trend thresholds (pixels/hour) for focus monitoring (Step 125)
+    fwhm_trend_threshold: float = 0.5   # Rate to trigger trend change detection
+    fwhm_refocus_threshold: float = 1.0  # Rate to recommend refocus
+
 
 @dataclass
 class SessionQualityStats:
@@ -550,10 +554,11 @@ class FrameAnalyzer:
 
         self._session_stats.fwhm_trend_rate = rate_per_hour
 
-        # Threshold for "significant" change: 0.5 pixels/hour
-        if rate_per_hour > 0.5:
+        # Use configurable threshold for trend detection
+        threshold = self.thresholds.fwhm_trend_threshold
+        if rate_per_hour > threshold:
             self._session_stats.fwhm_trend = "degrading"
-        elif rate_per_hour < -0.5:
+        elif rate_per_hour < -threshold:
             self._session_stats.fwhm_trend = "improving"
         else:
             self._session_stats.fwhm_trend = "stable"
@@ -570,8 +575,9 @@ class FrameAnalyzer:
 
         stats = self._session_stats
 
-        # Check if FWHM is degrading
-        if stats.fwhm_trend == "degrading" and stats.fwhm_trend_rate > 1.0:
+        # Check if FWHM is degrading beyond refocus threshold
+        refocus_threshold = self.thresholds.fwhm_refocus_threshold
+        if stats.fwhm_trend == "degrading" and stats.fwhm_trend_rate > refocus_threshold:
             return f"Focus degrading at {stats.fwhm_trend_rate:.1f} pixels/hour - refocus recommended"
 
         # Check if rejection rate is high
