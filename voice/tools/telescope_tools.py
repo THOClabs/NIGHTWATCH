@@ -1095,6 +1095,70 @@ TELESCOPE_TOOLS: List[Tool] = [
         parameters=[]
     ),
 
+    # Step 442-444: Additional INDI device control tools
+    Tool(
+        name="indi_connect_device",
+        description="Connect to an INDI device by name. Use indi_list_devices first "
+                    "to see available devices.",
+        category=ToolCategory.CAMERA,
+        parameters=[
+            ToolParameter(
+                name="device_name",
+                type="string",
+                description="Name of the INDI device to connect to",
+                required=True
+            )
+        ]
+    ),
+
+    Tool(
+        name="indi_get_property",
+        description="Get the value of an INDI device property. Properties control "
+                    "device settings like exposure, gain, temperature setpoint.",
+        category=ToolCategory.CAMERA,
+        parameters=[
+            ToolParameter(
+                name="device_name",
+                type="string",
+                description="Name of the INDI device",
+                required=True
+            ),
+            ToolParameter(
+                name="property_name",
+                type="string",
+                description="Name of the property to read (e.g., CCD_EXPOSURE, CCD_TEMPERATURE)",
+                required=True
+            )
+        ]
+    ),
+
+    Tool(
+        name="indi_set_property",
+        description="Set an INDI device property value. Use with caution as this "
+                    "directly controls hardware.",
+        category=ToolCategory.CAMERA,
+        parameters=[
+            ToolParameter(
+                name="device_name",
+                type="string",
+                description="Name of the INDI device",
+                required=True
+            ),
+            ToolParameter(
+                name="property_name",
+                type="string",
+                description="Name of the property to set",
+                required=True
+            ),
+            ToolParameter(
+                name="value",
+                type="string",
+                description="Value to set (will be converted to appropriate type)",
+                required=True
+            )
+        ]
+    ),
+
     # -------------------------------------------------------------------------
     # ALPACA DEVICE TOOLS (Phase 5.1 - Alpaca Integration)
     # -------------------------------------------------------------------------
@@ -1156,6 +1220,67 @@ TELESCOPE_TOOLS: List[Tool] = [
                     "movement state, and temperature compensation status.",
         category=ToolCategory.FOCUS,
         parameters=[]
+    ),
+
+    # Step 447-448: Additional Alpaca device control tools
+    Tool(
+        name="alpaca_connect_device",
+        description="Connect to an Alpaca device by type and number. "
+                    "Device types include: telescope, camera, filterwheel, focuser.",
+        category=ToolCategory.CAMERA,
+        parameters=[
+            ToolParameter(
+                name="device_type",
+                type="string",
+                description="Device type (telescope, camera, filterwheel, focuser, dome, etc.)",
+                required=True,
+                enum=["telescope", "camera", "filterwheel", "focuser", "dome", "rotator", "safetymonitor"]
+            ),
+            ToolParameter(
+                name="device_number",
+                type="number",
+                description="Device number (0 for first device of type)",
+                required=False,
+                default=0
+            ),
+            ToolParameter(
+                name="host",
+                type="string",
+                description="Alpaca server hostname or IP (default: localhost)",
+                required=False,
+                default="localhost"
+            ),
+            ToolParameter(
+                name="port",
+                type="number",
+                description="Alpaca server port (default: 11111)",
+                required=False,
+                default=11111
+            )
+        ]
+    ),
+
+    Tool(
+        name="alpaca_get_status",
+        description="Get comprehensive status of a connected Alpaca device including "
+                    "connection state, device-specific properties, and capabilities.",
+        category=ToolCategory.CAMERA,
+        parameters=[
+            ToolParameter(
+                name="device_type",
+                type="string",
+                description="Device type (telescope, camera, filterwheel, focuser)",
+                required=True,
+                enum=["telescope", "camera", "filterwheel", "focuser", "dome"]
+            ),
+            ToolParameter(
+                name="device_number",
+                type="number",
+                description="Device number (0 for first device)",
+                required=False,
+                default=0
+            )
+        ]
     ),
 ]
 
@@ -3037,6 +3162,129 @@ def create_default_handlers(
 
     handlers["indi_get_focuser_status"] = indi_get_focuser_status
 
+    # Step 442: indi_connect_device handler
+    async def indi_connect_device(device_name: str) -> str:
+        """Connect to an INDI device by name."""
+        if not indi_client:
+            return "INDI client not available. Ensure INDI server is running."
+
+        # Check if device exists
+        if device_name not in indi_client._devices:
+            available = list(indi_client._devices.keys())
+            if not available:
+                return f"Device '{device_name}' not found. No devices available."
+            return f"Device '{device_name}' not found. Available: {', '.join(available)}"
+
+        try:
+            device = indi_client._devices[device_name]
+
+            # Try to connect the device
+            if hasattr(device, 'connect'):
+                success = device.connect()
+                if success:
+                    return f"Connected to INDI device: {device_name}"
+                return f"Failed to connect to device: {device_name}"
+
+            # If no connect method, check if it's already connected
+            if hasattr(device, 'is_connected') and device.is_connected():
+                return f"Device {device_name} is already connected"
+
+            return f"Device {device_name} found but connection method not available"
+
+        except Exception as e:
+            return f"Error connecting to {device_name}: {e}"
+
+    handlers["indi_connect_device"] = indi_connect_device
+
+    # Step 443: indi_get_property handler
+    async def indi_get_property(device_name: str, property_name: str) -> str:
+        """Get an INDI device property value."""
+        if not indi_client:
+            return "INDI client not available. Ensure INDI server is running."
+
+        if device_name not in indi_client._devices:
+            return f"Device '{device_name}' not found"
+
+        try:
+            device = indi_client._devices[device_name]
+
+            # Try different methods to get property
+            if hasattr(device, 'get_property'):
+                prop = device.get_property(property_name)
+                if prop is not None:
+                    return f"{device_name}.{property_name} = {prop}"
+
+            # Try getting property vector
+            if hasattr(device, 'getNumber'):
+                value = device.getNumber(property_name)
+                if value is not None:
+                    return f"{device_name}.{property_name} = {value}"
+
+            if hasattr(device, 'getText'):
+                value = device.getText(property_name)
+                if value is not None:
+                    return f"{device_name}.{property_name} = {value}"
+
+            if hasattr(device, 'getSwitch'):
+                value = device.getSwitch(property_name)
+                if value is not None:
+                    return f"{device_name}.{property_name} = {value}"
+
+            return f"Property '{property_name}' not found on device '{device_name}'"
+
+        except Exception as e:
+            return f"Error reading property: {e}"
+
+    handlers["indi_get_property"] = indi_get_property
+
+    # Step 444: indi_set_property handler
+    async def indi_set_property(device_name: str, property_name: str, value: str) -> str:
+        """Set an INDI device property value."""
+        if not indi_client:
+            return "INDI client not available. Ensure INDI server is running."
+
+        if device_name not in indi_client._devices:
+            return f"Device '{device_name}' not found"
+
+        try:
+            device = indi_client._devices[device_name]
+
+            # Try to convert value to appropriate type
+            # First try as number
+            try:
+                num_value = float(value)
+                if hasattr(device, 'setNumber'):
+                    success = device.setNumber(property_name, num_value)
+                    if success:
+                        return f"Set {device_name}.{property_name} = {num_value}"
+            except ValueError:
+                pass
+
+            # Try as text/string
+            if hasattr(device, 'setText'):
+                success = device.setText(property_name, value)
+                if success:
+                    return f"Set {device_name}.{property_name} = '{value}'"
+
+            # Try as switch (on/off/true/false)
+            if value.lower() in ('on', 'true', '1', 'yes'):
+                if hasattr(device, 'setSwitch'):
+                    success = device.setSwitch(property_name, True)
+                    if success:
+                        return f"Set {device_name}.{property_name} = ON"
+            elif value.lower() in ('off', 'false', '0', 'no'):
+                if hasattr(device, 'setSwitch'):
+                    success = device.setSwitch(property_name, False)
+                    if success:
+                        return f"Set {device_name}.{property_name} = OFF"
+
+            return f"Could not set property '{property_name}' on device '{device_name}'"
+
+        except Exception as e:
+            return f"Error setting property: {e}"
+
+    handlers["indi_set_property"] = indi_set_property
+
     # -------------------------------------------------------------------------
     # ALPACA DEVICE HANDLERS (Phase 5.1)
     # -------------------------------------------------------------------------
@@ -3160,6 +3408,151 @@ def create_default_handlers(
         return "Alpaca Focuser status:\n  " + "\n  ".join(status_parts)
 
     handlers["alpaca_get_focuser_status"] = alpaca_get_focuser_status
+
+    # Step 447: alpaca_connect_device handler
+    async def alpaca_connect_device(
+        device_type: str,
+        device_number: int = 0,
+        host: str = "localhost",
+        port: int = 11111
+    ) -> str:
+        """Connect to an Alpaca device."""
+        try:
+            # Try to import alpyca for direct connection
+            try:
+                import alpyca
+            except ImportError:
+                return "Alpaca library (alpyca) not installed. Run: pip install alpyca"
+
+            # Normalize device type
+            device_type_lower = device_type.lower()
+
+            # Map device types to alpyca classes
+            device_classes = {
+                "telescope": "Telescope",
+                "camera": "Camera",
+                "filterwheel": "FilterWheel",
+                "focuser": "Focuser",
+                "dome": "Dome",
+                "rotator": "Rotator",
+                "safetymonitor": "SafetyMonitor",
+            }
+
+            if device_type_lower not in device_classes:
+                return f"Unknown device type: {device_type}. Supported: {', '.join(device_classes.keys())}"
+
+            class_name = device_classes[device_type_lower]
+
+            # Create device instance
+            device_class = getattr(alpyca, class_name, None)
+            if device_class is None:
+                return f"Device class {class_name} not available in alpyca"
+
+            device = device_class(f"{host}:{port}", device_number)
+
+            # Try to connect
+            device.Connected = True
+
+            if device.Connected:
+                name = getattr(device, 'Name', 'Unknown')
+                return f"Connected to Alpaca {device_type}: {name} at {host}:{port} (device #{device_number})"
+            else:
+                return f"Failed to connect to Alpaca {device_type} at {host}:{port}"
+
+        except Exception as e:
+            return f"Error connecting to Alpaca device: {e}"
+
+    handlers["alpaca_connect_device"] = alpaca_connect_device
+
+    # Step 448: alpaca_get_status handler
+    async def alpaca_get_status(device_type: str, device_number: int = 0) -> str:
+        """Get comprehensive Alpaca device status."""
+        try:
+            try:
+                import alpyca
+            except ImportError:
+                return "Alpaca library (alpyca) not installed"
+
+            device_type_lower = device_type.lower()
+
+            # Map device types to alpyca classes
+            device_classes = {
+                "telescope": "Telescope",
+                "camera": "Camera",
+                "filterwheel": "FilterWheel",
+                "focuser": "Focuser",
+                "dome": "Dome",
+            }
+
+            if device_type_lower not in device_classes:
+                return f"Unknown device type: {device_type}"
+
+            class_name = device_classes[device_type_lower]
+            device_class = getattr(alpyca, class_name, None)
+            if device_class is None:
+                return f"Device class {class_name} not available"
+
+            # Create device instance (using default localhost:11111)
+            device = device_class("localhost:11111", device_number)
+
+            status_lines = [f"Alpaca {device_type} #{device_number} Status:"]
+
+            # Common properties
+            try:
+                status_lines.append(f"  Connected: {device.Connected}")
+            except Exception:
+                status_lines.append("  Connected: Unknown")
+
+            try:
+                status_lines.append(f"  Name: {device.Name}")
+            except Exception:
+                pass
+
+            try:
+                status_lines.append(f"  Description: {device.Description}")
+            except Exception:
+                pass
+
+            # Device-specific properties
+            if device_type_lower == "telescope":
+                try:
+                    status_lines.append(f"  Tracking: {device.Tracking}")
+                    status_lines.append(f"  RA: {device.RightAscension:.4f}h")
+                    status_lines.append(f"  Dec: {device.Declination:.4f}°")
+                    status_lines.append(f"  Parked: {device.AtPark}")
+                    status_lines.append(f"  Slewing: {device.Slewing}")
+                except Exception:
+                    pass
+
+            elif device_type_lower == "camera":
+                try:
+                    status_lines.append(f"  Camera State: {device.CameraState}")
+                    status_lines.append(f"  CCD Temp: {device.CCDTemperature:.1f}°C")
+                    status_lines.append(f"  Cooler On: {device.CoolerOn}")
+                except Exception:
+                    pass
+
+            elif device_type_lower == "focuser":
+                try:
+                    status_lines.append(f"  Position: {device.Position}")
+                    status_lines.append(f"  Moving: {device.IsMoving}")
+                    status_lines.append(f"  Temp Comp: {device.TempComp}")
+                except Exception:
+                    pass
+
+            elif device_type_lower == "filterwheel":
+                try:
+                    status_lines.append(f"  Position: {device.Position}")
+                    status_lines.append(f"  Filter Names: {device.Names}")
+                except Exception:
+                    pass
+
+            return "\n".join(status_lines)
+
+        except Exception as e:
+            return f"Error getting Alpaca status: {e}"
+
+    handlers["alpaca_get_status"] = alpaca_get_status
 
     # -------------------------------------------------------------------------
     # GUIDING HANDLERS (Steps 395-397)

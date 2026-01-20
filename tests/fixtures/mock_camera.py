@@ -40,6 +40,37 @@ class BinningMode(Enum):
 
 
 @dataclass
+class NoiseConfig:
+    """
+    Camera noise simulation configuration (Step 531).
+
+    Models realistic CCD/CMOS noise sources:
+    - Read noise: Gaussian noise from readout electronics
+    - Dark current: Thermal noise increasing with temperature/exposure
+    - Shot noise: Poisson noise from photon statistics
+    - Hot pixels: Random bright defect pixels
+    - Bias level: Constant offset added to all pixels
+    """
+    enable_read_noise: bool = True
+    read_noise_e: float = 2.5  # electrons RMS (typical for cooled CMOS)
+
+    enable_dark_current: bool = True
+    dark_current_e_per_sec: float = 0.002  # electrons/pixel/sec at -10°C
+    dark_current_doubling_temp_c: float = 6.0  # doubles every 6°C
+
+    enable_shot_noise: bool = True  # Poisson noise on signal
+
+    enable_hot_pixels: bool = True
+    hot_pixel_fraction: float = 0.0001  # 0.01% of pixels are hot
+    hot_pixel_rate_e_per_sec: float = 50.0  # electrons/sec for hot pixels
+
+    enable_bias: bool = True
+    bias_level_adu: int = 100  # constant bias offset
+
+    gain_e_per_adu: float = 0.25  # electrons per ADU (conversion gain)
+
+
+@dataclass
 class CameraInfo:
     """Camera hardware information."""
     name: str = "MockCamera ASI294MC Pro"
@@ -103,6 +134,7 @@ class MockCamera:
         self,
         simulate_delays: bool = True,
         generate_images: bool = True,
+        noise_config: Optional[NoiseConfig] = None,
     ):
         """
         Initialize mock camera.
@@ -110,9 +142,11 @@ class MockCamera:
         Args:
             simulate_delays: Whether to simulate realistic delays
             generate_images: Whether to generate synthetic images
+            noise_config: Configuration for realistic noise simulation (Step 531)
         """
         self.simulate_delays = simulate_delays
         self.generate_images = generate_images
+        self.noise_config = noise_config or NoiseConfig()
 
         # Hardware info
         self.info = CameraInfo()
@@ -128,6 +162,9 @@ class MockCamera:
         # Internal state
         self._exposure_task: Optional[asyncio.Task] = None
         self._last_image: Optional[np.ndarray] = None
+
+        # Hot pixel map (generated once per camera instance)
+        self._hot_pixel_map: Optional[np.ndarray] = None
 
         # Error injection
         self._inject_connect_error = False
@@ -377,45 +414,107 @@ class MockCamera:
         return self._last_image
 
     def _generate_synthetic_image(self) -> Any:
-        """Generate a synthetic star field image."""
+        """
+        Generate a synthetic star field image with realistic noise (Step 531).
+
+        Implements proper CCD/CMOS noise model:
+        1. Bias level (constant offset)
+        2. Dark current (thermal, temperature/time dependent)
+        3. Sky background signal
+        4. Star signals
+        5. Shot noise (Poisson on all signals)
+        6. Read noise (Gaussian from electronics)
+        7. Hot pixels (defects)
+        """
         if not HAS_NUMPY:
             return None
+
         height = self.settings.roi_height
         width = self.settings.roi_width
+        nc = self.noise_config
+        exposure_sec = self.settings.exposure_sec
+        temp_c = self.status.temperature_c
 
-        # Create base image with noise
-        # Scale noise by gain
-        noise_level = 100 + self.settings.gain * 0.5
-        image = np.random.normal(
-            self.settings.offset * 16,
-            noise_level,
-            (height, width)
-        ).astype(np.float32)
+        # Effective gain (electrons per ADU) scales with camera gain setting
+        # Higher gain = fewer electrons per ADU = more sensitive but more noise
+        effective_gain_e_per_adu = nc.gain_e_per_adu * (1 + self.settings.gain / 100)
 
-        # Add some synthetic stars
+        # Start with signal in electrons
+        signal_e = np.zeros((height, width), dtype=np.float64)
+
+        # 1. Dark current (electrons) - doubles every ~6°C
+        if nc.enable_dark_current:
+            # Scale dark current by temperature relative to reference (-10°C)
+            temp_factor = 2 ** ((temp_c - (-10.0)) / nc.dark_current_doubling_temp_c)
+            dark_e = nc.dark_current_e_per_sec * temp_factor * exposure_sec
+            signal_e += dark_e
+
+        # 2. Add hot pixels (persistent defects with high dark current)
+        if nc.enable_hot_pixels:
+            if self._hot_pixel_map is None:
+                # Generate hot pixel map once per camera
+                n_hot = int(self.info.sensor_width_px * self.info.sensor_height_px
+                           * nc.hot_pixel_fraction)
+                self._hot_pixel_map = np.zeros(
+                    (self.info.sensor_height_px, self.info.sensor_width_px),
+                    dtype=np.float32
+                )
+                hot_y = np.random.randint(0, self.info.sensor_height_px, n_hot)
+                hot_x = np.random.randint(0, self.info.sensor_width_px, n_hot)
+                self._hot_pixel_map[hot_y, hot_x] = nc.hot_pixel_rate_e_per_sec
+
+            # Apply hot pixel contribution (cropped to ROI)
+            roi_hot = self._hot_pixel_map[
+                self.settings.roi_y:self.settings.roi_y + height,
+                self.settings.roi_x:self.settings.roi_x + width
+            ]
+            signal_e += roi_hot * exposure_sec
+
+        # 3. Sky background signal (electrons) - scales with exposure and gain
+        sky_background_e = 50 * exposure_sec * (1 + self.settings.gain / 200)
+        signal_e += sky_background_e
+
+        # 4. Add synthetic stars
         num_stars = np.random.randint(20, 100)
         for _ in range(num_stars):
             x = np.random.randint(0, width)
             y = np.random.randint(0, height)
-            brightness = np.random.uniform(500, 10000) * (1 + self.settings.gain / 100)
+            # Star flux in electrons
+            brightness_e = np.random.uniform(1000, 50000) * exposure_sec
             sigma = np.random.uniform(1.5, 4.0)
 
-            # Create Gaussian star
-            y_grid, x_grid = np.ogrid[
-                max(0, y-20):min(height, y+20),
-                max(0, x-20):min(width, x+20)
-            ]
-            star = brightness * np.exp(-((x_grid - x)**2 + (y_grid - y)**2) / (2 * sigma**2))
+            # Create Gaussian star PSF
+            y_min, y_max = max(0, y - 20), min(height, y + 20)
+            x_min, x_max = max(0, x - 20), min(width, x + 20)
 
-            # Add to image
-            image[
-                max(0, y-20):min(height, y+20),
-                max(0, x-20):min(width, x+20)
-            ] += star
+            if y_max > y_min and x_max > x_min:
+                y_grid, x_grid = np.ogrid[y_min:y_max, x_min:x_max]
+                star = brightness_e * np.exp(
+                    -((x_grid - x)**2 + (y_grid - y)**2) / (2 * sigma**2)
+                )
+                signal_e[y_min:y_max, x_min:x_max] += star
 
-        # Clip to valid range
+        # 5. Shot noise (Poisson noise on signal)
+        if nc.enable_shot_noise:
+            # Poisson noise - variance equals mean
+            signal_e = np.maximum(signal_e, 0)  # Ensure non-negative
+            signal_e = np.random.poisson(signal_e.astype(np.float64)).astype(np.float64)
+
+        # 6. Read noise (Gaussian, in electrons)
+        if nc.enable_read_noise:
+            read_noise = np.random.normal(0, nc.read_noise_e, (height, width))
+            signal_e += read_noise
+
+        # Convert electrons to ADU
+        signal_adu = signal_e / effective_gain_e_per_adu
+
+        # 7. Add bias level
+        if nc.enable_bias:
+            signal_adu += nc.bias_level_adu
+
+        # Clip to valid range and convert to uint16
         max_value = (2 ** self.info.bit_depth) - 1
-        image = np.clip(image, 0, max_value).astype(np.uint16)
+        image = np.clip(signal_adu, 0, max_value).astype(np.uint16)
 
         return image
 
@@ -489,6 +588,18 @@ class MockCamera:
         self.settings.roi_width = self.info.sensor_width_px
         self.settings.roi_height = self.info.sensor_height_px
         self._last_image = None
+        self._hot_pixel_map = None  # Regenerate hot pixels on reset
         self._inject_connect_error = False
         self._inject_capture_error = False
         self._inject_timeout = False
+
+    def set_noise_config(self, config: NoiseConfig):
+        """
+        Update noise simulation configuration (Step 531).
+
+        Args:
+            config: New noise configuration
+        """
+        self.noise_config = config
+        self._hot_pixel_map = None  # Regenerate hot pixels with new config
+        logger.debug(f"MockCamera noise config updated")

@@ -527,13 +527,13 @@ Create installation scripts, hardware integration guides, and prepare for Nevada
 | 439 | Tool Handler Implementation | power_tools | Add confirmation requirement | 438 | 2 | 1 | Complete | confirmed param in set_port_power(), power_cycle_port() |
 | 440 | Tool Handler Implementation | power_tools | Write unit tests for power tool handlers | 439 | 2 | 2 | Complete | TestPowerToolHandlers in test_telescope_tools.py (4 tests) |
 | 441 | Tool Handler Implementation | indi_tools | Implement indi_discover_devices handler | 257 | 3 | 2 | Not Started | Device scan |
-| 442 | Tool Handler Implementation | indi_tools | Implement indi_connect_device handler | 441 | 2 | 1 | Not Started | Connect device |
-| 443 | Tool Handler Implementation | indi_tools | Implement indi_get_property handler | 442 | 2 | 1 | Not Started | Read property |
-| 444 | Tool Handler Implementation | indi_tools | Implement indi_set_property handler | 443 | 2 | 1 | Not Started | Write property |
+| 442 | Tool Handler Implementation | indi_tools | Implement indi_connect_device handler | 441 | 2 | 1 | Complete | Connect device |
+| 443 | Tool Handler Implementation | indi_tools | Implement indi_get_property handler | 442 | 2 | 1 | Complete | Read property |
+| 444 | Tool Handler Implementation | indi_tools | Implement indi_set_property handler | 443 | 2 | 1 | Complete | Write property |
 | 445 | Tool Handler Implementation | indi_tools | Write unit tests for INDI tool handlers | 444 | 2 | 2 | Complete | TestINDIToolHandlers in test_telescope_tools.py (4 tests) |
 | 446 | Tool Handler Implementation | alpaca_tools | Implement alpaca_discover_devices handler | 257 | 3 | 2 | Not Started | Device scan |
-| 447 | Tool Handler Implementation | alpaca_tools | Implement alpaca_connect_device handler | 446 | 2 | 1 | Not Started | Connect device |
-| 448 | Tool Handler Implementation | alpaca_tools | Implement alpaca_get_status handler | 447 | 2 | 1 | Not Started | Device status |
+| 447 | Tool Handler Implementation | alpaca_tools | Implement alpaca_connect_device handler | 446 | 2 | 1 | Complete | Connect device |
+| 448 | Tool Handler Implementation | alpaca_tools | Implement alpaca_get_status handler | 447 | 2 | 1 | Complete | Device status |
 | 449 | Tool Handler Implementation | alpaca_tools | Write unit tests for Alpaca tool handlers | 448 | 2 | 2 | Complete | TestAlpacaToolHandlers in test_telescope_tools.py (4 tests) |
 | 450 | Tool Handler Implementation | encoder_tools | Implement get_encoder_position handler | 257 | 2 | 1 | Complete | get_encoder_position() with counts |
 | 451 | Tool Handler Implementation | encoder_tools | Add formatted position (degrees) | 450 | 2 | 1 | Complete | Degrees and counts in output |
@@ -598,7 +598,7 @@ Create installation scripts, hardware integration guides, and prepare for Nevada
 | 510 | Hardware-in-Loop Simulation | docker | Add INDI simulator configuration | 509 | 2 | 1 | Not Started | Device sim |
 | 511 | Hardware-in-Loop Simulation | docker | Add Alpaca simulator configuration | 510 | 2 | 1 | Not Started | Device sim |
 | 512 | Hardware-in-Loop Simulation | docker | Create docker-compose.test.yml for CI | 511 | 2 | 2 | Not Started | Lightweight |
-| 513 | Hardware-in-Loop Simulation | docker | Add healthcheck for all services | 512 | 2 | 1 | Not Started | Startup wait |
+| 513 | Hardware-in-Loop Simulation | docker | Add healthcheck for all services | 512 | 2 | 1 | Complete | Startup wait |
 | 514 | Hardware-in-Loop Simulation | docker | Create docker-compose.prod.yml template | 513 | 2 | 2 | Not Started | Production config |
 | 515 | Hardware-in-Loop Simulation | docker | Write docker-compose validation test | 514 | 2 | 1 | Not Started | Syntax check |
 | 516 | Hardware-in-Loop Simulation | simulators | Create services/simulators/__init__.py | 501 | 1 | 1 | Complete | BaseSimulator, SimulatorConfig, SimulatorStats, FaultConfig classes |
@@ -616,7 +616,7 @@ Create installation scripts, hardware integration guides, and prepare for Nevada
 | 528 | Hardware-in-Loop Simulation | simulators | Create camera_simulator.py | 527 | 3 | 2 | Not Started | Camera sim |
 | 529 | Hardware-in-Loop Simulation | simulators | Implement simulated image generation | 528 | 4 | 3 | Not Started | Synthetic stars |
 | 530 | Hardware-in-Loop Simulation | simulators | Add configurable star field | 529 | 3 | 2 | Not Started | Test images |
-| 531 | Hardware-in-Loop Simulation | simulators | Add noise simulation | 530 | 2 | 1 | Not Started | Realistic images |
+| 531 | Hardware-in-Loop Simulation | simulators | Add noise simulation | 530 | 2 | 1 | Complete | Realistic images |
 | 532 | Hardware-in-Loop Simulation | simulators | Create phd2_simulator.py | 531 | 3 | 2 | Not Started | Guiding sim |
 | 533 | Hardware-in-Loop Simulation | simulators | Implement JSON-RPC protocol | 532 | 3 | 2 | Not Started | PHD2 API |
 | 534 | Hardware-in-Loop Simulation | simulators | Add simulated guide star tracking | 533 | 3 | 2 | Not Started | Virtual guiding |
