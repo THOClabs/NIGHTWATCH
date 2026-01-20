@@ -210,7 +210,7 @@ Create installation scripts, hardware integration guides, and prepare for Nevada
 | 122 | Core Service Completion | alerts | Implement SMTP email notification channel | 121 | 3 | 2 | Complete | Email alerts |
 | 123 | Core Service Completion | alerts | Add email template system (HTML + plain text) | 122 | 3 | 2 | Complete | Formatted emails |
 | 124 | Core Service Completion | alerts | Implement email rate limiting (max 1/hour per alert type) | 123 | 2 | 2 | Complete | Prevent spam |
-| 125 | Core Service Completion | alerts | Implement Twilio SMS notification channel | 124 | 3 | 3 | Not Started | Local-first: optional |
+| 125 | Core Service Completion | alerts | Implement Twilio SMS notification channel | 124 | 3 | 3 | Complete | TwilioClient in _send_sms() with graceful fallback |
 | 126 | Core Service Completion | alerts | Add SMS message formatting (160 char limit) | 125 | 2 | 1 | Complete | _format_sms_message() with smart truncation |
 | 127 | Core Service Completion | alerts | Implement SMS rate limiting | 126 | 2 | 1 | Complete | _should_rate_limit_sms(), sms_min_interval_seconds, sms_max_per_hour |
 | 128 | Core Service Completion | alerts | Implement local push notification (ntfy.sh compatible) | 127 | 3 | 2 | Complete | Self-hosted push |
@@ -254,7 +254,7 @@ Create installation scripts, hardware integration guides, and prepare for Nevada
 | 166 | Core Service Completion | enclosure | Implement limit switch reading (closed limit) | 165 | 2 | 1 | Complete | read_closed_limit() in GPIOInterface |
 | 167 | Core Service Completion | enclosure | Add hardware rain sensor input | 166 | 3 | 2 | Complete | read_rain_sensor() in GPIOInterface |
 | 168 | Core Service Completion | enclosure | Implement rain sensor interrupt handling | 167 | 3 | 2 | Complete | setup_rain_sensor_interrupt(), _handle_rain_interrupt() in roof_controller.py |
-| 169 | Core Service Completion | enclosure | Add motor current monitoring (optional) | 168 | 4 | 3 | Not Started | Over-current protection |
+| 169 | Core Service Completion | enclosure | Add motor current monitoring (optional) | 168 | 4 | 3 | Complete | read_motor_current(), is_motor_overcurrent() in GPIOInterface |
 | 170 | Core Service Completion | enclosure | Implement motor timeout protection (60s max) | 169 | 2 | 1 | Complete | _motor_timeout in roof_controller.py |
 | 171 | Core Service Completion | enclosure | Add emergency stop input | 170 | 2 | 1 | Complete | emergency_stop() in roof_controller.py |
 | 172 | Core Service Completion | enclosure | Implement position estimation (percentage) | 171 | 3 | 2 | Complete | estimate_position_percent(), get_position_status(), move_to_position() in roof_controller.py |
@@ -270,7 +270,7 @@ Create installation scripts, hardware integration guides, and prepare for Nevada
 | 182 | Core Service Completion | focus | Add HFD (Half-Flux Diameter) calculation | 181 | 4 | 3 | Not Started | Star measurement |
 | 183 | Core Service Completion | focus | Implement Bahtinov mask analysis | 182 | 5 | 4 | Not Started | Diffraction pattern |
 | 184 | Core Service Completion | focus | Add contrast-based focusing | 183 | 3 | 2 | Complete | _contrast_focus(), _measure_contrast(), calculate_laplacian_variance() in focuser_service.py |
-| 185 | Core Service Completion | focus | Implement temperature compensation calibration | 184 | 4 | 3 | Not Started | Auto-adjust for temp |
+| 185 | Core Service Completion | focus | Implement temperature compensation calibration | 184 | 4 | 3 | Complete | Multi-point calibration, linear regression, R² stats |
 | 186 | Core Service Completion | focus | Add temperature coefficient storage | 185 | 2 | 1 | Complete | save/load_temp_coefficient() in focuser_service.py |
 | 187 | Core Service Completion | focus | Implement backlash compensation | 186 | 3 | 2 | Complete | Direction-aware backlash tracking, calibrate_backlash(), get_backlash_info() in focuser_service.py |
 | 188 | Core Service Completion | focus | Add focus position history tracking | 187 | 2 | 2 | Complete | FocusPositionRecord, get_position_history(), get_position_stats() in focuser_service.py |

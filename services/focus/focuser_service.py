@@ -1331,7 +1331,7 @@ class FocuserService:
                                          camera,
                                          temp_range: float = 5.0) -> float:
         """
-        Calibrate temperature compensation coefficient.
+        Calibrate temperature compensation coefficient (basic 2-point).
 
         Requires temperature to change during calibration.
 
@@ -1376,6 +1376,227 @@ class FocuserService:
         self._state = FocuserState.IDLE
 
         return coefficient
+
+    async def calibrate_temp_coefficient_multipoint(
+        self,
+        camera,
+        num_points: int = 5,
+        temp_interval: float = 1.0,
+        timeout_minutes: float = 120.0
+    ) -> dict:
+        """
+        Multi-point temperature compensation calibration (Step 185).
+
+        Collects multiple focus/temperature data points over a temperature
+        range and performs linear regression to find the optimal coefficient.
+        This provides a more accurate coefficient than the simple 2-point method.
+
+        The process:
+        1. Record initial focus and temperature
+        2. Wait for temperature to change by temp_interval
+        3. Find best focus at new temperature
+        4. Repeat until num_points collected
+        5. Perform linear regression on data
+        6. Save coefficient and calibration data
+
+        Args:
+            camera: Camera for focus measurements
+            num_points: Number of data points to collect (minimum 3)
+            temp_interval: Temperature change between measurements (°C)
+            timeout_minutes: Maximum time to wait for calibration
+
+        Returns:
+            Dict with:
+            - coefficient: Calculated steps/°C
+            - r_squared: Regression R² value (1.0 = perfect fit)
+            - data_points: List of (temp, focus) tuples
+            - std_error: Standard error of coefficient
+            - status: "success" or error message
+        """
+        logger.info(f"Starting multi-point temp coefficient calibration (Step 185)")
+        logger.info(f"Collecting {num_points} points at {temp_interval}°C intervals")
+
+        if num_points < 3:
+            return {"status": "error", "message": "Need at least 3 data points"}
+
+        self._state = FocuserState.CALIBRATING
+        data_points: List[Tuple[float, int]] = []
+        start_time = datetime.now()
+        last_temp = None
+
+        try:
+            # Collect data points
+            for point_num in range(num_points):
+                current_temp = self._temperature
+
+                # For first point, just record
+                if point_num == 0:
+                    focus_pos = await self._find_best_focus(camera)
+                    data_points.append((current_temp, focus_pos))
+                    last_temp = current_temp
+                    logger.info(f"Point 1/{num_points}: temp={current_temp:.1f}°C, focus={focus_pos}")
+                    continue
+
+                # Wait for temperature to change
+                logger.info(f"Waiting for {temp_interval}°C temperature change...")
+                while abs(self._temperature - last_temp) < temp_interval:
+                    # Check timeout
+                    elapsed = (datetime.now() - start_time).total_seconds() / 60
+                    if elapsed > timeout_minutes:
+                        logger.warning(f"Calibration timeout after {elapsed:.1f} minutes")
+                        break
+
+                    await asyncio.sleep(30)  # Check every 30 seconds
+
+                # Check if we got enough temperature change
+                if abs(self._temperature - last_temp) < temp_interval * 0.5:
+                    logger.warning("Insufficient temperature change, ending calibration early")
+                    break
+
+                # Find best focus at new temperature
+                current_temp = self._temperature
+                focus_pos = await self._find_best_focus(camera)
+                data_points.append((current_temp, focus_pos))
+                last_temp = current_temp
+
+                logger.info(f"Point {point_num + 1}/{num_points}: "
+                           f"temp={current_temp:.1f}°C, focus={focus_pos}")
+
+            # Need at least 2 points for regression
+            if len(data_points) < 2:
+                return {
+                    "status": "error",
+                    "message": f"Only collected {len(data_points)} points, need at least 2",
+                    "data_points": data_points
+                }
+
+            # Perform linear regression
+            result = self._linear_regression(data_points)
+
+            # Update coefficient
+            self.config.temp_coefficient = result["coefficient"]
+            logger.info(f"Calibration complete: {result['coefficient']:.2f} steps/°C "
+                       f"(R²={result['r_squared']:.3f})")
+
+            # Save calibration data
+            self._last_calibration = {
+                "date": datetime.now().isoformat(),
+                "coefficient": result["coefficient"],
+                "r_squared": result["r_squared"],
+                "data_points": data_points,
+                "num_points": len(data_points),
+            }
+
+            return {
+                "status": "success",
+                "coefficient": result["coefficient"],
+                "r_squared": result["r_squared"],
+                "std_error": result["std_error"],
+                "data_points": data_points,
+                "intercept": result["intercept"],
+            }
+
+        except Exception as e:
+            logger.error(f"Calibration failed: {e}")
+            return {"status": "error", "message": str(e), "data_points": data_points}
+
+        finally:
+            self._state = FocuserState.IDLE
+
+    def _linear_regression(self, data_points: List[Tuple[float, int]]) -> dict:
+        """
+        Perform linear regression on temperature/focus data (Step 185).
+
+        Uses least squares method to find best-fit line.
+        focus = coefficient * temperature + intercept
+
+        Args:
+            data_points: List of (temperature, focus_position) tuples
+
+        Returns:
+            Dict with coefficient, intercept, r_squared, std_error
+        """
+        n = len(data_points)
+        if n < 2:
+            return {"coefficient": 0, "intercept": 0, "r_squared": 0, "std_error": 0}
+
+        # Extract x (temperature) and y (focus)
+        temps = [p[0] for p in data_points]
+        focus = [p[1] for p in data_points]
+
+        # Calculate means
+        mean_temp = sum(temps) / n
+        mean_focus = sum(focus) / n
+
+        # Calculate slope (coefficient) and intercept
+        numerator = sum((t - mean_temp) * (f - mean_focus) for t, f in data_points)
+        denominator = sum((t - mean_temp) ** 2 for t in temps)
+
+        if abs(denominator) < 1e-10:
+            return {"coefficient": 0, "intercept": mean_focus, "r_squared": 0, "std_error": 0}
+
+        coefficient = numerator / denominator
+        intercept = mean_focus - coefficient * mean_temp
+
+        # Calculate R-squared
+        ss_tot = sum((f - mean_focus) ** 2 for f in focus)
+        ss_res = sum((f - (coefficient * t + intercept)) ** 2 for t, f in data_points)
+
+        r_squared = 1 - (ss_res / ss_tot) if ss_tot > 0 else 0
+
+        # Calculate standard error of coefficient
+        if n > 2 and ss_tot > 0:
+            mse = ss_res / (n - 2)
+            std_error = (mse / denominator) ** 0.5 if denominator > 0 else 0
+        else:
+            std_error = 0
+
+        return {
+            "coefficient": coefficient,
+            "intercept": intercept,
+            "r_squared": r_squared,
+            "std_error": std_error,
+        }
+
+    def apply_temp_compensation(self, temp_change: float) -> int:
+        """
+        Calculate focus adjustment for temperature change (Step 185).
+
+        Args:
+            temp_change: Temperature change in °C (positive = warmer)
+
+        Returns:
+            Focus position adjustment in steps
+        """
+        adjustment = int(temp_change * self.config.temp_coefficient)
+        logger.debug(f"Temp compensation: {temp_change:.1f}°C -> {adjustment} steps")
+        return adjustment
+
+    def get_compensated_position(self, reference_temp: float, reference_focus: int) -> int:
+        """
+        Calculate compensated focus position for current temperature (Step 185).
+
+        Given a known good focus at a reference temperature, calculate
+        what the focus should be at the current temperature.
+
+        Args:
+            reference_temp: Temperature when reference_focus was optimal
+            reference_focus: Focus position that was optimal at reference_temp
+
+        Returns:
+            Compensated focus position for current temperature
+        """
+        temp_change = self._temperature - reference_temp
+        adjustment = self.apply_temp_compensation(temp_change)
+        compensated = reference_focus + adjustment
+
+        # Clamp to valid range
+        compensated = max(0, min(self.config.max_position, compensated))
+
+        logger.debug(f"Temp compensation: ref={reference_focus}@{reference_temp:.1f}°C -> "
+                    f"{compensated}@{self._temperature:.1f}°C")
+
+        return compensated
 
     # =========================================================================
     # TEMPERATURE COEFFICIENT STORAGE (Step 186)

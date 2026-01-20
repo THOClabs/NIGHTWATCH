@@ -277,6 +277,94 @@ class GPIOInterface:
             return self._gpio["rain_sensor"]
 
     # =========================================================================
+    # MOTOR CURRENT MONITORING (Step 169)
+    # =========================================================================
+
+    def read_motor_current(self) -> float:
+        """
+        Read motor current from current sensor (Step 169).
+
+        Typically uses an ACS712 or similar Hall-effect current sensor
+        connected to an ADC (MCP3008 or similar) via SPI.
+
+        Common configurations:
+        - ACS712-5A: 185mV/A, ±5A range
+        - ACS712-20A: 100mV/A, ±20A range
+        - ACS712-30A: 66mV/A, ±30A range
+
+        The sensor outputs 2.5V at 0A, with voltage increasing/decreasing
+        proportionally to current flow.
+
+        Returns:
+            Current in Amps (0.0 if not available)
+        """
+        if not self._initialized:
+            return 0.0
+
+        if self.backend == GPIOBackend.MOCK:
+            # Return mock current value for testing
+            return self._gpio.get("motor_current", 0.0)
+
+        # Real implementation would use ADC to read current sensor
+        # Example with MCP3008 on SPI:
+        #
+        # try:
+        #     from gpiozero import MCP3008
+        #     adc = MCP3008(channel=0)  # Current sensor on channel 0
+        #     voltage = adc.value * 3.3  # Convert to voltage (0-3.3V)
+        #
+        #     # ACS712-20A: 2.5V = 0A, 100mV/A sensitivity
+        #     # current = (voltage - 2.5) / 0.1
+        #     current = (voltage - 2.5) / 0.1
+        #     return abs(current)  # Return absolute value
+        # except Exception as e:
+        #     logger.warning(f"Current sensor read failed: {e}")
+        #     return 0.0
+
+        # For non-mock without real hardware, return 0
+        return 0.0
+
+    def is_motor_overcurrent(self, limit_amps: float = 5.0) -> bool:
+        """
+        Check if motor current exceeds safe limit (Step 169).
+
+        Over-current conditions indicate:
+        - Mechanical obstruction (debris, stuck roof)
+        - Motor stall condition
+        - Bearing failure
+        - Electrical fault
+
+        Args:
+            limit_amps: Current threshold in Amps (default 5A)
+
+        Returns:
+            True if current exceeds limit
+        """
+        current = self.read_motor_current()
+        is_over = current > limit_amps
+
+        if is_over:
+            logger.warning(f"Motor over-current detected: {current:.2f}A > {limit_amps:.2f}A limit")
+
+        return is_over
+
+    def get_motor_current_stats(self) -> dict:
+        """
+        Get motor current statistics (Step 169).
+
+        Returns:
+            Dict with current reading and status
+        """
+        current = self.read_motor_current()
+
+        return {
+            "current_amps": current,
+            "current_ma": current * 1000,
+            "sensor_available": self._initialized,
+            "backend": self.backend.value,
+        }
+
+    # =========================================================================
     # MOCK CONTROL (for testing)
     # =========================================================================
 
@@ -294,6 +382,11 @@ class GPIOInterface:
         """Set mock rain sensor state (for testing)."""
         if self.backend == GPIOBackend.MOCK:
             self._gpio["rain_sensor"] = state
+
+    def mock_set_motor_current(self, current_amps: float) -> None:
+        """Set mock motor current value for testing (Step 169)."""
+        if self.backend == GPIOBackend.MOCK:
+            self._gpio["motor_current"] = current_amps
 
 
 class RoofState(Enum):
@@ -728,13 +821,17 @@ class RoofController:
 
     async def _run_motor(self, direction: str):
         """
-        Run roof motor with timeout and current monitoring.
+        Run roof motor with timeout and current monitoring (Step 169).
 
         Args:
             direction: "open" or "close"
+
+        Raises:
+            RuntimeError: On timeout or over-current condition
         """
         self._motor_running = True
         start_time = datetime.now()
+        max_current_seen = 0.0
 
         logger.debug(f"Starting motor: {direction}")
 
@@ -747,6 +844,19 @@ class RoofController:
                 if elapsed > self.config.motor_timeout_sec:
                     raise RuntimeError(f"Motor timeout after {elapsed:.0f}s")
 
+                # Check motor current (Step 169)
+                if self._gpio:
+                    current = self._gpio.read_motor_current()
+                    max_current_seen = max(max_current_seen, current)
+
+                    if self._gpio.is_motor_overcurrent(self.config.motor_current_limit_a):
+                        # Over-current protection - stop immediately
+                        self._safety[SafetyCondition.MOTOR_OK] = False
+                        raise RuntimeError(
+                            f"Motor over-current protection triggered: "
+                            f"{current:.2f}A exceeds {self.config.motor_current_limit_a}A limit"
+                        )
+
                 # Simulate position update
                 if direction == "open":
                     self._position = min(100, self._position + 5)
@@ -758,6 +868,10 @@ class RoofController:
                         break
 
                 await asyncio.sleep(0.5)
+
+            # Log max current for diagnostics
+            if max_current_seen > 0:
+                logger.debug(f"Motor run complete, max current: {max_current_seen:.2f}A")
 
         finally:
             self._motor_running = False

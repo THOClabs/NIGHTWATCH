@@ -915,11 +915,19 @@ class AlertManager:
 
     async def _send_sms(self, alert: Alert):
         """
-        Send SMS notification via Twilio (Steps 126-127).
+        Send SMS notification via Twilio (Step 125).
 
         Implements:
         - Message formatting with 160 char limit (Step 126)
         - SMS-specific rate limiting (Step 127)
+        - Actual Twilio API integration (Step 125)
+
+        Requires twilio package: pip install twilio
+        Configure with:
+        - sms_twilio_sid: Twilio Account SID
+        - sms_twilio_token: Twilio Auth Token
+        - sms_from_number: Twilio phone number (e.g., "+15551234567")
+        - sms_to_numbers: List of destination numbers
         """
         # Check SMS-specific rate limiting first
         if self._should_rate_limit_sms(alert):
@@ -933,17 +941,47 @@ class AlertManager:
         self._recent_sms[key] = datetime.now()
         self._sms_count_hour += 1
 
-        # Would send via Twilio in production
-        # from twilio.rest import Client
-        # client = Client(self.config.sms_twilio_sid, self.config.sms_twilio_token)
-        # for number in self.config.sms_to_numbers:
-        #     client.messages.create(
-        #         body=sms_text,
-        #         from_=self.config.sms_from_number,
-        #         to=number
-        #     )
+        # Check if Twilio is configured
+        if not all([
+            self.config.sms_twilio_sid,
+            self.config.sms_twilio_token,
+            self.config.sms_from_number,
+            self.config.sms_to_numbers
+        ]):
+            logger.debug(f"Twilio not configured, SMS not sent: {sms_text[:50]}")
+            return
 
-        logger.debug(f"Would send SMS ({len(sms_text)} chars): {sms_text}")
+        # Send via Twilio (Step 125)
+        try:
+            from twilio.rest import Client as TwilioClient
+            from twilio.base.exceptions import TwilioRestException
+
+            client = TwilioClient(
+                self.config.sms_twilio_sid,
+                self.config.sms_twilio_token
+            )
+
+            sent_count = 0
+            for number in self.config.sms_to_numbers:
+                try:
+                    message = client.messages.create(
+                        body=sms_text,
+                        from_=self.config.sms_from_number,
+                        to=number
+                    )
+                    sent_count += 1
+                    logger.info(f"SMS sent to {number}: SID={message.sid}")
+                except TwilioRestException as e:
+                    logger.error(f"Twilio SMS to {number} failed: {e.msg}")
+
+            logger.debug(f"SMS sent to {sent_count}/{len(self.config.sms_to_numbers)} numbers")
+
+        except ImportError:
+            # Twilio package not installed - graceful degradation
+            logger.warning("twilio package not installed, SMS disabled. Install with: pip install twilio")
+            logger.debug(f"Would send SMS ({len(sms_text)} chars): {sms_text}")
+        except Exception as e:
+            logger.error(f"Twilio SMS error: {e}")
 
     async def _send_call(self, alert: Alert):
         """Initiate voice call."""
