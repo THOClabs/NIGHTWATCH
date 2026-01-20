@@ -3073,6 +3073,248 @@ def create_default_handlers(
 
     handlers["alpaca_get_focuser_status"] = alpaca_get_focuser_status
 
+    # -------------------------------------------------------------------------
+    # GUIDING HANDLERS (Steps 395-397)
+    # -------------------------------------------------------------------------
+
+    async def stop_guiding() -> str:
+        """Stop autoguiding (Step 395)."""
+        if not guiding_client:
+            return "Guiding system not available"
+
+        try:
+            if hasattr(guiding_client, 'stop_guiding'):
+                success = guiding_client.stop_guiding()
+            elif hasattr(guiding_client, 'stop'):
+                success = guiding_client.stop()
+            else:
+                return "Guiding client does not support stop operation"
+
+            if success:
+                return "Autoguiding stopped"
+            return "Failed to stop guiding"
+        except Exception as e:
+            return f"Error stopping guiding: {e}"
+
+    handlers["stop_guiding"] = stop_guiding
+
+    async def get_guiding_status() -> str:
+        """Get autoguiding status with RMS (Steps 396-397)."""
+        if not guiding_client:
+            return "Guiding system not available"
+
+        try:
+            parts = []
+
+            # Get guiding state
+            if hasattr(guiding_client, 'is_guiding'):
+                is_guiding = guiding_client.is_guiding()
+                parts.append(f"Guiding: {'Active' if is_guiding else 'Inactive'}")
+            elif hasattr(guiding_client, 'get_status'):
+                status = guiding_client.get_status()
+                if status:
+                    is_guiding = status.get('guiding', False)
+                    parts.append(f"Guiding: {'Active' if is_guiding else 'Inactive'}")
+
+            # Step 397: Get RMS in arcseconds
+            if hasattr(guiding_client, 'get_rms'):
+                rms = guiding_client.get_rms()
+                if rms:
+                    ra_rms = rms.get('ra_arcsec', 0)
+                    dec_rms = rms.get('dec_arcsec', 0)
+                    total_rms = rms.get('total_arcsec', 0)
+                    parts.append(f"RMS: {total_rms:.2f}\" total (RA: {ra_rms:.2f}\", Dec: {dec_rms:.2f}\")")
+
+                    # Quality assessment
+                    if total_rms < 0.5:
+                        parts.append("Guiding quality: Excellent")
+                    elif total_rms < 1.0:
+                        parts.append("Guiding quality: Good")
+                    elif total_rms < 2.0:
+                        parts.append("Guiding quality: Fair")
+                    else:
+                        parts.append("Guiding quality: Poor - consider recalibration")
+
+            # Get guide star info
+            if hasattr(guiding_client, 'get_guide_star'):
+                star = guiding_client.get_guide_star()
+                if star:
+                    parts.append(f"Guide star: SNR {star.get('snr', 0):.1f}")
+
+            # Get calibration status
+            if hasattr(guiding_client, 'is_calibrated'):
+                is_cal = guiding_client.is_calibrated()
+                parts.append(f"Calibrated: {'Yes' if is_cal else 'No'}")
+
+            if not parts:
+                return "Could not retrieve guiding status"
+
+            return "\n".join(parts)
+
+        except Exception as e:
+            return f"Error getting guiding status: {e}"
+
+    handlers["get_guiding_status"] = get_guiding_status
+
+    # -------------------------------------------------------------------------
+    # CAMERA HANDLERS (Steps 403-405)
+    # -------------------------------------------------------------------------
+
+    async def stop_capture() -> str:
+        """Stop current camera capture (Step 403)."""
+        if not camera_client:
+            return "Camera not available"
+
+        try:
+            if hasattr(camera_client, 'abort_exposure'):
+                success = camera_client.abort_exposure()
+            elif hasattr(camera_client, 'stop_capture'):
+                success = camera_client.stop_capture()
+            elif hasattr(camera_client, 'stop'):
+                success = camera_client.stop()
+            else:
+                return "Camera does not support abort operation"
+
+            if success:
+                return "Capture aborted"
+            return "Failed to stop capture (may not have been active)"
+        except Exception as e:
+            return f"Error stopping capture: {e}"
+
+    handlers["stop_capture"] = stop_capture
+
+    async def get_camera_status() -> str:
+        """Get camera status with temperature (Steps 404-405)."""
+        if not camera_client:
+            return "Camera not available"
+
+        try:
+            parts = []
+
+            # Get camera state
+            if hasattr(camera_client, 'get_status'):
+                status = camera_client.get_status()
+                if status:
+                    state = status.get('state', 'unknown')
+                    parts.append(f"State: {state}")
+
+                    if status.get('exposure_progress'):
+                        progress = status['exposure_progress'] * 100
+                        parts.append(f"Exposure progress: {progress:.0f}%")
+
+            # Check if capturing
+            if hasattr(camera_client, 'is_capturing'):
+                is_cap = camera_client.is_capturing()
+                parts.append(f"Capturing: {'Yes' if is_cap else 'No'}")
+
+            # Get current settings
+            if hasattr(camera_client, 'get_gain'):
+                gain = camera_client.get_gain()
+                parts.append(f"Gain: {gain}")
+
+            if hasattr(camera_client, 'get_exposure'):
+                exp = camera_client.get_exposure()
+                if exp < 1:
+                    parts.append(f"Exposure: {exp*1000:.1f}ms")
+                else:
+                    parts.append(f"Exposure: {exp:.2f}s")
+
+            if hasattr(camera_client, 'get_binning'):
+                binning = camera_client.get_binning()
+                parts.append(f"Binning: {binning}x{binning}")
+
+            # Step 405: Temperature and cooling status
+            if hasattr(camera_client, 'get_temperature'):
+                temp = camera_client.get_temperature()
+                parts.append(f"Sensor temperature: {temp:.1f}°C")
+
+            if hasattr(camera_client, 'get_cooler_status'):
+                cooler = camera_client.get_cooler_status()
+                if cooler:
+                    power = cooler.get('power_percent', 0)
+                    target = cooler.get('target_temp')
+                    is_on = cooler.get('enabled', False)
+                    parts.append(f"Cooler: {'On' if is_on else 'Off'} ({power:.0f}% power)")
+                    if target is not None:
+                        parts.append(f"Target temp: {target:.0f}°C")
+            elif hasattr(camera_client, 'is_cooler_on'):
+                is_on = camera_client.is_cooler_on()
+                parts.append(f"Cooler: {'On' if is_on else 'Off'}")
+
+            if not parts:
+                return "Could not retrieve camera status"
+
+            return "Camera status:\n  " + "\n  ".join(parts)
+
+        except Exception as e:
+            return f"Error getting camera status: {e}"
+
+    handlers["get_camera_status"] = get_camera_status
+
+    # -------------------------------------------------------------------------
+    # FOCUS HANDLERS (Step 413)
+    # -------------------------------------------------------------------------
+
+    async def get_focus_status() -> str:
+        """Get focuser status (Step 413)."""
+        if not focuser_service:
+            return "Focuser not available"
+
+        try:
+            parts = []
+
+            # Get focuser position
+            if hasattr(focuser_service, 'get_position'):
+                pos = focuser_service.get_position()
+                parts.append(f"Position: {pos} steps")
+
+            if hasattr(focuser_service, 'get_max_position'):
+                max_pos = focuser_service.get_max_position()
+                parts.append(f"Range: 0 - {max_pos} steps")
+
+            # Get movement status
+            if hasattr(focuser_service, 'is_moving'):
+                is_moving = focuser_service.is_moving()
+                parts.append(f"Moving: {'Yes' if is_moving else 'No'}")
+
+            # Get temperature compensation
+            if hasattr(focuser_service, 'get_temp_compensation'):
+                temp_comp = focuser_service.get_temp_compensation()
+                parts.append(f"Temp compensation: {'Enabled' if temp_comp else 'Disabled'}")
+
+            # Get temperature
+            if hasattr(focuser_service, 'get_temperature'):
+                temp = focuser_service.get_temperature()
+                if temp is not None:
+                    parts.append(f"Temperature: {temp:.1f}°C")
+
+            # Get last HFD/FWHM if available
+            if hasattr(focuser_service, 'get_last_hfd'):
+                hfd = focuser_service.get_last_hfd()
+                if hfd is not None:
+                    parts.append(f"Last HFD: {hfd:.2f} pixels")
+
+            if hasattr(focuser_service, 'get_last_fwhm'):
+                fwhm = focuser_service.get_last_fwhm()
+                if fwhm is not None:
+                    parts.append(f"Last FWHM: {fwhm:.2f} arcsec")
+
+            # Get autofocus status
+            if hasattr(focuser_service, 'is_autofocus_running'):
+                is_af = focuser_service.is_autofocus_running()
+                if is_af:
+                    parts.append("Autofocus: Running")
+
+            if not parts:
+                return "Could not retrieve focuser status"
+
+            return "Focuser status:\n  " + "\n  ".join(parts)
+
+        except Exception as e:
+            return f"Error getting focus status: {e}"
+
+    handlers["get_focus_status"] = get_focus_status
+
     return handlers
 
 

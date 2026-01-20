@@ -480,17 +480,17 @@ Create installation scripts, hardware integration guides, and prepare for Nevada
 | 392 | Tool Handler Implementation | session_tools | Write unit tests for session tool handlers | 391 | 2 | 2 | Not Started | Test coverage |
 | 393 | Tool Handler Implementation | guiding_tools | Implement start_guiding handler | 257 | 3 | 2 | Not Started | Begin guiding |
 | 394 | Tool Handler Implementation | guiding_tools | Add auto star selection option | 393 | 2 | 1 | Not Started | Convenience |
-| 395 | Tool Handler Implementation | guiding_tools | Implement stop_guiding handler | 394 | 2 | 1 | Not Started | End guiding |
-| 396 | Tool Handler Implementation | guiding_tools | Implement get_guiding_status handler | 395 | 2 | 1 | Not Started | Guide stats |
-| 397 | Tool Handler Implementation | guiding_tools | Add RMS in arcseconds | 396 | 2 | 1 | Not Started | Quality metric |
+| 395 | Tool Handler Implementation | guiding_tools | Implement stop_guiding handler | 394 | 2 | 1 | Complete | stop_guiding() with stop/stop_guiding fallback |
+| 396 | Tool Handler Implementation | guiding_tools | Implement get_guiding_status handler | 395 | 2 | 1 | Complete | get_guiding_status() with state and RMS |
+| 397 | Tool Handler Implementation | guiding_tools | Add RMS in arcseconds | 396 | 2 | 1 | Complete | RMS RA/Dec/total with quality assessment |
 | 398 | Tool Handler Implementation | guiding_tools | Implement dither handler | 397 | 3 | 2 | Not Started | Imaging workflow |
 | 399 | Tool Handler Implementation | guiding_tools | Add dither amount parameter | 398 | 2 | 1 | Not Started | Customizable |
 | 400 | Tool Handler Implementation | guiding_tools | Write unit tests for guiding tool handlers | 399 | 2 | 2 | Not Started | Test coverage |
 | 401 | Tool Handler Implementation | camera_tools | Implement start_capture handler | 257 | 3 | 2 | Not Started | Begin imaging |
 | 402 | Tool Handler Implementation | camera_tools | Add exposure and gain parameters | 401 | 2 | 1 | Not Started | Capture settings |
-| 403 | Tool Handler Implementation | camera_tools | Implement stop_capture handler | 402 | 2 | 1 | Not Started | Abort capture |
-| 404 | Tool Handler Implementation | camera_tools | Implement get_camera_status handler | 403 | 2 | 1 | Not Started | Camera state |
-| 405 | Tool Handler Implementation | camera_tools | Add temperature and cooling status | 404 | 2 | 1 | Not Started | Thermal info |
+| 403 | Tool Handler Implementation | camera_tools | Implement stop_capture handler | 402 | 2 | 1 | Complete | stop_capture() with abort_exposure fallback |
+| 404 | Tool Handler Implementation | camera_tools | Implement get_camera_status handler | 403 | 2 | 1 | Complete | get_camera_status() with settings and progress |
+| 405 | Tool Handler Implementation | camera_tools | Add temperature and cooling status | 404 | 2 | 1 | Complete | Temperature, cooler power, target temp in status |
 | 406 | Tool Handler Implementation | camera_tools | Implement set_camera_gain handler | 405 | 2 | 1 | Not Started | Gain control |
 | 407 | Tool Handler Implementation | camera_tools | Add gain range validation | 406 | 2 | 1 | Not Started | Bounds check |
 | 408 | Tool Handler Implementation | camera_tools | Implement set_camera_exposure handler | 407 | 2 | 1 | Not Started | Exposure control |
@@ -498,8 +498,8 @@ Create installation scripts, hardware integration guides, and prepare for Nevada
 | 410 | Tool Handler Implementation | camera_tools | Write unit tests for camera tool handlers | 409 | 2 | 2 | Not Started | Test coverage |
 | 411 | Tool Handler Implementation | focus_tools | Implement auto_focus handler | 257 | 3 | 2 | Not Started | Begin focus |
 | 412 | Tool Handler Implementation | focus_tools | Add algorithm selection parameter | 411 | 2 | 1 | Not Started | V-curve, HFD |
-| 413 | Tool Handler Implementation | focus_tools | Implement get_focus_status handler | 412 | 2 | 1 | Not Started | Focus state |
-| 414 | Tool Handler Implementation | focus_tools | Add current position and temperature | 413 | 2 | 1 | Not Started | Focus info |
+| 413 | Tool Handler Implementation | focus_tools | Implement get_focus_status handler | 412 | 2 | 1 | Complete | get_focus_status() with position, temp, HFD |
+| 414 | Tool Handler Implementation | focus_tools | Add current position and temperature | 413 | 2 | 1 | Complete | Position, temp, temp_comp, HFD/FWHM in status |
 | 415 | Tool Handler Implementation | focus_tools | Implement move_focus handler | 414 | 2 | 1 | Not Started | Manual focus |
 | 416 | Tool Handler Implementation | focus_tools | Add direction and step parameters | 415 | 2 | 1 | Not Started | Control options |
 | 417 | Tool Handler Implementation | focus_tools | Implement enable_temp_compensation handler | 416 | 2 | 1 | Not Started | Auto-adjust |
