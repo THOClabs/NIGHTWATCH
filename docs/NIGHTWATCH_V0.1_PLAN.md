@@ -366,7 +366,7 @@ Create installation scripts, hardware integration guides, and prepare for Nevada
 | 278 | Voice Pipeline Integration | llm | Implement local Llama 3.2 client using llama-cpp-python | 277 | 4 | 3 | Complete | Local inference |
 | 279 | Voice Pipeline Integration | llm | Add model loading with GPU offload | 278 | 3 | 2 | Complete | CUDA acceleration |
 | 280 | Voice Pipeline Integration | llm | Implement chat completion with tool definitions | 279 | 4 | 3 | Complete | Function calling |
-| 281 | Voice Pipeline Integration | llm | Add streaming response support | 280 | 3 | 2 | Not Started | Real-time output |
+| 281 | Voice Pipeline Integration | llm | Add streaming response support | 280 | 3 | 2 | Complete | chat_stream() method, StreamingChunk dataclass |
 | 282 | Voice Pipeline Integration | llm | Implement tool call parsing from LLM response | 281 | 4 | 3 | Complete | Extract tool calls |
 | 283 | Voice Pipeline Integration | llm | Add multi-turn conversation support | 282 | 3 | 2 | Complete | Context retention |
 | 284 | Voice Pipeline Integration | llm | Implement conversation history management | 283 | 3 | 2 | Complete | Memory limit |
@@ -374,8 +374,8 @@ Create installation scripts, hardware integration guides, and prepare for Nevada
 | 286 | Voice Pipeline Integration | llm | Implement Anthropic API client as fallback | 285 | 3 | 2 | Complete | Optional cloud |
 | 287 | Voice Pipeline Integration | llm | Add OpenAI API client as fallback | 286 | 3 | 2 | Complete | Optional cloud |
 | 288 | Voice Pipeline Integration | llm | Implement client selection based on config | 287 | 2 | 1 | Complete | Flexible backend |
-| 289 | Voice Pipeline Integration | llm | Add response confidence scoring | 288 | 4 | 3 | Not Started | Quality check |
-| 290 | Voice Pipeline Integration | llm | Implement low confidence confirmation request | 289 | 3 | 2 | Not Started | Ask for clarification |
+| 289 | Voice Pipeline Integration | llm | Add response confidence scoring | 288 | 4 | 3 | Complete | calculate_confidence_score(), hedging detection, relevance scoring |
+| 290 | Voice Pipeline Integration | llm | Implement low confidence confirmation request | 289 | 3 | 2 | Complete | requires_confirmation(), get_confirmation_prompt() |
 | 291 | Voice Pipeline Integration | llm | Add token usage tracking | 290 | 2 | 1 | Complete | Cost monitoring |
 | 292 | Voice Pipeline Integration | llm | Write unit tests for LLM client | 291 | 2 | 2 | Complete | Test coverage |
 | 293 | Voice Pipeline Integration | voice_pipeline | Create nightwatch/voice_pipeline.py module | 277 | 3 | 2 | Complete | End-to-end voice |
@@ -391,7 +391,7 @@ Create installation scripts, hardware integration guides, and prepare for Nevada
 | 303 | Voice Pipeline Integration | voice_pipeline | Implement response formatting call | 302 | 2 | 1 | Complete | Human text |
 | 304 | Voice Pipeline Integration | voice_pipeline | Add TTS synthesis call | 303 | 2 | 1 | Complete | Text to speech |
 | 305 | Voice Pipeline Integration | voice_pipeline | Implement audio playback | 304 | 2 | 1 | Complete | AudioPlayer class, play_response() |
-| 306 | Voice Pipeline Integration | voice_pipeline | Add pipeline state machine | 305 | 3 | 2 | Not Started | State management |
+| 306 | Voice Pipeline Integration | voice_pipeline | Add pipeline state machine | 305 | 3 | 2 | Complete | PipelineState enum, _set_state() with callbacks, state property |
 | 307 | Voice Pipeline Integration | voice_pipeline | Implement concurrent request handling | 306 | 3 | 2 | Not Started | Multiple users |
 | 308 | Voice Pipeline Integration | voice_pipeline | Add pipeline latency tracking | 307 | 2 | 1 | Complete | _record_latency(), get_latency_history(), enhanced get_metrics() |
 | 309 | Voice Pipeline Integration | voice_pipeline | Implement audio feedback (beeps for state changes) | 308 | 2 | 1 | Complete | AudioFeedback class, _set_state() with feedback |

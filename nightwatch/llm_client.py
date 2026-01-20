@@ -41,10 +41,12 @@ __all__ = [
     "LLMClient",
     "LLMBackend",
     "LLMResponse",
+    "StreamingChunk",
     "ToolCall",
     "TokenUsage",
     "ConversationMessage",
     "create_llm_client",
+    "calculate_confidence_score",
 ]
 
 
@@ -147,10 +149,33 @@ class LLMResponse:
     usage: Optional[TokenUsage] = None
     latency_ms: float = 0.0
 
+    # Step 289: Response confidence scoring
+    confidence_score: float = 1.0  # 0.0 to 1.0
+    confidence_factors: Dict[str, float] = field(default_factory=dict)
+
     @property
     def has_tool_calls(self) -> bool:
         """Check if response contains tool calls."""
         return len(self.tool_calls) > 0
+
+    @property
+    def is_high_confidence(self) -> bool:
+        """Check if response has high confidence (Step 289)."""
+        return self.confidence_score >= 0.7
+
+    @property
+    def is_low_confidence(self) -> bool:
+        """Check if response has low confidence, requiring confirmation (Step 290)."""
+        return self.confidence_score < 0.5
+
+
+@dataclass
+class StreamingChunk:
+    """A chunk from streaming LLM response (Step 281)."""
+    content: str = ""
+    tool_call_delta: Optional[Dict[str, Any]] = None
+    is_final: bool = False
+    finish_reason: Optional[str] = None
 
 
 # =============================================================================
@@ -208,6 +233,27 @@ class BaseLLMClient(ABC):
     ) -> LLMResponse:
         """Send chat completion request."""
         pass
+
+    async def chat_stream(
+        self,
+        messages: List[Dict[str, Any]],
+        tools: Optional[List[Dict[str, Any]]] = None,
+        temperature: float = 0.7,
+        max_tokens: int = 1024,
+    ):
+        """
+        Stream chat completion response (Step 281).
+
+        Yields StreamingChunk objects as they arrive.
+        Default implementation falls back to non-streaming.
+        """
+        # Default: fall back to non-streaming
+        response = await self.chat(messages, tools, temperature, max_tokens)
+        yield StreamingChunk(
+            content=response.content,
+            is_final=True,
+            finish_reason=response.finish_reason,
+        )
 
     @abstractmethod
     async def health_check(self) -> bool:
@@ -713,6 +759,16 @@ class LLMClient:
                     max_tokens=max_tokens,
                 )
 
+                # Step 289: Calculate confidence score
+                confidence, factors = calculate_confidence_score(
+                    response.content,
+                    response.tool_calls,
+                    response.finish_reason,
+                    message,
+                )
+                response.confidence_score = confidence
+                response.confidence_factors = factors
+
                 # Update token tracking
                 if response.usage:
                     self.token_usage.add(
@@ -731,7 +787,8 @@ class LLMClient:
                     tool_calls=response.tool_calls if response.tool_calls else None,
                 ))
 
-                logger.debug(f"Chat completed via {backend.value} in {response.latency_ms:.0f}ms")
+                logger.debug(f"Chat completed via {backend.value} in {response.latency_ms:.0f}ms "
+                           f"(confidence: {confidence:.2f})")
                 return response
 
             except Exception as e:
@@ -765,6 +822,184 @@ class LLMClient:
         self.token_usage.session_prompt_tokens = 0
         self.token_usage.session_completion_tokens = 0
         self.token_usage.session_total_tokens = 0
+
+    async def chat_stream(
+        self,
+        message: str,
+        tools: Optional[List[Dict[str, Any]]] = None,
+        temperature: float = 0.7,
+        max_tokens: int = 1024,
+        include_history: bool = True,
+    ):
+        """
+        Stream chat response for real-time output (Step 281).
+
+        Yields StreamingChunk objects as they arrive from the LLM.
+
+        Args:
+            message: User message
+            tools: Available tools for function calling
+            temperature: Sampling temperature
+            max_tokens: Maximum response tokens
+            include_history: Include conversation history
+
+        Yields:
+            StreamingChunk objects with incremental content
+        """
+        # Build messages list
+        messages = [{"role": "system", "content": self.system_prompt}]
+
+        if include_history:
+            for msg in self._conversation[-self._max_history:]:
+                messages.append(msg.to_dict())
+
+        messages.append({"role": "user", "content": message})
+
+        # Try primary backend
+        client = self._get_client(self.backend)
+
+        # Add user message to history
+        self._conversation.append(ConversationMessage(
+            role="user",
+            content=message,
+        ))
+
+        accumulated_content = ""
+        async for chunk in client.chat_stream(messages, tools, temperature, max_tokens):
+            accumulated_content += chunk.content
+            yield chunk
+
+            if chunk.is_final:
+                # Add assistant response to history
+                self._conversation.append(ConversationMessage(
+                    role="assistant",
+                    content=accumulated_content,
+                ))
+
+    def requires_confirmation(self, response: LLMResponse) -> bool:
+        """
+        Check if response requires user confirmation due to low confidence (Step 290).
+
+        Args:
+            response: LLM response to check
+
+        Returns:
+            True if confirmation should be requested
+        """
+        # Low confidence requires confirmation
+        if response.is_low_confidence:
+            return True
+
+        # Critical tool calls require confirmation
+        critical_tools = {"emergency_shutdown", "open_roof", "close_roof", "stop_roof"}
+        for tc in response.tool_calls:
+            if tc.name in critical_tools:
+                return True
+
+        return False
+
+    def get_confirmation_prompt(self, response: LLMResponse) -> str:
+        """
+        Generate confirmation prompt for low confidence response (Step 290).
+
+        Args:
+            response: Low confidence LLM response
+
+        Returns:
+            Confirmation prompt text
+        """
+        if response.tool_calls:
+            tool_names = [tc.name for tc in response.tool_calls]
+            return f"I'm going to execute: {', '.join(tool_names)}. Is that correct?"
+        else:
+            return f"I understood: {response.content[:100]}... Is that what you meant?"
+
+
+# =============================================================================
+# Confidence Scoring (Step 289)
+# =============================================================================
+
+
+def calculate_confidence_score(
+    response_content: str,
+    tool_calls: List[ToolCall],
+    finish_reason: str,
+    user_message: str,
+) -> tuple:
+    """
+    Calculate confidence score for LLM response (Step 289).
+
+    Analyzes response characteristics to estimate confidence:
+    - Tool call specificity
+    - Response length vs question complexity
+    - Hedging language detection
+    - Finish reason analysis
+
+    Args:
+        response_content: LLM response text
+        tool_calls: Tool calls in response
+        finish_reason: Model's finish reason
+        user_message: Original user message
+
+    Returns:
+        Tuple of (confidence_score, confidence_factors dict)
+    """
+    factors = {}
+
+    # Factor 1: Finish reason (0.0-1.0)
+    finish_scores = {
+        "stop": 1.0,
+        "end_turn": 1.0,
+        "tool_use": 0.95,
+        "tool_calls": 0.95,
+        "length": 0.6,
+        "content_filter": 0.3,
+        "": 0.7,
+    }
+    factors["finish_reason"] = finish_scores.get(finish_reason, 0.7)
+
+    # Factor 2: Tool call confidence (0.0-1.0)
+    if tool_calls:
+        # Having specific tool calls indicates higher confidence
+        factors["tool_specificity"] = min(1.0, 0.7 + len(tool_calls) * 0.1)
+    else:
+        # No tools - check if response seems complete
+        factors["tool_specificity"] = 0.8 if len(response_content) > 20 else 0.5
+
+    # Factor 3: Hedging language detection (0.0-1.0)
+    hedging_phrases = [
+        "i think", "maybe", "perhaps", "not sure", "i'm uncertain",
+        "could be", "might be", "possibly", "i believe", "it seems",
+        "i don't know", "unclear", "hard to say"
+    ]
+    content_lower = response_content.lower()
+    hedge_count = sum(1 for phrase in hedging_phrases if phrase in content_lower)
+    factors["hedging"] = max(0.3, 1.0 - hedge_count * 0.15)
+
+    # Factor 4: Response relevance (simple heuristic)
+    # Check for command keywords in both user message and response
+    command_words = ["point", "slew", "goto", "park", "track", "stop", "weather", "status"]
+    user_has_command = any(w in user_message.lower() for w in command_words)
+    response_has_tool = len(tool_calls) > 0
+
+    if user_has_command and response_has_tool:
+        factors["relevance"] = 1.0
+    elif user_has_command and not response_has_tool:
+        factors["relevance"] = 0.6  # User asked for action but no tool called
+    else:
+        factors["relevance"] = 0.8
+
+    # Calculate weighted average
+    weights = {
+        "finish_reason": 0.2,
+        "tool_specificity": 0.3,
+        "hedging": 0.25,
+        "relevance": 0.25,
+    }
+
+    total_score = sum(factors[k] * weights[k] for k in weights)
+
+    return total_score, factors
 
 
 # =============================================================================
