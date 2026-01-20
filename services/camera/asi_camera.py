@@ -463,6 +463,357 @@ class ASICamera:
         """Get current camera settings."""
         return self._settings
 
+    # =========================================================================
+    # GAIN CONTROL (Step 86)
+    # =========================================================================
+
+    def set_gain(self, gain: int) -> bool:
+        """
+        Set camera gain.
+
+        Args:
+            gain: Gain value (typically 0-500 for ZWO cameras)
+
+        Returns:
+            True if successful
+        """
+        if not self._camera:
+            logger.warning("Cannot set gain: camera not initialized")
+            return False
+
+        try:
+            # Validate gain range
+            min_gain, max_gain = self.get_gain_range()
+            if not min_gain <= gain <= max_gain:
+                logger.warning(f"Gain {gain} out of range ({min_gain}-{max_gain})")
+                return False
+
+            self._camera.set_control_value(self._asi.ASI_GAIN, gain)
+            self._settings.gain = gain
+            logger.debug(f"Set gain to {gain}")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to set gain: {e}")
+            return False
+
+    def get_gain(self) -> int:
+        """
+        Get current camera gain.
+
+        Returns:
+            Current gain value
+        """
+        if not self._camera:
+            return self._settings.gain
+
+        try:
+            gain = self._camera.get_control_value(self._asi.ASI_GAIN)[0]
+            return int(gain)
+        except Exception:
+            return self._settings.gain
+
+    def get_gain_range(self) -> Tuple[int, int]:
+        """
+        Get supported gain range.
+
+        Returns:
+            Tuple of (min_gain, max_gain)
+        """
+        if not self._camera:
+            return (0, 500)  # Default ZWO range
+
+        try:
+            info = self._camera.get_controls()[self._asi.ASI_GAIN]
+            return (info["MinValue"], info["MaxValue"])
+        except Exception:
+            return (0, 500)
+
+    # =========================================================================
+    # EXPOSURE CONTROL (Step 87)
+    # =========================================================================
+
+    def set_exposure(self, exposure_ms: float) -> bool:
+        """
+        Set camera exposure time.
+
+        Args:
+            exposure_ms: Exposure time in milliseconds
+
+        Returns:
+            True if successful
+        """
+        if not self._camera:
+            logger.warning("Cannot set exposure: camera not initialized")
+            return False
+
+        try:
+            # Validate exposure range
+            min_exp, max_exp = self.get_exposure_range()
+            if not min_exp <= exposure_ms <= max_exp:
+                logger.warning(f"Exposure {exposure_ms}ms out of range ({min_exp}-{max_exp}ms)")
+                return False
+
+            # Convert to microseconds for ASI API
+            exposure_us = int(exposure_ms * 1000)
+            self._camera.set_control_value(self._asi.ASI_EXPOSURE, exposure_us)
+            self._settings.exposure_ms = exposure_ms
+            logger.debug(f"Set exposure to {exposure_ms}ms")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to set exposure: {e}")
+            return False
+
+    def get_exposure(self) -> float:
+        """
+        Get current exposure time in milliseconds.
+
+        Returns:
+            Current exposure in ms
+        """
+        if not self._camera:
+            return self._settings.exposure_ms
+
+        try:
+            exposure_us = self._camera.get_control_value(self._asi.ASI_EXPOSURE)[0]
+            return exposure_us / 1000.0  # Convert to ms
+        except Exception:
+            return self._settings.exposure_ms
+
+    def get_exposure_range(self) -> Tuple[float, float]:
+        """
+        Get supported exposure range in milliseconds.
+
+        Returns:
+            Tuple of (min_ms, max_ms)
+        """
+        if not self._camera:
+            return (0.001, 3600000.0)  # 1us to 1hr default
+
+        try:
+            info = self._camera.get_controls()[self._asi.ASI_EXPOSURE]
+            # Convert from microseconds to milliseconds
+            return (info["MinValue"] / 1000.0, info["MaxValue"] / 1000.0)
+        except Exception:
+            return (0.001, 3600000.0)
+
+    # =========================================================================
+    # BINNING CONTROL (Step 88)
+    # =========================================================================
+
+    def set_binning(self, binning: int) -> bool:
+        """
+        Set camera binning mode.
+
+        Args:
+            binning: Binning factor (1, 2, 3, or 4)
+
+        Returns:
+            True if successful
+        """
+        if not self._camera:
+            logger.warning("Cannot set binning: camera not initialized")
+            return False
+
+        supported = self.get_supported_binning()
+        if binning not in supported:
+            logger.warning(f"Binning {binning}x{binning} not supported. Supported: {supported}")
+            return False
+
+        try:
+            # Get current ROI
+            roi_info = self._camera.get_roi()
+            # Set new ROI with updated binning
+            self._camera.set_roi(
+                roi_info[0], roi_info[1],  # x, y
+                roi_info[2], roi_info[3],  # width, height
+                binning
+            )
+            self._settings.binning = binning
+            logger.debug(f"Set binning to {binning}x{binning}")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to set binning: {e}")
+            return False
+
+    def get_binning(self) -> int:
+        """
+        Get current binning mode.
+
+        Returns:
+            Current binning factor
+        """
+        if not self._camera:
+            return self._settings.binning
+
+        try:
+            roi_info = self._camera.get_roi()
+            return roi_info[4]  # binning is 5th element
+        except Exception:
+            return self._settings.binning
+
+    def get_supported_binning(self) -> List[int]:
+        """
+        Get supported binning modes.
+
+        Returns:
+            List of supported binning factors
+        """
+        if not self._camera or not self._info:
+            return [1, 2, 4]  # Default ZWO support
+
+        try:
+            props = self._camera.get_camera_property()
+            bins = props.get("SupportedBins", [1, 2, 4])
+            return list(bins)
+        except Exception:
+            return [1, 2, 4]
+
+    # =========================================================================
+    # TEMPERATURE MONITORING (Step 95)
+    # =========================================================================
+
+    def get_temperature_status(self) -> dict:
+        """
+        Get detailed temperature status.
+
+        Returns:
+            Dict with temperature information
+        """
+        result = {
+            "sensor_temp_c": None,
+            "target_temp_c": self._settings.target_temp_c,
+            "cooler_on": self._settings.cooler_on,
+            "cooler_power_percent": None,
+            "has_cooler": False,
+        }
+
+        if not self._camera or not self._info:
+            return result
+
+        result["has_cooler"] = self._info.has_cooler
+
+        if not self._info.has_cooler:
+            return result
+
+        try:
+            # Get current sensor temperature
+            temp = self._camera.get_control_value(self._asi.ASI_TEMPERATURE)[0]
+            result["sensor_temp_c"] = temp / 10.0  # Reported in 0.1°C
+
+            # Get cooler power
+            power = self._camera.get_control_value(self._asi.ASI_COOLER_POWER_PERC)[0]
+            result["cooler_power_percent"] = float(power)
+
+            # Get cooler state
+            cooler_on = self._camera.get_control_value(self._asi.ASI_COOLER_ON)[0]
+            result["cooler_on"] = cooler_on == 1
+
+        except Exception as e:
+            logger.debug(f"Error reading temperature status: {e}")
+
+        return result
+
+    def set_cooler(self, enabled: bool, target_temp_c: Optional[float] = None) -> bool:
+        """
+        Control camera cooler.
+
+        Args:
+            enabled: Turn cooler on/off
+            target_temp_c: Target temperature (required if enabling)
+
+        Returns:
+            True if successful
+        """
+        if not self._camera or not self._info or not self._info.has_cooler:
+            logger.warning("Camera does not have a cooler")
+            return False
+
+        try:
+            if enabled:
+                if target_temp_c is None:
+                    target_temp_c = self._settings.target_temp_c or -10.0
+
+                self._camera.set_control_value(
+                    self._asi.ASI_TARGET_TEMP,
+                    int(target_temp_c)
+                )
+                self._camera.set_control_value(self._asi.ASI_COOLER_ON, 1)
+                self._settings.target_temp_c = target_temp_c
+                self._settings.cooler_on = True
+                logger.info(f"Cooler enabled, target: {target_temp_c}°C")
+            else:
+                self._camera.set_control_value(self._asi.ASI_COOLER_ON, 0)
+                self._settings.cooler_on = False
+                logger.info("Cooler disabled")
+
+            return True
+        except Exception as e:
+            logger.error(f"Failed to control cooler: {e}")
+            return False
+
+    # =========================================================================
+    # CAPTURE ABORT (Step 96)
+    # =========================================================================
+
+    async def abort_capture(self) -> bool:
+        """
+        Immediately abort any capture in progress.
+
+        Returns:
+            True if capture was aborted
+        """
+        if not self._capturing:
+            logger.debug("No capture to abort")
+            return False
+
+        logger.warning("Aborting capture!")
+        self._capturing = False
+
+        # Mark session as incomplete
+        if self._current_session:
+            self._current_session.complete = False
+            self._current_session.error = "Capture aborted by user"
+
+        # Stop video capture if running
+        if self._camera:
+            try:
+                self._camera.stop_video_capture()
+            except Exception:
+                pass  # May not be in video mode
+
+        # Brief delay to let capture loop exit
+        await asyncio.sleep(0.1)
+
+        logger.info("Capture aborted")
+        return True
+
+    def is_capture_in_progress(self) -> bool:
+        """Check if a capture is currently in progress."""
+        return self._capturing
+
+    def get_capture_progress(self) -> Optional[dict]:
+        """
+        Get progress of current capture.
+
+        Returns:
+            Dict with capture progress or None if no capture
+        """
+        if not self._current_session:
+            return None
+
+        session = self._current_session
+        elapsed = (datetime.now() - session.start_time).total_seconds()
+
+        return {
+            "session_id": session.session_id,
+            "target": session.target,
+            "frame_count": session.frame_count,
+            "elapsed_sec": elapsed,
+            "duration_sec": session.duration_sec,
+            "progress_percent": min(100.0, (elapsed / session.duration_sec) * 100) if session.duration_sec > 0 else 0,
+            "output_path": str(session.output_path),
+        }
+
 
 # =============================================================================
 # MAIN (for testing)

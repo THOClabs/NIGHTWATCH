@@ -171,21 +171,21 @@ Create installation scripts, hardware integration guides, and prepare for Nevada
 | 83 | Core Service Completion | camera | Add ZWO ASI SDK wrapper import handling | 82 | 3 | 2 | Not Started | Optional dependency |
 | 84 | Core Service Completion | camera | Implement camera detection and enumeration | 83 | 3 | 2 | Not Started | List connected cameras |
 | 85 | Core Service Completion | camera | Implement camera connection with settings | 84 | 3 | 2 | Not Started | Connect by ID |
-| 86 | Core Service Completion | camera | Implement gain control (set/get) | 85 | 2 | 1 | Not Started | Exposure control |
-| 87 | Core Service Completion | camera | Implement exposure time control (set/get) | 86 | 2 | 1 | Not Started | Exposure control |
-| 88 | Core Service Completion | camera | Implement binning control (1x1, 2x2, 4x4) | 87 | 2 | 1 | Not Started | Resolution control |
+| 86 | Core Service Completion | camera | Implement gain control (set/get) | 85 | 2 | 1 | Complete | set_gain(), get_gain(), get_gain_range() in asi_camera.py |
+| 87 | Core Service Completion | camera | Implement exposure time control (set/get) | 86 | 2 | 1 | Complete | set_exposure(), get_exposure(), get_exposure_range() in asi_camera.py |
+| 88 | Core Service Completion | camera | Implement binning control (1x1, 2x2, 4x4) | 87 | 2 | 1 | Complete | set_binning(), get_binning(), get_supported_binning() in asi_camera.py |
 | 89 | Core Service Completion | camera | Implement ROI (region of interest) control | 88 | 3 | 2 | Not Started | Subframe capture |
 | 90 | Core Service Completion | camera | Implement single frame capture | 89 | 3 | 2 | Not Started | Still image capture |
 | 91 | Core Service Completion | camera | Implement video/streaming capture mode | 90 | 4 | 3 | Not Started | Planetary imaging |
 | 92 | Core Service Completion | camera | Implement image download and format conversion | 91 | 3 | 2 | Not Started | RAW to usable format |
 | 93 | Core Service Completion | camera | Add FITS header writing | 92 | 3 | 2 | Not Started | Metadata for astrometry |
 | 94 | Core Service Completion | camera | Implement cooling control (setpoint, power) | 93 | 3 | 2 | Not Started | Temperature regulation |
-| 95 | Core Service Completion | camera | Implement temperature monitoring | 94 | 2 | 1 | Not Started | Sensor temperature |
-| 96 | Core Service Completion | camera | Add capture abort functionality | 95 | 2 | 1 | Not Started | Cancel exposure |
+| 95 | Core Service Completion | camera | Implement temperature monitoring | 94 | 2 | 1 | Complete | get_temperature_status(), set_cooler() in asi_camera.py |
+| 96 | Core Service Completion | camera | Add capture abort functionality | 95 | 2 | 1 | Complete | abort_capture(), get_capture_progress() in asi_camera.py |
 | 97 | Core Service Completion | camera | Implement capture progress callbacks | 96 | 3 | 2 | Not Started | Status updates |
 | 98 | Core Service Completion | camera | Add SER file recording for planetary | 97 | 4 | 3 | Not Started | Video format |
 | 99 | Core Service Completion | camera | Create mock camera for testing | 98 | 3 | 2 | Not Started | Simulation mode |
-| 100 | Core Service Completion | camera | Write unit tests for camera control | 99 | 2 | 2 | Not Started | Test coverage |
+| 100 | Core Service Completion | camera | Write unit tests for camera control | 99 | 2 | 2 | Complete | test_camera_service.py (26 tests) |
 | 101 | Core Service Completion | camera | Write integration test with simulator | 100 | 3 | 2 | Not Started | End-to-end test |
 | 102 | Core Service Completion | astrometry | Review plate_solver.py current implementation | None | 2 | 1 | Complete | Full astrometry.net/ASTAP, WCS parsing, mount sync |
 | 103 | Core Service Completion | astrometry | Implement astrometry.net local solver backend | 102 | 4 | 4 | Not Started | Primary solver |
@@ -204,7 +204,7 @@ Create installation scripts, hardware integration guides, and prepare for Nevada
 | 116 | Core Service Completion | astrometry | Implement pointing error calculation | 115 | 3 | 2 | Not Started | Mount correction |
 | 117 | Core Service Completion | astrometry | Add center_on_object() sync method | 116 | 3 | 2 | Not Started | Pointing refinement |
 | 118 | Core Service Completion | astrometry | Create mock solver for testing | 117 | 3 | 2 | Not Started | Simulation mode |
-| 119 | Core Service Completion | astrometry | Write unit tests for solver backends | 118 | 2 | 2 | Not Started | Test coverage |
+| 119 | Core Service Completion | astrometry | Write unit tests for solver backends | 118 | 2 | 2 | Complete | test_plate_solver.py (21 tests) |
 | 120 | Core Service Completion | astrometry | Write integration test with camera | 119 | 3 | 2 | Not Started | End-to-end test |
 | 121 | Core Service Completion | alerts | Review alert_manager.py current implementation | None | 2 | 1 | Complete | Understand gaps |
 | 122 | Core Service Completion | alerts | Implement SMTP email notification channel | 121 | 3 | 2 | Complete | Email alerts |
