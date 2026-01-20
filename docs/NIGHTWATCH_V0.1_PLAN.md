@@ -454,7 +454,7 @@ Create installation scripts, hardware integration guides, and prepare for Nevada
 | 366 | Tool Handler Implementation | ephemeris_tools | Add twilight phase details | 365 | 2 | 1 | Complete | Civil/nautical/astro descriptions |
 | 367 | Tool Handler Implementation | ephemeris_tools | Implement whats_up_tonight handler | 366 | 3 | 2 | Not Started | Observing list |
 | 368 | Tool Handler Implementation | ephemeris_tools | Add object prioritization by visibility window | 367 | 3 | 2 | Not Started | Best timing |
-| 369 | Tool Handler Implementation | ephemeris_tools | Write unit tests for ephemeris tool handlers | 368 | 2 | 2 | Not Started | Test coverage |
+| 369 | Tool Handler Implementation | ephemeris_tools | Write unit tests for ephemeris tool handlers | 368 | 2 | 2 | Complete | TestEphemerisToolHandlers in test_telescope_tools.py (5 tests) |
 | 370 | Tool Handler Implementation | weather_tools | Implement get_weather handler | 257 | 2 | 1 | Complete | Enhanced get_weather() with full conditions |
 | 371 | Tool Handler Implementation | weather_tools | Add formatted temperature (F and C) | 370 | 2 | 1 | Complete | Both F and C in get_weather response |
 | 372 | Tool Handler Implementation | weather_tools | Implement get_wind_speed handler | 371 | 2 | 1 | Complete | get_wind_speed() with direction |
@@ -463,7 +463,7 @@ Create installation scripts, hardware integration guides, and prepare for Nevada
 | 375 | Tool Handler Implementation | weather_tools | Add sky quality (SQM) in response | 374 | 2 | 1 | Complete | SQM mag/arcsec² with quality assessment |
 | 376 | Tool Handler Implementation | weather_tools | Implement get_seeing_prediction handler | 375 | 3 | 2 | Not Started | Image quality |
 | 377 | Tool Handler Implementation | weather_tools | Add FWHM estimate | 376 | 3 | 2 | Not Started | Arcsec estimate |
-| 378 | Tool Handler Implementation | weather_tools | Write unit tests for weather tool handlers | 377 | 2 | 2 | Not Started | Test coverage |
+| 378 | Tool Handler Implementation | weather_tools | Write unit tests for weather tool handlers | 377 | 2 | 2 | Complete | TestWeatherToolHandlers in test_telescope_tools.py (4 tests) |
 | 379 | Tool Handler Implementation | safety_tools | Implement is_safe_to_observe handler | 257 | 2 | 1 | Complete | Enhanced is_safe_to_observe() with context |
 | 380 | Tool Handler Implementation | safety_tools | Add detailed reason if unsafe | 379 | 2 | 1 | Complete | Categorized reasons with current readings |
 | 381 | Tool Handler Implementation | safety_tools | Implement get_sensor_health handler | 380 | 2 | 1 | Complete | get_sensor_health() returns string status |
@@ -477,7 +477,7 @@ Create installation scripts, hardware integration guides, and prepare for Nevada
 | 389 | Tool Handler Implementation | session_tools | Add filtering by date range | 388 | 2 | 1 | Complete | start_date, end_date parameters |
 | 390 | Tool Handler Implementation | session_tools | Implement set_voice_style handler | 389 | 2 | 1 | Complete | set_voice_style() with _voice_state tracking |
 | 391 | Tool Handler Implementation | session_tools | Add style options (normal, alert, calm, technical) | 390 | 2 | 1 | Complete | normal, alert, calm, technical with rate adjustments |
-| 392 | Tool Handler Implementation | session_tools | Write unit tests for session tool handlers | 391 | 2 | 2 | Not Started | Test coverage |
+| 392 | Tool Handler Implementation | session_tools | Write unit tests for session tool handlers | 391 | 2 | 2 | Complete | TestSessionToolHandlers in test_telescope_tools.py (4 tests) |
 | 393 | Tool Handler Implementation | guiding_tools | Implement start_guiding handler | 257 | 3 | 2 | Not Started | Begin guiding |
 | 394 | Tool Handler Implementation | guiding_tools | Add auto star selection option | 393 | 2 | 1 | Not Started | Convenience |
 | 395 | Tool Handler Implementation | guiding_tools | Implement stop_guiding handler | 394 | 2 | 1 | Complete | stop_guiding() with stop/stop_guiding fallback |
@@ -485,7 +485,7 @@ Create installation scripts, hardware integration guides, and prepare for Nevada
 | 397 | Tool Handler Implementation | guiding_tools | Add RMS in arcseconds | 396 | 2 | 1 | Complete | RMS RA/Dec/total with quality assessment |
 | 398 | Tool Handler Implementation | guiding_tools | Implement dither handler | 397 | 3 | 2 | Not Started | Imaging workflow |
 | 399 | Tool Handler Implementation | guiding_tools | Add dither amount parameter | 398 | 2 | 1 | Not Started | Customizable |
-| 400 | Tool Handler Implementation | guiding_tools | Write unit tests for guiding tool handlers | 399 | 2 | 2 | Not Started | Test coverage |
+| 400 | Tool Handler Implementation | guiding_tools | Write unit tests for guiding tool handlers | 399 | 2 | 2 | Complete | TestGuidingToolHandlers in test_telescope_tools.py (5 tests) |
 | 401 | Tool Handler Implementation | camera_tools | Implement start_capture handler | 257 | 3 | 2 | Not Started | Begin imaging |
 | 402 | Tool Handler Implementation | camera_tools | Add exposure and gain parameters | 401 | 2 | 1 | Not Started | Capture settings |
 | 403 | Tool Handler Implementation | camera_tools | Implement stop_capture handler | 402 | 2 | 1 | Complete | stop_capture() with abort_exposure fallback |
@@ -495,7 +495,7 @@ Create installation scripts, hardware integration guides, and prepare for Nevada
 | 407 | Tool Handler Implementation | camera_tools | Add gain range validation | 406 | 2 | 1 | Complete | Dynamic range check via get_gain_range |
 | 408 | Tool Handler Implementation | camera_tools | Implement set_camera_exposure handler | 407 | 2 | 1 | Complete | set_camera_exposure() with smart formatting |
 | 409 | Tool Handler Implementation | camera_tools | Add exposure range validation | 408 | 2 | 1 | Complete | Dynamic range check via get_exposure_range |
-| 410 | Tool Handler Implementation | camera_tools | Write unit tests for camera tool handlers | 409 | 2 | 2 | Not Started | Test coverage |
+| 410 | Tool Handler Implementation | camera_tools | Write unit tests for camera tool handlers | 409 | 2 | 2 | Complete | TestCameraToolHandlers in test_telescope_tools.py (5 tests) |
 | 411 | Tool Handler Implementation | focus_tools | Implement auto_focus handler | 257 | 3 | 2 | Not Started | Begin focus |
 | 412 | Tool Handler Implementation | focus_tools | Add algorithm selection parameter | 411 | 2 | 1 | Not Started | V-curve, HFD |
 | 413 | Tool Handler Implementation | focus_tools | Implement get_focus_status handler | 412 | 2 | 1 | Complete | get_focus_status() with position, temp, HFD |
@@ -503,7 +503,7 @@ Create installation scripts, hardware integration guides, and prepare for Nevada
 | 415 | Tool Handler Implementation | focus_tools | Implement move_focus handler | 414 | 2 | 1 | Complete | move_focus() relative/absolute with validation |
 | 416 | Tool Handler Implementation | focus_tools | Add direction and step parameters | 415 | 2 | 1 | Complete | steps, direction (in/out), position params |
 | 417 | Tool Handler Implementation | focus_tools | Implement enable_temp_compensation handler | 416 | 2 | 1 | Complete | enable_temp_compensation() toggle with feedback |
-| 418 | Tool Handler Implementation | focus_tools | Write unit tests for focus tool handlers | 417 | 2 | 2 | Not Started | Test coverage |
+| 418 | Tool Handler Implementation | focus_tools | Write unit tests for focus tool handlers | 417 | 2 | 2 | Complete | TestFocusToolHandlers in test_telescope_tools.py (5 tests) |
 | 419 | Tool Handler Implementation | astrometry_tools | Implement plate_solve handler | 257 | 3 | 2 | Complete | plate_solve() with hint and timeout in telescope_tools.py |
 | 420 | Tool Handler Implementation | astrometry_tools | Add timeout parameter | 419 | 2 | 1 | Complete | timeout_sec parameter (default 30s) |
 | 421 | Tool Handler Implementation | astrometry_tools | Implement get_pointing_error handler | 420 | 2 | 1 | Complete | get_pointing_error() compares mount vs solve |

@@ -583,6 +583,383 @@ class TestSafetyToolHandlers:
 
 
 # ============================================================================
+# Ephemeris Tool Handler Tests (Step 369)
+# ============================================================================
+
+class TestEphemerisToolHandlers:
+    """Tests for ephemeris tool handlers."""
+
+    def test_ephemeris_tools_defined(self):
+        """Verify all ephemeris tools are defined."""
+        ephemeris_tool_names = [
+            "get_planet_position",
+            "get_visible_planets",
+            "get_moon_info",
+            "is_it_dark",
+        ]
+        tool_names = {t.name for t in TELESCOPE_TOOLS}
+        for name in ephemeris_tool_names:
+            assert name in tool_names, f"Ephemeris tool '{name}' not found"
+
+    def test_get_planet_position_parameters(self):
+        """Verify get_planet_position has planet parameter."""
+        registry = ToolRegistry()
+        tool = registry.get_tool("get_planet_position")
+        assert tool is not None
+
+        param_names = {p.name for p in tool.parameters}
+        assert "planet" in param_names
+
+        planet_param = next(p for p in tool.parameters if p.name == "planet")
+        assert planet_param.required is True
+        assert planet_param.type == "string"
+
+    def test_get_visible_planets_parameters(self):
+        """Verify get_visible_planets has min_altitude parameter."""
+        registry = ToolRegistry()
+        tool = registry.get_tool("get_visible_planets")
+        assert tool is not None
+
+        param_names = {p.name for p in tool.parameters}
+        assert "min_altitude" in param_names
+
+        alt_param = next(p for p in tool.parameters if p.name == "min_altitude")
+        assert alt_param.required is False  # Optional with default
+
+    def test_ephemeris_handlers_created(self):
+        """Verify ephemeris handlers are created in default handlers."""
+        handlers = create_default_handlers()
+
+        ephemeris_handlers = [
+            "get_planet_position",
+            "get_visible_planets",
+            "get_moon_info",
+            "is_it_dark",
+        ]
+
+        for handler_name in ephemeris_handlers:
+            assert handler_name in handlers, f"Handler '{handler_name}' not created"
+            assert callable(handlers[handler_name])
+
+    def test_ephemeris_tools_in_correct_category(self):
+        """Verify ephemeris tools are in EPHEMERIS category."""
+        registry = ToolRegistry()
+        ephemeris_tools = registry.get_tools_by_category(ToolCategory.EPHEMERIS)
+        ephemeris_names = {t.name for t in ephemeris_tools}
+
+        expected = ["get_planet_position", "get_visible_planets", "get_moon_info", "is_it_dark"]
+        for name in expected:
+            assert name in ephemeris_names, f"'{name}' not in EPHEMERIS category"
+
+
+# ============================================================================
+# Weather Tool Handler Tests (Step 378)
+# ============================================================================
+
+class TestWeatherToolHandlers:
+    """Tests for weather tool handlers."""
+
+    def test_weather_tools_defined(self):
+        """Verify all weather tools are defined."""
+        weather_tool_names = [
+            "get_weather",
+            "get_cloud_status",
+        ]
+        tool_names = {t.name for t in TELESCOPE_TOOLS}
+        for name in weather_tool_names:
+            assert name in tool_names, f"Weather tool '{name}' not found"
+
+    def test_get_weather_no_required_params(self):
+        """Verify get_weather has no required parameters."""
+        registry = ToolRegistry()
+        tool = registry.get_tool("get_weather")
+        assert tool is not None
+
+        required_params = [p for p in tool.parameters if p.required]
+        assert len(required_params) == 0
+
+    def test_weather_handlers_created(self):
+        """Verify weather handlers are created in default handlers."""
+        handlers = create_default_handlers()
+
+        weather_handlers = [
+            "get_weather",
+            "get_cloud_status",
+        ]
+
+        for handler_name in weather_handlers:
+            assert handler_name in handlers, f"Handler '{handler_name}' not created"
+            assert callable(handlers[handler_name])
+
+    def test_weather_tools_in_correct_category(self):
+        """Verify weather tools are in WEATHER category."""
+        registry = ToolRegistry()
+        weather_tools = registry.get_tools_by_category(ToolCategory.WEATHER)
+        weather_names = {t.name for t in weather_tools}
+
+        expected = ["get_weather", "get_cloud_status"]
+        for name in expected:
+            assert name in weather_names, f"'{name}' not in WEATHER category"
+
+
+# ============================================================================
+# Session Tool Handler Tests (Step 392)
+# ============================================================================
+
+class TestSessionToolHandlers:
+    """Tests for session tool handlers."""
+
+    def test_session_tools_defined(self):
+        """Verify all session tools are defined."""
+        session_tool_names = [
+            "confirm_command",
+            "get_observation_log",
+            "set_voice_style",
+        ]
+        tool_names = {t.name for t in TELESCOPE_TOOLS}
+        for name in session_tool_names:
+            assert name in tool_names, f"Session tool '{name}' not found"
+
+    def test_confirm_command_parameters(self):
+        """Verify confirm_command has action parameter."""
+        registry = ToolRegistry()
+        tool = registry.get_tool("confirm_command")
+        assert tool is not None
+
+        param_names = {p.name for p in tool.parameters}
+        assert "action" in param_names
+
+        action_param = next(p for p in tool.parameters if p.name == "action")
+        assert action_param.required is True
+        assert action_param.type == "string"
+
+    def test_set_voice_style_parameters(self):
+        """Verify set_voice_style has style parameter with enum."""
+        registry = ToolRegistry()
+        tool = registry.get_tool("set_voice_style")
+        assert tool is not None
+
+        param_names = {p.name for p in tool.parameters}
+        assert "style" in param_names
+
+        style_param = next(p for p in tool.parameters if p.name == "style")
+        assert style_param.required is True
+        assert style_param.enum is not None
+        assert len(style_param.enum) >= 2  # At least 2 style options
+
+    def test_session_handlers_created(self):
+        """Verify session handlers are created in default handlers."""
+        handlers = create_default_handlers()
+
+        session_handlers = [
+            "confirm_command",
+            "get_observation_log",
+            "set_voice_style",
+        ]
+
+        for handler_name in session_handlers:
+            assert handler_name in handlers, f"Handler '{handler_name}' not created"
+            assert callable(handlers[handler_name])
+
+
+# ============================================================================
+# Guiding Tool Handler Tests (Step 400)
+# ============================================================================
+
+class TestGuidingToolHandlers:
+    """Tests for guiding tool handlers."""
+
+    def test_guiding_tools_defined(self):
+        """Verify all guiding tools are defined."""
+        guiding_tool_names = [
+            "stop_guiding",
+            "get_guiding_status",
+        ]
+        tool_names = {t.name for t in TELESCOPE_TOOLS}
+        for name in guiding_tool_names:
+            assert name in tool_names, f"Guiding tool '{name}' not found"
+
+    def test_stop_guiding_no_required_params(self):
+        """Verify stop_guiding has no required parameters."""
+        registry = ToolRegistry()
+        tool = registry.get_tool("stop_guiding")
+        assert tool is not None
+
+        required_params = [p for p in tool.parameters if p.required]
+        assert len(required_params) == 0
+
+    def test_get_guiding_status_no_required_params(self):
+        """Verify get_guiding_status has no required parameters."""
+        registry = ToolRegistry()
+        tool = registry.get_tool("get_guiding_status")
+        assert tool is not None
+
+        required_params = [p for p in tool.parameters if p.required]
+        assert len(required_params) == 0
+
+    def test_guiding_handlers_created(self):
+        """Verify guiding handlers are created in default handlers."""
+        handlers = create_default_handlers()
+
+        guiding_handlers = [
+            "stop_guiding",
+            "get_guiding_status",
+        ]
+
+        for handler_name in guiding_handlers:
+            assert handler_name in handlers, f"Handler '{handler_name}' not created"
+            assert callable(handlers[handler_name])
+
+    def test_guiding_tools_in_correct_category(self):
+        """Verify guiding tools are in GUIDING category."""
+        registry = ToolRegistry()
+        guiding_tools = registry.get_tools_by_category(ToolCategory.GUIDING)
+        guiding_names = {t.name for t in guiding_tools}
+
+        expected = ["stop_guiding", "get_guiding_status"]
+        for name in expected:
+            assert name in guiding_names, f"'{name}' not in GUIDING category"
+
+
+# ============================================================================
+# Camera Tool Handler Tests (Step 410)
+# ============================================================================
+
+class TestCameraToolHandlers:
+    """Tests for camera tool handlers."""
+
+    def test_camera_tools_defined(self):
+        """Verify all camera tools are defined."""
+        camera_tool_names = [
+            "stop_capture",
+            "get_camera_status",
+            "set_camera_gain",
+            "set_camera_exposure",
+        ]
+        tool_names = {t.name for t in TELESCOPE_TOOLS}
+        for name in camera_tool_names:
+            assert name in tool_names, f"Camera tool '{name}' not found"
+
+    def test_set_camera_gain_parameters(self):
+        """Verify set_camera_gain has gain parameter."""
+        registry = ToolRegistry()
+        tool = registry.get_tool("set_camera_gain")
+        assert tool is not None
+
+        param_names = {p.name for p in tool.parameters}
+        assert "gain" in param_names
+
+        gain_param = next(p for p in tool.parameters if p.name == "gain")
+        assert gain_param.required is True
+        assert gain_param.type == "number"
+
+    def test_set_camera_exposure_parameters(self):
+        """Verify set_camera_exposure has exposure_ms parameter."""
+        registry = ToolRegistry()
+        tool = registry.get_tool("set_camera_exposure")
+        assert tool is not None
+
+        param_names = {p.name for p in tool.parameters}
+        assert "exposure_ms" in param_names
+
+        exp_param = next(p for p in tool.parameters if p.name == "exposure_ms")
+        assert exp_param.required is True
+        assert exp_param.type == "number"
+
+    def test_camera_handlers_created(self):
+        """Verify camera handlers are created in default handlers."""
+        handlers = create_default_handlers()
+
+        camera_handlers = [
+            "stop_capture",
+            "get_camera_status",
+            "set_camera_gain",
+            "set_camera_exposure",
+        ]
+
+        for handler_name in camera_handlers:
+            assert handler_name in handlers, f"Handler '{handler_name}' not created"
+            assert callable(handlers[handler_name])
+
+    def test_camera_tools_in_correct_category(self):
+        """Verify camera tools are in CAMERA category."""
+        registry = ToolRegistry()
+        camera_tools = registry.get_tools_by_category(ToolCategory.CAMERA)
+        camera_names = {t.name for t in camera_tools}
+
+        expected = ["stop_capture", "get_camera_status", "set_camera_gain", "set_camera_exposure"]
+        for name in expected:
+            assert name in camera_names, f"'{name}' not in CAMERA category"
+
+
+# ============================================================================
+# Focus Tool Handler Tests (Step 418)
+# ============================================================================
+
+class TestFocusToolHandlers:
+    """Tests for focus tool handlers."""
+
+    def test_focus_tools_defined(self):
+        """Verify all focus tools are defined."""
+        focus_tool_names = [
+            "get_focus_status",
+            "move_focus",
+            "enable_temp_compensation",
+        ]
+        tool_names = {t.name for t in TELESCOPE_TOOLS}
+        for name in focus_tool_names:
+            assert name in tool_names, f"Focus tool '{name}' not found"
+
+    def test_move_focus_parameters(self):
+        """Verify move_focus has position parameter."""
+        registry = ToolRegistry()
+        tool = registry.get_tool("move_focus")
+        assert tool is not None
+
+        param_names = {p.name for p in tool.parameters}
+        # Should have position parameter for movement
+        assert "position" in param_names
+        position_param = next(p for p in tool.parameters if p.name == "position")
+        assert position_param.type == "number"
+
+    def test_enable_temp_compensation_parameters(self):
+        """Verify enable_temp_compensation has enabled parameter."""
+        registry = ToolRegistry()
+        tool = registry.get_tool("enable_temp_compensation")
+        assert tool is not None
+
+        param_names = {p.name for p in tool.parameters}
+        assert "enabled" in param_names
+
+        enabled_param = next(p for p in tool.parameters if p.name == "enabled")
+        assert enabled_param.type == "boolean"
+
+    def test_focus_handlers_created(self):
+        """Verify focus handlers are created in default handlers."""
+        handlers = create_default_handlers()
+
+        focus_handlers = [
+            "get_focus_status",
+            "move_focus",
+            "enable_temp_compensation",
+        ]
+
+        for handler_name in focus_handlers:
+            assert handler_name in handlers, f"Handler '{handler_name}' not created"
+            assert callable(handlers[handler_name])
+
+    def test_focus_tools_in_correct_category(self):
+        """Verify focus tools are in FOCUS category."""
+        registry = ToolRegistry()
+        focus_tools = registry.get_tools_by_category(ToolCategory.FOCUS)
+        focus_names = {t.name for t in focus_tools}
+
+        expected = ["get_focus_status", "move_focus", "enable_temp_compensation"]
+        for name in expected:
+            assert name in focus_names, f"'{name}' not in FOCUS category"
+
+
+# ============================================================================
 # Run Configuration
 # ============================================================================
 
