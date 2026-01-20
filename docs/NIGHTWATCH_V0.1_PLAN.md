@@ -168,7 +168,7 @@ Create installation scripts, hardware integration guides, and prepare for Nevada
 | 80 | Core Service Completion | catalog | Write unit tests for catalog search | 79 | 2 | 2 | Complete | Test coverage |
 | 81 | Core Service Completion | catalog | Write unit tests for coordinate resolution | 80 | 2 | 1 | Complete | Test coverage |
 | 82 | Core Service Completion | camera | Review asi_camera.py current implementation | None | 2 | 1 | Complete | Full ZWO ASI integration, presets, video capture |
-| 83 | Core Service Completion | camera | Add ZWO ASI SDK wrapper import handling | 82 | 3 | 2 | Not Started | Optional dependency |
+| 83 | Core Service Completion | camera | Add ZWO ASI SDK wrapper import handling | 82 | 3 | 2 | Complete | ASISDKWrapper class with graceful degradation |
 | 84 | Core Service Completion | camera | Implement camera detection and enumeration | 83 | 3 | 2 | Not Started | List connected cameras |
 | 85 | Core Service Completion | camera | Implement camera connection with settings | 84 | 3 | 2 | Not Started | Connect by ID |
 | 86 | Core Service Completion | camera | Implement gain control (set/get) | 85 | 2 | 1 | Complete | set_gain(), get_gain(), get_gain_range() in asi_camera.py |
@@ -571,10 +571,10 @@ Create installation scripts, hardware integration guides, and prepare for Nevada
 | 483 | Safety System Hardening | emergency_response | Implement emergency close sequence | 482 | 3 | 2 | Complete | emergency_close() with retries and timeout |
 | 484 | Safety System Hardening | emergency_response | Add mount safety position for enclosure close | 483 | 3 | 2 | Complete | move_to_safety_position() checks altitude and parks if needed |
 | 485 | Safety System Hardening | emergency_response | Implement power failure response | 484 | 4 | 3 | Not Started | UPS detected |
-| 486 | Safety System Hardening | emergency_response | Add staged shutdown on low battery | 485 | 3 | 2 | Not Started | Graceful degradation |
+| 486 | Safety System Hardening | emergency_response | Add staged shutdown on low battery | 485 | 3 | 2 | Complete | 4-stage shutdown: warning/park/close/shutdown |
 | 487 | Safety System Hardening | emergency_response | Implement weather emergency response | 486 | 3 | 2 | Complete | respond_to_weather() handles storm/high_wind with safety position |
 | 488 | Safety System Hardening | emergency_response | Add rain emergency response | 487 | 3 | 2 | Complete | respond_to_rain() with park+close+alerts |
-| 489 | Safety System Hardening | emergency_response | Implement network failure response | 488 | 3 | 2 | Not Started | Lose connectivity |
+| 489 | Safety System Hardening | emergency_response | Implement network failure response | 488 | 3 | 2 | Complete | check_network_connectivity(), NETWORK_FAILURE action |
 | 490 | Safety System Hardening | emergency_response | Add alert escalation during emergency | 489 | 2 | 1 | Complete | _send_alert() and escalate_alert() |
 | 491 | Safety System Hardening | emergency_response | Write unit tests for emergency response | 490 | 2 | 2 | Complete | tests/unit/test_emergency_response.py (40 tests) |
 | 492 | Safety System Hardening | watchdog | Create nightwatch/watchdog.py module | 457 | 3 | 2 | Complete | System health |
@@ -613,7 +613,7 @@ Create installation scripts, hardware integration guides, and prepare for Nevada
 | 525 | Hardware-in-Loop Simulation | simulators | Implement Ecowitt API simulation | 524 | 3 | 2 | Complete | /get_livedata_info endpoint with JSON response |
 | 526 | Hardware-in-Loop Simulation | simulators | Add weather pattern generation | 525 | 3 | 2 | Complete | Diurnal temp cycles, wind variability, rain events |
 | 527 | Hardware-in-Loop Simulation | simulators | Add configurable weather scenarios | 526 | 2 | 1 | Complete | WeatherScenario enum, SCENARIO_PRESETS in weather_simulator.py |
-| 528 | Hardware-in-Loop Simulation | simulators | Create camera_simulator.py | 527 | 3 | 2 | Not Started | Camera sim |
+| 528 | Hardware-in-Loop Simulation | simulators | Create camera_simulator.py | 527 | 3 | 2 | Complete | CameraSimulator class with 5 ASI models, cooler sim |
 | 529 | Hardware-in-Loop Simulation | simulators | Implement simulated image generation | 528 | 4 | 3 | Not Started | Synthetic stars |
 | 530 | Hardware-in-Loop Simulation | simulators | Add configurable star field | 529 | 3 | 2 | Not Started | Test images |
 | 531 | Hardware-in-Loop Simulation | simulators | Add noise simulation | 530 | 2 | 1 | Complete | Realistic images |

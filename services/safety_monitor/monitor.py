@@ -34,6 +34,12 @@ class SafetyAction(Enum):
     EMERGENCY_CLOSE = "emergency_close"
     DEW_WARNING = "dew_warning"
     COLD_WARNING = "cold_warning"
+    # Step 486: Staged shutdown actions
+    LOW_BATTERY_WARNING = "low_battery_warning"
+    LOW_BATTERY_PARK = "low_battery_park"
+    LOW_BATTERY_SHUTDOWN = "low_battery_shutdown"
+    # Step 489: Network failure action
+    NETWORK_FAILURE = "network_failure"
 
 
 class ObservatoryState(Enum):
@@ -74,6 +80,7 @@ class SafetyStatus:
     enclosure_ok: bool = True      # Step 470
     altitude_ok: bool = True       # Step 467
     meridian_ok: bool = True       # Step 468
+    network_ok: bool = True        # Step 489
 
     # Environmental readings
     temperature_f: Optional[float] = None
@@ -90,11 +97,18 @@ class SafetyStatus:
     ups_battery_percent: Optional[float] = None
     ups_on_battery: bool = False
 
+    # Step 486: Staged battery shutdown status
+    battery_shutdown_stage: Optional[str] = None  # warning/park/shutdown
+
     # Step 470: Enclosure status
     enclosure_open: Optional[bool] = None
 
     # Step 467: Target altitude
     target_altitude_deg: Optional[float] = None
+
+    # Step 489: Network status
+    network_connected: bool = True
+    network_latency_ms: Optional[float] = None
 
 
 @dataclass
@@ -155,6 +169,18 @@ class SafetyThresholds:
     # Step 468: Meridian safety zone (prevent collision during flip)
     meridian_safety_zone_deg: float = 5.0  # Degrees from meridian to warn
     meridian_flip_zone_deg: float = 2.0    # Degrees from meridian (must flip)
+
+    # Step 486: Staged battery shutdown thresholds
+    battery_stage1_percent: float = 50.0   # Stage 1: Warning
+    battery_stage2_percent: float = 30.0   # Stage 2: Park telescope
+    battery_stage3_percent: float = 15.0   # Stage 3: Close roof, prepare shutdown
+    battery_stage4_percent: float = 10.0   # Stage 4: Emergency system shutdown
+
+    # Step 489: Network monitoring thresholds
+    network_check_hosts: List[str] = field(default_factory=lambda: ["8.8.8.8", "1.1.1.1"])
+    network_timeout_sec: float = 5.0       # Timeout for network check
+    network_fail_count_park: int = 3       # Consecutive failures before parking
+    network_latency_warning_ms: float = 500.0  # High latency warning
 
 
 @dataclass
@@ -225,6 +251,16 @@ class SafetyMonitor:
         self._humidity_triggered: bool = False
         self._cloud_triggered: bool = False
         self._daylight_triggered: bool = False
+
+        # Step 486: Staged battery shutdown tracking
+        self._battery_shutdown_stage: int = 0  # 0=normal, 1-4=stages
+        self._battery_stage_time: Optional[datetime] = None
+
+        # Step 489: Network failure tracking
+        self._network_fail_count: int = 0
+        self._network_connected: bool = True
+        self._network_latency_ms: Optional[float] = None
+        self._last_network_check: Optional[datetime] = None
 
     @property
     def state(self) -> ObservatoryState:
@@ -639,6 +675,141 @@ class SafetyMonitor:
 
         return True, reasons
 
+    def _evaluate_staged_battery_shutdown(self) -> tuple[bool, List[str], Optional[str], SafetyAction]:
+        """
+        Evaluate staged battery shutdown (Step 486).
+
+        Implements graceful degradation as battery depletes:
+        - Stage 1 (50%): Warning, reduce non-essential operations
+        - Stage 2 (30%): Park telescope safely
+        - Stage 3 (15%): Close roof, prepare for shutdown
+        - Stage 4 (10%): Emergency system shutdown
+
+        Returns:
+            (is_ok, reasons, stage_name, recommended_action)
+        """
+        reasons = []
+        stage_name = None
+        action = SafetyAction.SAFE_TO_OBSERVE
+
+        if self._ups_battery_percent is None:
+            return True, [], None, action
+
+        battery = self._ups_battery_percent
+        thresholds = self.thresholds
+
+        # Determine current stage
+        if battery < thresholds.battery_stage4_percent:
+            new_stage = 4
+            stage_name = "shutdown"
+            action = SafetyAction.LOW_BATTERY_SHUTDOWN
+            reasons.append(f"CRITICAL: Battery {battery:.0f}% - EMERGENCY SHUTDOWN REQUIRED")
+
+        elif battery < thresholds.battery_stage3_percent:
+            new_stage = 3
+            stage_name = "close"
+            action = SafetyAction.LOW_BATTERY_SHUTDOWN
+            reasons.append(f"Battery {battery:.0f}% - Closing roof and preparing shutdown")
+
+        elif battery < thresholds.battery_stage2_percent:
+            new_stage = 2
+            stage_name = "park"
+            action = SafetyAction.LOW_BATTERY_PARK
+            reasons.append(f"Battery {battery:.0f}% - Parking telescope")
+
+        elif battery < thresholds.battery_stage1_percent:
+            new_stage = 1
+            stage_name = "warning"
+            action = SafetyAction.LOW_BATTERY_WARNING
+            reasons.append(f"Battery {battery:.0f}% - Low battery warning")
+
+        else:
+            new_stage = 0
+
+        # Track stage transitions
+        if new_stage != self._battery_shutdown_stage:
+            if new_stage > self._battery_shutdown_stage:
+                logger.warning(f"Battery shutdown stage increased: {self._battery_shutdown_stage} -> {new_stage}")
+            else:
+                logger.info(f"Battery shutdown stage decreased: {self._battery_shutdown_stage} -> {new_stage}")
+            self._battery_shutdown_stage = new_stage
+            self._battery_stage_time = datetime.now()
+
+        # Only unsafe if in stage 2+ (need to take action)
+        is_ok = new_stage < 2
+        return is_ok, reasons, stage_name, action
+
+    async def check_network_connectivity(self) -> tuple[bool, Optional[float]]:
+        """
+        Check network connectivity (Step 489).
+
+        Pings multiple hosts to verify network is operational.
+
+        Returns:
+            (is_connected, latency_ms)
+        """
+        import socket
+        import time
+
+        hosts = self.thresholds.network_check_hosts
+        timeout = self.thresholds.network_timeout_sec
+
+        for host in hosts:
+            try:
+                start = time.time()
+                # Try TCP connection to port 53 (DNS) as a connectivity check
+                sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                sock.settimeout(timeout)
+                sock.connect((host, 53))
+                sock.close()
+                latency = (time.time() - start) * 1000  # Convert to ms
+                self._network_latency_ms = latency
+                self._network_connected = True
+                self._network_fail_count = 0
+                self._last_network_check = datetime.now()
+                return True, latency
+            except (socket.timeout, socket.error, OSError):
+                continue
+
+        # All hosts failed
+        self._network_fail_count += 1
+        self._last_network_check = datetime.now()
+
+        if self._network_fail_count >= self.thresholds.network_fail_count_park:
+            self._network_connected = False
+
+        return False, None
+
+    def _evaluate_network(self) -> tuple[bool, List[str]]:
+        """
+        Evaluate network connectivity status (Step 489).
+
+        Returns:
+            (is_ok, reasons)
+        """
+        reasons = []
+
+        # Check if we have recent network status
+        if self._last_network_check is None:
+            # No network check performed yet - assume OK but note it
+            return True, ["Network status not yet checked"]
+
+        # Check if network check is stale (older than 2x check interval)
+        age = (datetime.now() - self._last_network_check).total_seconds()
+        if age > 120:  # 2 minutes stale
+            reasons.append("Network status stale - check may be failing")
+
+        if not self._network_connected:
+            reasons.append(f"Network disconnected ({self._network_fail_count} consecutive failures)")
+            return False, reasons
+
+        # Check for high latency
+        if self._network_latency_ms is not None:
+            if self._network_latency_ms > self.thresholds.network_latency_warning_ms:
+                reasons.append(f"High network latency: {self._network_latency_ms:.0f}ms")
+
+        return True, reasons
+
     def evaluate(self) -> SafetyStatus:
         """
         Perform comprehensive safety evaluation.
@@ -668,6 +839,12 @@ class SafetyMonitor:
         # Step 468: Meridian safety
         meridian_ok, meridian_reasons = self._evaluate_meridian()
 
+        # Step 486: Staged battery shutdown
+        battery_shutdown_ok, battery_reasons, battery_stage, battery_action = self._evaluate_staged_battery_shutdown()
+
+        # Step 489: Network status
+        network_ok, network_reasons = self._evaluate_network()
+
         reasons.extend(weather_reasons)
         reasons.extend(cloud_reasons)
         reasons.extend(daylight_reasons)
@@ -676,11 +853,13 @@ class SafetyMonitor:
         reasons.extend(power_reasons)
         reasons.extend(enclosure_reasons)
         reasons.extend(meridian_reasons)
+        reasons.extend(battery_reasons)
+        reasons.extend(network_reasons)
 
         # Determine overall safety and action
         is_safe = (weather_ok and clouds_ok and daylight_ok and
                    rain_holdoff_ok and altitude_ok and power_ok and enclosure_ok and
-                   meridian_ok)
+                   meridian_ok and battery_shutdown_ok and network_ok)
 
         # Check for emergency conditions (rain or power)
         is_emergency = power_emergency  # Step 469: Include power emergency
@@ -691,10 +870,22 @@ class SafetyMonitor:
             elif hasattr(data, 'rain_rate_in_hr') and data.rain_rate_in_hr > 0:
                 is_emergency = True
 
+        # Step 486: Battery shutdown is also an emergency at stage 3+
+        if self._battery_shutdown_stage >= 3:
+            is_emergency = True
+
         # Determine action
         if is_emergency:
             action = SafetyAction.EMERGENCY_CLOSE
             alert_level = AlertLevel.EMERGENCY
+        elif battery_action in [SafetyAction.LOW_BATTERY_SHUTDOWN, SafetyAction.LOW_BATTERY_PARK]:
+            # Step 486: Use battery-specific action
+            action = battery_action
+            alert_level = AlertLevel.CRITICAL
+        elif not network_ok:
+            # Step 489: Network failure - park safely
+            action = SafetyAction.NETWORK_FAILURE
+            alert_level = AlertLevel.WARNING
         elif not daylight_ok:
             action = SafetyAction.PARK_FOR_DAYLIGHT
             alert_level = AlertLevel.INFO
@@ -709,6 +900,10 @@ class SafetyMonitor:
             alert_level = AlertLevel.WARNING
         elif not enclosure_ok:
             action = SafetyAction.PARK_AND_WAIT
+            alert_level = AlertLevel.WARNING
+        elif battery_action == SafetyAction.LOW_BATTERY_WARNING:
+            # Step 486: Low battery warning (still safe but warn)
+            action = SafetyAction.SAFE_TO_OBSERVE
             alert_level = AlertLevel.WARNING
         else:
             action = SafetyAction.SAFE_TO_OBSERVE
@@ -749,6 +944,7 @@ class SafetyMonitor:
             enclosure_ok=enclosure_ok,
             altitude_ok=altitude_ok,
             meridian_ok=meridian_ok,
+            network_ok=network_ok,  # Step 489
             temperature_f=temp,
             humidity_percent=humidity,
             wind_speed_mph=wind,
@@ -760,10 +956,15 @@ class SafetyMonitor:
             # Step 469: Power status
             ups_battery_percent=self._ups_battery_percent,
             ups_on_battery=self._ups_on_battery,
+            # Step 486: Staged battery shutdown
+            battery_shutdown_stage=battery_stage,
             # Step 470: Enclosure status
             enclosure_open=self._enclosure_open,
             # Step 467: Target altitude
             target_altitude_deg=self._target_altitude,
+            # Step 489: Network status
+            network_connected=self._network_connected,
+            network_latency_ms=self._network_latency_ms,
         )
 
         self._last_status = status
@@ -797,6 +998,36 @@ class SafetyMonitor:
                 if self._state in [ObservatoryState.PARKED, ObservatoryState.CLOSED]:
                     logger.info("Conditions safe - Ready to observe")
                     self._state = ObservatoryState.OPEN_IDLE
+
+            # Step 486: Battery shutdown actions
+            elif action == SafetyAction.LOW_BATTERY_WARNING:
+                logger.warning("Low battery warning - reducing non-essential operations")
+                # Could disable non-essential services here
+
+            elif action == SafetyAction.LOW_BATTERY_PARK:
+                logger.warning("Low battery - parking telescope")
+                self._state = ObservatoryState.PARKING
+                self.mount.stop()
+                self.mount.park()
+
+            elif action == SafetyAction.LOW_BATTERY_SHUTDOWN:
+                logger.critical("CRITICAL: Battery depleted - emergency shutdown!")
+                self._state = ObservatoryState.EMERGENCY
+                self.mount.stop()
+                self.mount.park()
+                # Close enclosure if available
+                if self.enclosure:
+                    try:
+                        self.enclosure.close()
+                    except Exception as e:
+                        logger.error(f"Failed to close enclosure: {e}")
+
+            # Step 489: Network failure action
+            elif action == SafetyAction.NETWORK_FAILURE:
+                logger.warning("Network failure - parking telescope for safety")
+                self._state = ObservatoryState.PARKING
+                self.mount.stop()
+                self.mount.park()
 
         except Exception as e:
             logger.error(f"Failed to execute safety action: {e}")

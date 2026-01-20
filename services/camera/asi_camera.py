@@ -8,6 +8,8 @@ POS Panel v2.0 - Day 12 Recommendations (Damian Peach):
 - ROI: Crop to 640x480 for faster capture
 - Binning: 1x1 only (already undersampled at f/6)
 - Format: SER files for stacking, 60-90 seconds each
+
+Step 83: SDK wrapper import handling for graceful degradation
 """
 
 import asyncio
@@ -16,9 +18,161 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
-from typing import Optional, List, Tuple
+from typing import Optional, List, Tuple, Any
 
 logger = logging.getLogger("NIGHTWATCH.Camera")
+
+
+# =============================================================================
+# ZWO ASI SDK Wrapper (Step 83)
+# =============================================================================
+
+class ASISDKWrapper:
+    """
+    Wrapper for ZWO ASI SDK with graceful degradation (Step 83).
+
+    Handles SDK import failures gracefully, providing:
+    - Mock mode when SDK unavailable
+    - Consistent API regardless of SDK presence
+    - Clear error messages for installation guidance
+    """
+
+    # SDK status
+    SDK_AVAILABLE = False
+    SDK_ERROR: Optional[str] = None
+    _sdk = None
+
+    # SDK constants (fallbacks if SDK not available)
+    ASI_GAIN = 0
+    ASI_EXPOSURE = 1
+    ASI_BANDWIDTHOVERLOAD = 6
+    ASI_HIGH_SPEED_MODE = 14
+    ASI_FLIP = 17
+    ASI_TEMPERATURE = 18
+    ASI_TARGET_TEMP = 19
+    ASI_COOLER_ON = 20
+    ASI_COOLER_POWER_PERC = 21
+
+    @classmethod
+    def initialize(cls) -> bool:
+        """
+        Initialize the ASI SDK wrapper.
+
+        Returns:
+            True if SDK is available and initialized
+        """
+        if cls._sdk is not None:
+            return cls.SDK_AVAILABLE
+
+        try:
+            import zwoasi as asi
+            cls._sdk = asi
+            cls.SDK_AVAILABLE = True
+
+            # Copy SDK constants
+            cls.ASI_GAIN = asi.ASI_GAIN
+            cls.ASI_EXPOSURE = asi.ASI_EXPOSURE
+            cls.ASI_BANDWIDTHOVERLOAD = asi.ASI_BANDWIDTHOVERLOAD
+            cls.ASI_HIGH_SPEED_MODE = asi.ASI_HIGH_SPEED_MODE
+            cls.ASI_FLIP = asi.ASI_FLIP
+            cls.ASI_TEMPERATURE = asi.ASI_TEMPERATURE
+            cls.ASI_TARGET_TEMP = asi.ASI_TARGET_TEMP
+            cls.ASI_COOLER_ON = asi.ASI_COOLER_ON
+            cls.ASI_COOLER_POWER_PERC = asi.ASI_COOLER_POWER_PERC
+
+            # Initialize the library
+            try:
+                asi.init()
+                logger.info("ZWO ASI SDK initialized successfully")
+            except Exception as e:
+                # May already be initialized
+                logger.debug(f"ASI init note: {e}")
+
+            return True
+
+        except ImportError as e:
+            cls.SDK_ERROR = (
+                f"ZWO ASI SDK not installed: {e}\n"
+                "Install with: pip install zwoasi\n"
+                "Or download from: https://astronomy-imaging-camera.com/software-drivers"
+            )
+            logger.warning(cls.SDK_ERROR)
+            return False
+
+        except Exception as e:
+            cls.SDK_ERROR = f"Failed to initialize ZWO ASI SDK: {e}"
+            logger.error(cls.SDK_ERROR)
+            return False
+
+    @classmethod
+    def get_sdk(cls) -> Optional[Any]:
+        """Get the SDK module if available."""
+        if not cls.SDK_AVAILABLE:
+            cls.initialize()
+        return cls._sdk
+
+    @classmethod
+    def get_num_cameras(cls) -> int:
+        """Get number of connected cameras."""
+        if not cls.SDK_AVAILABLE:
+            return 0
+        try:
+            return cls._sdk.get_num_cameras()
+        except Exception as e:
+            logger.error(f"Failed to enumerate cameras: {e}")
+            return 0
+
+    @classmethod
+    def list_cameras(cls) -> List[dict]:
+        """
+        List all connected ZWO cameras.
+
+        Returns:
+            List of camera info dictionaries
+        """
+        if not cls.SDK_AVAILABLE:
+            return []
+
+        try:
+            cameras = []
+            num = cls._sdk.get_num_cameras()
+            for i in range(num):
+                try:
+                    cam = cls._sdk.Camera(i)
+                    props = cam.get_camera_property()
+                    cameras.append({
+                        "index": i,
+                        "name": props.get("Name", f"Camera {i}"),
+                        "id": props.get("CameraID", i),
+                        "max_width": props.get("MaxWidth", 0),
+                        "max_height": props.get("MaxHeight", 0),
+                        "is_color": props.get("IsColorCam", False),
+                        "has_cooler": props.get("IsCoolerCam", False),
+                    })
+                    cam.close()
+                except Exception as e:
+                    logger.warning(f"Failed to query camera {i}: {e}")
+            return cameras
+
+        except Exception as e:
+            logger.error(f"Failed to list cameras: {e}")
+            return []
+
+    @classmethod
+    def is_available(cls) -> bool:
+        """Check if SDK is available."""
+        if cls._sdk is None:
+            cls.initialize()
+        return cls.SDK_AVAILABLE
+
+    @classmethod
+    def get_error(cls) -> Optional[str]:
+        """Get SDK initialization error if any."""
+        return cls.SDK_ERROR
+
+
+# Initialize SDK wrapper on module load
+ASISDKWrapper.initialize()
 
 
 class ImageFormat(Enum):
