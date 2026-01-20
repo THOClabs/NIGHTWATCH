@@ -693,10 +693,10 @@ Create installation scripts, hardware integration guides, and prepare for Nevada
 | 605 | Documentation & POS | docs | Update docs/INTEGRATION_PLAN.md for v0.1 | 604 | 2 | 1 | Complete | Alignment |
 | 606 | Documentation & POS | docs | Add architecture diagrams (Mermaid) | 605 | 3 | 2 | Complete | ARCHITECTURE.md with system, voice, safety, data flow diagrams |
 | 607 | Documentation & POS | docs | Add sequence diagrams for key flows | 606 | 3 | 2 | Complete | Catalog resolution, mount slew, weather monitoring sequences |
-| 608 | Documentation & POS | pos | Create POS deliberation for LLM integration | None | 4 | 3 | Not Started | Expert consensus |
-| 609 | Documentation & POS | pos | Add Michael Clive perspective (DGX Spark) | 608 | 3 | 2 | Not Started | AI expert |
-| 610 | Documentation & POS | pos | Add Alec Radford perspective (Whisper) | 609 | 3 | 2 | Not Started | STT expert |
-| 611 | Documentation & POS | pos | Add Michael Hansen perspective (Piper) | 610 | 3 | 2 | Not Started | TTS expert |
+| 608 | Documentation & POS | pos | Create POS deliberation for LLM integration | None | 4 | 3 | Complete | POS_LLM_INTEGRATION.md with 4 expert perspectives |
+| 609 | Documentation & POS | pos | Add Michael Clive perspective (DGX Spark) | 608 | 3 | 2 | Complete | Memory layout, TensorRT-LLM, power considerations |
+| 610 | Documentation & POS | pos | Add Alec Radford perspective (Whisper) | 609 | 3 | 2 | Complete | Astronomy vocab boost, VAD, latency optimization |
+| 611 | Documentation & POS | pos | Add Michael Hansen perspective (Piper) | 610 | 3 | 2 | Complete | Voice selection, streaming synthesis, pronunciation |
 | 612 | Documentation & POS | pos | Document LLM model selection rationale | 611 | 2 | 1 | Complete | Decision record |
 | 613 | Documentation & POS | pos | Create POS deliberation for tool confirmation | 612 | 3 | 2 | Not Started | Safety design |
 | 614 | Documentation & POS | pos | Create POS deliberation for emergency response | 613 | 3 | 2 | Not Started | Safety design |
