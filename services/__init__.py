@@ -73,6 +73,16 @@ Environmental
 - services.safety_monitor: Safety interlock system
 - services.ephemeris: Astronomical calculations (Skyfield)
 
+Meteor Tracking
+---------------
+- services.meteor_tracking: Fireball/meteor monitoring with Lexicon prayers
+  - NASA CNEOS and AMS fireball API clients
+  - Meteor shower calendar (2026 data)
+  - Natural language watch window parsing
+  - Trajectory calculation and debris field prediction
+  - Hopi circles expanding search patterns
+  - Prayer of Finding and Prayer of Watching generation
+
 Data Management
 ---------------
 - services.catalog: Object catalogs (Messier, NGC, IC)

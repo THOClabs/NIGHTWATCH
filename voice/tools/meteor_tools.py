@@ -13,9 +13,7 @@ from typing import List, Optional
 from .telescope_tools import Tool, ToolParameter, ToolCategory
 
 
-# Add METEOR category to ToolCategory (extend existing enum concept)
-# Note: In production, add to the ToolCategory enum in telescope_tools.py
-METEOR_CATEGORY = "meteor"
+# METEOR category now defined in ToolCategory enum (telescope_tools.py)
 
 
 METEOR_TOOLS: List[Tool] = [
@@ -27,7 +25,7 @@ METEOR_TOOLS: List[Tool] = [
         description="Set up a meteor watch window. Accepts natural language like "
                     "'watch for the Perseids next week' or 'keep an eye on the sky tonight'. "
                     "NIGHTWATCH will monitor fireball databases and alert when events are detected.",
-        category=ToolCategory.ALERTS,  # Use ALERTS category for now
+        category=ToolCategory.METEOR,
         parameters=[
             ToolParameter(
                 name="request",
@@ -42,7 +40,7 @@ METEOR_TOOLS: List[Tool] = [
         name="get_meteor_status",
         description="Get the current status of meteor tracking. Shows active watch windows, "
                     "recent detections, and next major meteor shower.",
-        category=ToolCategory.ALERTS,
+        category=ToolCategory.METEOR,
         parameters=[]
     ),
 
@@ -67,7 +65,7 @@ METEOR_TOOLS: List[Tool] = [
         description="Manually trigger a check for new fireballs. Queries NASA CNEOS and "
                     "American Meteor Society databases for recent events visible from "
                     "the current watch location.",
-        category=ToolCategory.ALERTS,
+        category=ToolCategory.METEOR,
         parameters=[]
     ),
 
@@ -75,7 +73,7 @@ METEOR_TOOLS: List[Tool] = [
         name="get_active_watch_windows",
         description="List all currently active meteor watch windows with their locations, "
                     "time ranges, and associated meteor showers.",
-        category=ToolCategory.ALERTS,
+        category=ToolCategory.METEOR,
         parameters=[]
     ),
 ]

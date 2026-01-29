@@ -31,6 +31,7 @@ class ToolCategory(Enum):
     ASTROMETRY = "astrometry"  # v3.0: Plate solving
     ENCLOSURE = "enclosure"  # v3.0: Roof/dome control
     POWER = "power"          # v3.0: Power management
+    METEOR = "meteor"        # Meteor/fireball tracking
 
 
 @dataclass
