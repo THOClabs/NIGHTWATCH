@@ -27,7 +27,9 @@ from typing import TYPE_CHECKING
 from nightwatch import __version__
 from nightwatch.config import NightwatchConfig, load_config
 from nightwatch.exceptions import ConfigurationError, NightwatchError
+from nightwatch.health import HealthChecker
 from nightwatch.logging_config import get_logger, setup_logging
+from nightwatch.orchestrator import Orchestrator
 
 if TYPE_CHECKING:
     from types import FrameType
@@ -241,31 +243,53 @@ async def async_main(args: argparse.Namespace, config: NightwatchConfig) -> int:
 
     logger.info("Starting NIGHTWATCH observatory system...")
 
-    try:
-        # TODO: Initialize orchestrator and services here
-        # This will be implemented in Phase 3 (Orchestrator Development)
+    # Initialize orchestrator
+    orchestrator = Orchestrator(config)
 
+    try:
+        # Health check mode - run checks and exit
         if args.check_health:
             logger.info("Running health checks...")
-            # TODO: Implement health check framework (Step 46+)
-            logger.info("Health checks completed")
-            return 0
+            health_checker = HealthChecker(config)
+            results = await health_checker.check_all()
+
+            # Display results
+            print("\nHealth Check Results:")
+            print("=" * 50)
+            for name, status in results:
+                symbol = "✓" if status.healthy else "✗"
+                print(f"  {symbol} {name}: {status.status.value}")
+                if status.message:
+                    print(f"      {status.message}")
+                if status.latency_ms > 0:
+                    print(f"      Latency: {status.latency_ms:.1f}ms")
+            print("=" * 50)
+            print(f"Summary: {results.summary}")
+
+            return 0 if results.all_required_healthy else 1
+
+        # Start orchestrator and all services
+        if not await orchestrator.start():
+            logger.error("Failed to start orchestrator")
+            return 1
 
         # Main event loop - wait for shutdown signal
         logger.info("Observatory system running. Press Ctrl+C to stop.")
         await shutdown_event.wait()
 
         logger.info("Shutdown signal received, stopping services...")
-        # TODO: Implement graceful shutdown sequence
-        # - Stop voice pipeline
-        # - Park mount
-        # - Close enclosure
-        # - Save session log
+        # Graceful shutdown: parks mount, closes enclosure, saves session log
+        await orchestrator.shutdown(safe=True)
 
         return 0
 
     except Exception as e:
         logger.exception(f"Fatal error in main loop: {e}")
+        # Attempt emergency shutdown
+        try:
+            await orchestrator.shutdown(safe=False)
+        except Exception:
+            pass
         return 1
 
 
