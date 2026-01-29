@@ -10,6 +10,7 @@ This document provides a comprehensive reference for voice commands supported by
 | **Catalog** | "What is M31?" / "Find galaxies in Orion" |
 | **Ephemeris** | "Where is Jupiter?" / "Is it dark?" |
 | **Weather** | "What's the weather?" / "Is it safe?" |
+| **Meteor** | "Watch for meteors tonight" / "Meteor status" |
 | **Guiding** | "Start guiding" / "What's the guiding RMS?" |
 | **Camera** | "Start capture on Jupiter" / "Set gain to 280" |
 | **Focus** | "Auto focus" / "Move focus in 50 steps" |
@@ -163,6 +164,45 @@ This document provides a comprehensive reference for voice commands supported by
 | "Safety status" | Detailed safety report |
 | "Check conditions" | Weather and safety overview |
 | "Sensor health" | Check all sensor status |
+
+---
+
+## Meteor Tracking Commands
+
+NIGHTWATCH includes meteor and fireball monitoring capabilities with NASA CNEOS and American Meteor Society data integration.
+
+### Watch Commands
+
+| Voice Command | Action |
+|--------------|--------|
+| "Watch for meteors tonight" | Create watch window for tonight |
+| "Watch for the Perseids" | Create watch window for specific shower |
+| "Watch the sky from Nevada" | Create watch window with location |
+| "Keep an eye on the sky" | Casual meteor watch |
+
+**Natural language examples:**
+- "Quadrantids peak January 3-4, Nevada should be clear"
+- "Watch for the Perseids next week from Astoria"
+- "Alert me if anything bright shows up tonight"
+
+### Status Commands
+
+| Voice Command | Action |
+|--------------|--------|
+| "Meteor status" | Get watch windows and recent detections |
+| "What's the meteor status?" | Summary of tracking activity |
+| "Check for fireballs" | Manual check of fireball databases |
+| "Active watch windows" | List current watch windows |
+
+### Shower Information
+
+| Voice Command | Action |
+|--------------|--------|
+| "What meteor showers are coming?" | Upcoming showers list |
+| "Tell me about the Perseids" | Specific shower info |
+| "When is the next meteor shower?" | Next major shower |
+
+**Major showers tracked:** Quadrantids, Lyrids, Eta Aquariids, Perseids, Orionids, Leonids, Geminids, Ursids
 
 ---
 
