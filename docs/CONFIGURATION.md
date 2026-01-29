@@ -224,6 +224,38 @@ alerts:
   quiet_hours_end: 18      # 6 PM local
 ```
 
+## Meteor Tracking Configuration
+
+Monitor fireballs and meteor showers using NASA CNEOS and American Meteor Society data:
+
+```yaml
+meteor:
+  enabled: true
+
+  # Data sources
+  cneos_enabled: true      # NASA CNEOS Fireball Database
+  ams_enabled: true        # American Meteor Society reports
+  poll_interval_sec: 300   # Check interval (5 minutes)
+
+  # Watch location (defaults to site coordinates if not set)
+  default_lat: 38.9        # Override site latitude
+  default_lon: -117.4      # Override site longitude
+
+  # Alert thresholds
+  min_magnitude: -4.0      # Minimum brightness to alert (more negative = brighter)
+  max_distance_km: 1000    # Maximum distance from watch location
+
+  # State persistence
+  state_file: "~/.nightwatch/meteor_state.json"
+```
+
+### Watch Window Examples
+
+Natural language watch requests are supported:
+- "Watch for meteors tonight"
+- "Watch for the Perseids next week from Nevada"
+- "Quadrantids peak January 3-4, alert me if anything bright shows up"
+
 ## Voice Pipeline Configuration
 
 ```yaml
