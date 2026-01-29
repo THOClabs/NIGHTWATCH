@@ -171,6 +171,22 @@ ALERT_TEMPLATES = {
         "message": "NIGHTWATCH system shutting down: {reason}.",
         "channels": [AlertChannel.EMAIL]
     },
+    # Meteor tracking templates (presa-nightwatch)
+    "fireball_detected": {
+        "level": AlertLevel.INFO,
+        "message": "Fireball detected: {coordinates}. Magnitude {magnitude}.",
+        "channels": [AlertChannel.PUSH, AlertChannel.EMAIL]
+    },
+    "bright_fireball": {
+        "level": AlertLevel.WARNING,
+        "message": "Bright fireball! {coordinates}, magnitude {magnitude}. Possible debris field.",
+        "channels": [AlertChannel.PUSH, AlertChannel.SMS, AlertChannel.EMAIL]
+    },
+    "meteor_shower_peak": {
+        "level": AlertLevel.INFO,
+        "message": "{shower_name} meteor shower peaks tonight. ZHR: {zhr}/hour.",
+        "channels": [AlertChannel.PUSH]
+    },
 }
 
 
