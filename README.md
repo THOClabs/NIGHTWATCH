@@ -37,6 +37,7 @@ python -m nightwatch.cli --simulate
 - "What's the current position?"
 - "Park the telescope"
 - "What's the weather like?"
+- "Watch for meteors tonight"
 
 See [docs/QUICKSTART.md](docs/QUICKSTART.md) for detailed setup instructions.
 
@@ -110,12 +111,13 @@ NIGHTWATCH/
 ├── docs/research/          # Research documentation and sourcing
 ├── firmware/onstepx_config/ # OnStepX controller configuration
 ├── pos/agents/             # POS retreat simulation personalities
-├── services/               # 13 observatory microservices
+├── services/               # 14 observatory microservices
 │   ├── mount_control/      # Telescope mount interface
 │   ├── camera/             # Imaging and capture
 │   ├── weather/            # Environmental monitoring
 │   ├── safety_monitor/     # Automated safety systems
 │   ├── ephemeris/          # Celestial calculations
+│   ├── meteor_tracking/    # Fireball/meteor monitoring
 │   └── ...                 # guiding, focus, astrometry, etc.
 └── voice/                  # Voice control pipeline
     ├── stt/                # Speech-to-text (Whisper)
