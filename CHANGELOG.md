@@ -10,6 +10,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Initial project structure and documentation
 - Core service implementations (mount control, weather, safety, guiding, encoder, camera, catalog, astrometry, alerts, power, enclosure, focus, ephemeris)
+- **Meteor Tracking Service** (`services/meteor_tracking`)
+  - NASA CNEOS and AMS fireball API clients (async, aiohttp)
+  - Meteor shower calendar with 2026 data for 9 major showers
+  - Natural language watch window parsing ("Watch for Perseids next week")
+  - Trajectory calculation with debris field prediction
+  - Hopi circles: expanding concentric search patterns for ground search
+  - Lexicon prayers: Prayer of Finding and Prayer of Watching generation
+  - Voice tools: 5 commands for meteor tracking via voice pipeline
+  - Alert templates: fireball_detected, bright_fireball, meteor_shower_peak
 - Voice pipeline foundation (Wyoming protocol, STT/TTS services, telescope tools)
 - INDI and ASCOM Alpaca client implementations
 - LX200 and OnStepX extended protocol support
