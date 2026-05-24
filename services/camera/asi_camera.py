@@ -1805,10 +1805,11 @@ class ASICamera:
         sensor temperature until it remains within ``tolerance_c`` of
         ``target_c`` for a continuous window of at least ``stable_secs`` seconds.
 
-        Fixes the fire-and-forget pattern in ``apply_settings`` (lines 562-568)
-        which writes the target temperature once and never confirms the cooler
-        actually reached setpoint. Use this method when callers need to *await*
-        the cooler reaching its target (e.g. before starting a long exposure).
+        Closes the fire-and-forget gap for callers that opt in by calling
+        ``cool_to`` directly. The auto-applied path in ``apply_settings``
+        (lines 562-568) is unchanged and still writes target temp + cooler ON
+        without polling — wire ``cool_to`` in if you need a synchronous setpoint
+        guarantee.
 
         If the sensor temperature drifts back out of tolerance at any point, the
         stability timer is reset and the wait continues until either a new
@@ -1829,6 +1830,21 @@ class ASICamera:
             ``stable_secs`` continuous seconds before ``timeout_s`` elapses.
             False if there is no cooler, the camera handle is missing, or the
             timeout expires before stabilization is achieved.
+
+        Note:
+            The SDK target temp is truncated to int by ZWO's API
+            (``set_cooler`` does ``int(target_c)``). Pass an integer target for
+            predictable behavior; for fine-tolerance use cases
+            (tolerance < 0.5°C), pass ``int(target_c)`` and tighten tolerance
+            accordingly.
+
+        See also:
+            wait_for_temperature: Legacy lenient-poll variant. Returns True on
+                the FIRST in-tolerance reading (no stability window). Returns
+                True (not False) when no cooler is present. Uses
+                ``datetime.now()`` so NTP slewing can perturb its timeout.
+                Prefer ``cool_to`` for new code that needs a genuinely-settled
+                cooler.
         """
         # Guard: no cooler hardware → cannot stabilize.
         if not self._camera or not self._info or not self._info.has_cooler:
@@ -1881,10 +1897,10 @@ class ASICamera:
                     if stable_since is None:
                         # First sample within tolerance — start the window.
                         stable_since = now
-                        logger.debug(
-                            "cool_to(): entered tolerance at %.2f°C "
-                            "(target %.1f°C); starting %.1fs stability window",
-                            current, target_c, stable_secs,
+                        logger.info(
+                            "Cooler entered tolerance at %.2f°C "
+                            "(target %.2f, stable timer started)",
+                            current, target_c,
                         )
                     elif (now - stable_since) >= stable_secs:
                         logger.info(
@@ -1898,10 +1914,9 @@ class ASICamera:
                 else:
                     if stable_since is not None:
                         # Drifted back out — reset the window.
-                        logger.debug(
-                            "cool_to(): drifted out of tolerance "
-                            "(current=%.2f°C target=%.1f°C); "
-                            "resetting stability timer",
+                        logger.info(
+                            "Cooler drifted out of tolerance: %.2f°C "
+                            "(target %.2f, stable timer reset)",
                             current, target_c,
                         )
                     stable_since = None
@@ -1988,6 +2003,13 @@ class ASICamera:
 
         Returns:
             True if target reached within timeout
+
+        See also:
+            cool_to: Closed-loop variant with stability window. Requires the
+                temperature to remain in-tolerance for ``stable_secs`` continuous
+                seconds before returning True. Uses ``time.monotonic()``
+                (NTP-safe). Preferred for code that must not start an exposure
+                on a still-ramping cooler.
         """
         if not self._info or not self._info.has_cooler:
             return True

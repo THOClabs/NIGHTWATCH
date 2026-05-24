@@ -445,6 +445,28 @@ class TestTECCooling:
         )
         assert result is True
 
+    @pytest.mark.asyncio
+    async def test_cool_to_already_at_target_still_waits_for_stable_window(
+        self, cooled_camera
+    ):
+        """Sensor already at target on poll 0 — cool_to should still require
+        stable_secs of in-tolerance readings before returning True (defense
+        against momentary at-boundary readings)."""
+        # All readings already at -10°C (raw = -100 in tenths).
+        cooled_camera._camera.get_control_value.side_effect = [(-100, 0)] * 20
+
+        result = await cooled_camera.cool_to(
+            target_c=-10.0,
+            tolerance_c=0.5,
+            poll_interval_s=0.01,
+            stable_secs=0.05,
+            timeout_s=2.0,
+        )
+
+        assert result is True
+        # Should still have polled multiple times to fulfill stable_secs.
+        assert cooled_camera._camera.get_control_value.call_count >= 5
+
 
 # ============================================================================
 # Capture Session Tests

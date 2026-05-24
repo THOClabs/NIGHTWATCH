@@ -944,6 +944,17 @@ class CameraServiceProtocol(ServiceProtocol, Protocol):
         """Check if currently exposing."""
         ...
 
+    async def cool_to(
+        self,
+        target_c: float,
+        tolerance_c: float = 0.5,
+        timeout_s: float = 600.0,
+        stable_secs: float = 30.0,
+        poll_interval_s: float = 1.0,
+    ) -> bool:
+        """Drive the TEC cooler to ``target_c`` and await stable in-tolerance window."""
+        ...
+
 
 class GuidingServiceProtocol(ServiceProtocol, Protocol):
     """Protocol for guiding service."""
