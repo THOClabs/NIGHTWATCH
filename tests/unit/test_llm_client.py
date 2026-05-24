@@ -21,6 +21,11 @@ from nightwatch.llm_client import (
     OBSERVATORY_SYSTEM_PROMPT,
     create_llm_client,
 )
+from services.safety_monitor.monitor import (
+    AlertLevel,
+    SafetyAction,
+    SafetyStatus,
+)
 
 
 class TestTokenUsage:
@@ -400,3 +405,268 @@ class TestSystemPrompt:
     def test_prompt_mentions_local_operation(self):
         """Test local operation is mentioned."""
         assert "local" in OBSERVATORY_SYSTEM_PROMPT.lower() or "DGX" in OBSERVATORY_SYSTEM_PROMPT
+
+
+# ============================================================================
+# VOX-002: SafetyStatus injection into LLM context
+# ============================================================================
+
+
+def _make_safety_status(
+    *,
+    is_safe: bool,
+    reasons: list,
+    sun_altitude_deg=None,
+    wind_speed_mph=None,
+):
+    """Helper to construct a SafetyStatus with the fields we care about."""
+    return SafetyStatus(
+        timestamp=datetime.now(),
+        action=SafetyAction.SAFE_TO_OBSERVE if is_safe else SafetyAction.PARK_AND_WAIT,
+        is_safe=is_safe,
+        reasons=reasons,
+        alert_level=AlertLevel.INFO if is_safe else AlertLevel.WARNING,
+        sun_altitude_deg=sun_altitude_deg,
+        wind_speed_mph=wind_speed_mph,
+    )
+
+
+class TestSafetyContextInjection:
+    """Tests for VOX-002: SafetyStatus grounding before tool selection."""
+
+    def test_inject_safety_context_returns_none_without_provider(self):
+        """No provider set -> returns None (no injection)."""
+        client = LLMClient(backend=LLMBackend.MOCK)
+        assert client._inject_safety_context() is None
+
+    def test_inject_safety_context_formats_safe_state(self):
+        """Provider returns safe SafetyStatus -> formatted OK block."""
+        status = _make_safety_status(
+            is_safe=True,
+            reasons=[],
+            sun_altitude_deg=-18.5,
+            wind_speed_mph=8.0,
+        )
+        client = LLMClient(backend=LLMBackend.MOCK, safety_provider=lambda: status)
+        text = client._inject_safety_context()
+
+        assert text is not None
+        assert "SAFETY STATUS: OK" in text
+        assert "-18.5" in text  # sun altitude formatted
+        assert "8.0 mph" in text
+
+    def test_inject_safety_context_formats_unsafe_state(self):
+        """Provider returns unsafe SafetyStatus with 4 reasons -> shows top 3."""
+        reasons = [
+            "Humidity 92% (above limit)",
+            "Inside rain holdoff (12 min remaining)",
+            "Wind 28 mph (above park threshold)",
+            "Cloud cover 75%",  # 4th, must be excluded
+        ]
+        status = _make_safety_status(
+            is_safe=False,
+            reasons=reasons,
+            sun_altitude_deg=-6.3,
+            wind_speed_mph=28.0,
+        )
+        client = LLMClient(backend=LLMBackend.MOCK, safety_provider=lambda: status)
+        text = client._inject_safety_context()
+
+        assert text is not None
+        assert "SAFETY STATUS: UNSAFE" in text
+        # Top 3 included
+        assert "Humidity 92%" in text
+        assert "rain holdoff" in text
+        assert "Wind 28 mph" in text
+        # 4th reason NOT included
+        assert "Cloud cover 75%" not in text
+        # Trailing instruction
+        assert "refuse" in text.lower()
+        assert "explain" in text.lower()
+
+    def test_inject_safety_context_handles_provider_exception(self, caplog):
+        """Provider raises -> returns None and logs a warning."""
+        def boom():
+            raise RuntimeError("safety monitor not responding")
+
+        client = LLMClient(backend=LLMBackend.MOCK, safety_provider=boom)
+        with caplog.at_level("WARNING", logger="NIGHTWATCH.LLMClient"):
+            result = client._inject_safety_context()
+
+        assert result is None
+        assert any("safety" in rec.message.lower() for rec in caplog.records)
+
+    def test_inject_safety_context_omits_optional_fields_when_none(self):
+        """Optional sun/wind fields absent -> lines omitted gracefully."""
+        status = _make_safety_status(is_safe=True, reasons=[])
+        client = LLMClient(backend=LLMBackend.MOCK, safety_provider=lambda: status)
+        text = client._inject_safety_context()
+
+        assert text is not None
+        assert "SAFETY STATUS: OK" in text
+        assert "Sun altitude" not in text
+        assert "Wind:" not in text
+
+    def test_set_safety_provider_wires_post_construction(self):
+        """set_safety_provider() works as a post-construction setter."""
+        client = LLMClient(backend=LLMBackend.MOCK)
+        assert client._inject_safety_context() is None
+
+        status = _make_safety_status(
+            is_safe=True, reasons=[], sun_altitude_deg=-20.0, wind_speed_mph=5.0
+        )
+        client.set_safety_provider(lambda: status)
+        text = client._inject_safety_context()
+        assert text is not None
+        assert "SAFETY STATUS: OK" in text
+
+    @pytest.mark.asyncio
+    async def test_chat_includes_safety_context_in_system_message_when_provider_set(self):
+        """chat() folds the safety block into the system message before backend call."""
+        status = _make_safety_status(
+            is_safe=False,
+            reasons=["Humidity 92% (above limit)", "Inside rain holdoff (12 min remaining)"],
+            sun_altitude_deg=-6.0,
+            wind_speed_mph=28.0,
+        )
+        client = LLMClient(backend=LLMBackend.MOCK, safety_provider=lambda: status)
+
+        # Spy on the backend chat() call to capture the messages payload
+        backend = client._get_client(LLMBackend.MOCK)
+        captured = {}
+        original_chat = backend.chat
+
+        async def spy_chat(messages, tools=None, temperature=0.7, max_tokens=1024):
+            captured["messages"] = messages
+            return await original_chat(messages, tools, temperature, max_tokens)
+
+        backend.chat = spy_chat
+        await client.chat("slew to M31")
+
+        msgs = captured["messages"]
+        # First message must be the (augmented) system message
+        assert msgs[0]["role"] == "system"
+        system_content = msgs[0]["content"]
+        # Original system prompt preserved
+        assert "NIGHTWATCH" in system_content
+        # Safety block folded in — discriminating reason text only appears in
+        # the live block, not in the static prompt.
+        assert "Humidity 92%" in system_content
+        assert "rain holdoff" in system_content
+        assert "Wind: 28.0 mph" in system_content
+
+    @pytest.mark.asyncio
+    async def test_chat_omits_safety_context_when_no_provider(self):
+        """No provider -> system message unchanged (backward compat)."""
+        client = LLMClient(backend=LLMBackend.MOCK)
+
+        backend = client._get_client(LLMBackend.MOCK)
+        captured = {}
+        original_chat = backend.chat
+
+        async def spy_chat(messages, tools=None, temperature=0.7, max_tokens=1024):
+            captured["messages"] = messages
+            return await original_chat(messages, tools, temperature, max_tokens)
+
+        backend.chat = spy_chat
+        await client.chat("hi")
+
+        system_content = captured["messages"][0]["content"]
+        # System message is exactly the static prompt — no per-turn block appended.
+        # (The static prompt itself contains "SAFETY STATUS:" as part of the
+        # grounding paragraph that teaches the LLM the pattern, so a substring
+        # check on that phrase would not be discriminating; full equality is.)
+        assert system_content == OBSERVATORY_SYSTEM_PROMPT
+
+    @pytest.mark.asyncio
+    async def test_chat_stream_includes_safety_context_when_provider_set(self):
+        """chat_stream() also folds the safety block into the system message."""
+        status = _make_safety_status(
+            is_safe=False,
+            reasons=["Wind 35 mph (gust above limit)"],
+            sun_altitude_deg=2.0,
+            wind_speed_mph=35.0,
+        )
+        client = LLMClient(backend=LLMBackend.MOCK, safety_provider=lambda: status)
+
+        backend = client._get_client(LLMBackend.MOCK)
+        captured = {}
+        original_stream = backend.chat_stream
+
+        async def spy_stream(messages, tools=None, temperature=0.7, max_tokens=1024):
+            captured["messages"] = messages
+            async for chunk in original_stream(messages, tools, temperature, max_tokens):
+                yield chunk
+
+        backend.chat_stream = spy_stream
+        async for _ in client.chat_stream("open the roof"):
+            pass
+
+        system_content = captured["messages"][0]["content"]
+        # Discriminating: the specific reason text only appears in the live block.
+        assert "Wind 35 mph" in system_content
+        assert "gust above limit" in system_content
+
+    @pytest.mark.asyncio
+    async def test_chat_succeeds_when_safety_provider_raises(self):
+        """If safety_provider fails, chat() still completes (no injection)."""
+        def boom():
+            raise RuntimeError("safety down")
+
+        client = LLMClient(backend=LLMBackend.MOCK, safety_provider=boom)
+        response = await client.chat("hi")
+        assert response.content == "Mock response"
+
+    @pytest.mark.asyncio
+    async def test_chat_unsafe_grounding_includes_specific_reasons_for_refusal(self):
+        """Spec verify line: with unsafe weather, the system message contains the
+        live reasons the LLM can quote (e.g. 'humidity 92'), so it can refuse with
+        specifics rather than emitting a tool call that the interlock then vetoes."""
+        status = _make_safety_status(
+            is_safe=False,
+            reasons=[
+                "Humidity 92% (above 85% limit)",
+                "Inside rain holdoff (12 min remaining)",
+            ],
+            sun_altitude_deg=-5.0,
+            wind_speed_mph=12.0,
+        )
+        client = LLMClient(backend=LLMBackend.MOCK, safety_provider=lambda: status)
+
+        backend = client._get_client(LLMBackend.MOCK)
+        captured = {}
+        original_chat = backend.chat
+
+        async def spy_chat(messages, tools=None, temperature=0.7, max_tokens=1024):
+            captured["messages"] = messages
+            return await original_chat(messages, tools, temperature, max_tokens)
+
+        backend.chat = spy_chat
+        await client.chat("slew to M31")
+
+        system_content = captured["messages"][0]["content"]
+        # Reasons appear verbatim so the LLM can quote them back
+        assert "Humidity 92%" in system_content
+        assert "rain holdoff" in system_content
+        # Refusal instruction is present (in the injected block, not just the
+        # static prompt — the prompt says "refuse mount/camera tool calls"
+        # while the injected block adds "refuse mount/exposure tool calls").
+        assert "refuse mount/exposure" in system_content.lower()
+        # The OBSERVATORY_SYSTEM_PROMPT itself teaches the LLM what to do
+        # when it sees SAFETY STATUS: UNSAFE
+        assert "SAFETY STATUS" in OBSERVATORY_SYSTEM_PROMPT
+
+
+class TestObservatorySystemPromptGrounding:
+    """Tests that OBSERVATORY_SYSTEM_PROMPT teaches the model about the
+    injected safety block (VOX-002)."""
+
+    def test_prompt_mentions_safety_status_pattern(self):
+        """Prompt explicitly names the SAFETY STATUS: pattern."""
+        assert "SAFETY STATUS" in OBSERVATORY_SYSTEM_PROMPT
+
+    def test_prompt_teaches_refusal_on_unsafe(self):
+        """Prompt instructs the model to refuse mount/camera tools on UNSAFE."""
+        text = OBSERVATORY_SYSTEM_PROMPT.lower()
+        assert "unsafe" in text
+        assert "refuse" in text

@@ -32,7 +32,12 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Any, Callable, Dict, List, Optional, Union
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Union
+
+if TYPE_CHECKING:
+    # Imported only for type hints — keeps a runtime cycle impossible and avoids
+    # paying the import cost when LLMClient is used without a safety provider.
+    from services.safety_monitor.monitor import SafetyStatus
 
 logger = logging.getLogger("NIGHTWATCH.LLMClient")
 
@@ -201,6 +206,12 @@ ALWAYS prioritize safety:
 - Respect all safety vetoes from the safety monitor
 - Park the telescope if conditions become dangerous
 - Alert the operator to any safety concerns
+
+SAFETY GROUNDING: A "SAFETY STATUS:" block may be prepended to your system
+prompt each turn. When "SAFETY STATUS: UNSAFE" appears, you MUST refuse mount,
+camera, and enclosure tool calls and explain WHY using the specific reasons
+listed in that block. When "SAFETY STATUS: OK", proceed normally. Read-only
+tools (e.g. checking weather or status) remain allowed in either case.
 
 ## Response Style
 - Be concise and direct - your responses will be spoken aloud via text-to-speech
@@ -655,6 +666,7 @@ class LLMClient:
         model: Optional[str] = None,
         fallback_backends: Optional[List[LLMBackend]] = None,
         system_prompt: Optional[str] = None,
+        safety_provider: Optional[Callable[[], "SafetyStatus"]] = None,
     ):
         """
         Initialize LLM client.
@@ -666,6 +678,13 @@ class LLMClient:
             model: Model name/identifier
             fallback_backends: Ordered list of fallback backends
             system_prompt: Custom system prompt (uses default if None)
+            safety_provider: Optional callable returning the current
+                ``SafetyStatus`` (VOX-002). When supplied, a "SAFETY STATUS:"
+                block is folded into the system message on every ``chat()``
+                and ``chat_stream()`` call so the LLM can refuse unsafe tool
+                calls with specific reasons instead of relying on the safety
+                interlock to veto a slew that's already in flight. When
+                ``None`` (the default), behavior is unchanged.
         """
         if isinstance(backend, str):
             backend = LLMBackend(backend)
@@ -676,6 +695,7 @@ class LLMClient:
         self.model = model
         self.fallback_backends = fallback_backends or []
         self.system_prompt = system_prompt or OBSERVATORY_SYSTEM_PROMPT
+        self._safety_provider: Optional[Callable[[], "SafetyStatus"]] = safety_provider
 
         # Token tracking (Step 291)
         self.token_usage = TokenUsage()
@@ -710,6 +730,86 @@ class LLMClient:
         self._clients[backend] = client
         return client
 
+    def set_safety_provider(
+        self, provider: Optional[Callable[[], "SafetyStatus"]]
+    ) -> None:
+        """Wire (or unwire) the safety status provider after construction.
+
+        Pass ``None`` to clear and restore non-grounded behavior.
+
+        Part of VOX-002 — exists so the orchestrator can construct an
+        ``LLMClient`` before the ``SafetyMonitor`` is up, then attach the
+        provider once both services are running.
+        """
+        self._safety_provider = provider
+
+    def _inject_safety_context(self) -> Optional[str]:
+        """Build the SAFETY STATUS block to fold into the system message.
+
+        Returns ``None`` when no provider is wired, or when the provider call
+        raises (logged as a warning — never blocks the LLM call). Otherwise
+        returns a short formatted block listing:
+
+        - The headline ``SAFETY STATUS: OK`` or ``SAFETY STATUS: UNSAFE``
+        - Up to the top 3 reasons from the live ``SafetyStatus``
+        - Sun altitude if present
+        - Wind speed if present
+        - A trailing instruction line directing refusal on UNSAFE
+
+        Part of VOX-002 — see the OBSERVATORY_SYSTEM_PROMPT 'SAFETY GROUNDING'
+        paragraph for the model-side contract.
+        """
+        if self._safety_provider is None:
+            return None
+
+        try:
+            status = self._safety_provider()
+        except Exception as exc:
+            # Never block the LLM call on a flaky safety provider — the
+            # SafetyInterlock is still the authoritative veto downstream.
+            logger.warning(
+                "Safety provider raised, omitting safety context: %s", exc
+            )
+            return None
+
+        lines: List[str] = []
+        lines.append(
+            "SAFETY STATUS: OK" if status.is_safe else "SAFETY STATUS: UNSAFE"
+        )
+
+        # Top 3 reasons only — keeps the token budget tight and gives the LLM
+        # a small set of specific facts to quote back to the user.
+        if status.reasons:
+            for reason in status.reasons[:3]:
+                lines.append(f"- {reason}")
+
+        if status.sun_altitude_deg is not None:
+            lines.append(f"Sun altitude: {status.sun_altitude_deg:.1f}°")
+        if status.wind_speed_mph is not None:
+            lines.append(f"Wind: {status.wind_speed_mph:.1f} mph")
+
+        if not status.is_safe:
+            lines.append(
+                "If UNSAFE, refuse mount/exposure tool calls and explain WHY "
+                "using the reasons above."
+            )
+
+        return "\n".join(lines)
+
+    def _build_system_message(self) -> str:
+        """Compose the per-turn system message, folding in safety context.
+
+        Design choice (b) from VOX-002: a single ``role: system`` message
+        carrying both the persistent prompt and the per-turn safety block.
+        This is portable across every backend (Llama, Anthropic, OpenAI) —
+        none of them require multiple system messages, and Anthropic actually
+        prefers a single string.
+        """
+        safety_ctx = self._inject_safety_context()
+        if safety_ctx:
+            return f"{self.system_prompt}\n\n{safety_ctx}"
+        return self.system_prompt
+
     async def chat(
         self,
         message: str,
@@ -731,8 +831,9 @@ class LLMClient:
         Returns:
             LLM response with content and/or tool calls
         """
-        # Build messages list
-        messages = [{"role": "system", "content": self.system_prompt}]
+        # Build messages list — system prompt may carry an injected
+        # SAFETY STATUS block (VOX-002) when a safety_provider is wired.
+        messages = [{"role": "system", "content": self._build_system_message()}]
 
         if include_history:
             for msg in self._conversation[-self._max_history:]:
@@ -846,8 +947,9 @@ class LLMClient:
         Yields:
             StreamingChunk objects with incremental content
         """
-        # Build messages list
-        messages = [{"role": "system", "content": self.system_prompt}]
+        # Build messages list — system prompt may carry an injected
+        # SAFETY STATUS block (VOX-002) when a safety_provider is wired.
+        messages = [{"role": "system", "content": self._build_system_message()}]
 
         if include_history:
             for msg in self._conversation[-self._max_history:]:
