@@ -14,6 +14,7 @@ Step 83: SDK wrapper import handling for graceful degradation
 
 import asyncio
 import logging
+import time
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
@@ -1877,6 +1878,151 @@ class ASICamera:
             logger.error(f"Failed to control cooler: {e}")
             return False
 
+    async def cool_to(
+        self,
+        target_c: float,
+        tolerance_c: float = 0.5,
+        timeout_s: float = 600.0,
+        stable_secs: float = 30.0,
+        poll_interval_s: float = 1.0,
+    ) -> bool:
+        """
+        Closed-loop TEC cooling controller (HWS-002).
+
+        Sets the cooler target temperature, enables the cooler, then polls the
+        sensor temperature until it remains within ``tolerance_c`` of
+        ``target_c`` for a continuous window of at least ``stable_secs`` seconds.
+
+        Closes the fire-and-forget gap for callers that opt in by calling
+        ``cool_to`` directly. The auto-applied path in ``apply_settings``
+        (lines 562-568) is unchanged and still writes target temp + cooler ON
+        without polling — wire ``cool_to`` in if you need a synchronous setpoint
+        guarantee.
+
+        If the sensor temperature drifts back out of tolerance at any point, the
+        stability timer is reset and the wait continues until either a new
+        ``stable_secs`` window completes or ``timeout_s`` elapses.
+
+        Args:
+            target_c: Desired sensor temperature in Celsius (e.g. -10.0).
+            tolerance_c: Acceptable absolute deviation from target, in Celsius.
+            timeout_s: Maximum total wall-clock seconds to wait before giving
+                up. Uses ``time.monotonic`` so NTP corrections cannot affect it.
+            stable_secs: Continuous seconds the temperature must remain within
+                tolerance to be considered stable. Default 30s per task spec.
+            poll_interval_s: Seconds between temperature polls. Tests pass a
+                tiny value (e.g. 0.01) to keep runtime sub-second.
+
+        Returns:
+            True if the temperature stabilizes within tolerance for
+            ``stable_secs`` continuous seconds before ``timeout_s`` elapses.
+            False if there is no cooler, the camera handle is missing, or the
+            timeout expires before stabilization is achieved.
+
+        Note:
+            The SDK target temp is truncated to int by ZWO's API
+            (``set_cooler`` does ``int(target_c)``). Pass an integer target for
+            predictable behavior; for fine-tolerance use cases
+            (tolerance < 0.5°C), pass ``int(target_c)`` and tighten tolerance
+            accordingly.
+
+        See also:
+            wait_for_temperature: Legacy lenient-poll variant. Returns True on
+                the FIRST in-tolerance reading (no stability window). Returns
+                True (not False) when no cooler is present. Uses
+                ``datetime.now()`` so NTP slewing can perturb its timeout.
+                Prefer ``cool_to`` for new code that needs a genuinely-settled
+                cooler.
+        """
+        # Guard: no cooler hardware → cannot stabilize.
+        if not self._camera or not self._info or not self._info.has_cooler:
+            logger.warning(
+                "cool_to() called but camera has no cooler "
+                "(target=%.1f°C)", target_c
+            )
+            return False
+
+        # Kick the cooler on with the requested target. Reuse set_cooler so
+        # _settings.target_temp_c / cooler_on stay in sync with the hardware
+        # writes (and we get a single point that emits the SDK writes).
+        if not self.set_cooler(True, target_c):
+            logger.warning(
+                "cool_to() failed to enable cooler (target=%.1f°C)", target_c
+            )
+            return False
+
+        logger.info(
+            "Cooling started: target=%.1f°C tolerance=±%.2f°C "
+            "stable_window=%.1fs timeout=%.0fs poll=%.2fs",
+            target_c, tolerance_c, stable_secs, timeout_s, poll_interval_s,
+        )
+
+        start = time.monotonic()
+        stable_since: Optional[float] = None
+        last_temp: Optional[float] = None
+
+        while True:
+            now = time.monotonic()
+            elapsed = now - start
+
+            # Read current temperature. get_temperature() handles the
+            # tenths-of-a-degree → °C conversion and returns None on read
+            # failure, so we don't have to re-implement either here.
+            current = self.get_temperature()
+
+            if current is None:
+                # Treat read failures as "not stable yet" — reset the stability
+                # window because we cannot confirm we're still in tolerance.
+                logger.warning(
+                    "cool_to(): temperature read failed; treating as not stable"
+                )
+                stable_since = None
+            else:
+                last_temp = current
+                in_tolerance = abs(current - target_c) <= tolerance_c
+
+                if in_tolerance:
+                    if stable_since is None:
+                        # First sample within tolerance — start the window.
+                        stable_since = now
+                        logger.info(
+                            "Cooler entered tolerance at %.2f°C "
+                            "(target %.2f, stable timer started)",
+                            current, target_c,
+                        )
+                    elif (now - stable_since) >= stable_secs:
+                        logger.info(
+                            "Cooler stable at %.2f°C (target %.1f°C, "
+                            "tolerance ±%.2f°C) after %.1fs in window, "
+                            "%.1fs total",
+                            current, target_c, tolerance_c,
+                            now - stable_since, elapsed,
+                        )
+                        return True
+                else:
+                    if stable_since is not None:
+                        # Drifted back out — reset the window.
+                        logger.info(
+                            "Cooler drifted out of tolerance: %.2f°C "
+                            "(target %.2f, stable timer reset)",
+                            current, target_c,
+                        )
+                    stable_since = None
+
+            # Check timeout BEFORE sleeping so we don't waste a final
+            # poll-interval after we've already exceeded the budget.
+            if elapsed >= timeout_s:
+                logger.warning(
+                    "cool_to(): timeout after %.1fs without stable temp "
+                    "(target=%.1f°C, last_read=%s°C, tolerance=±%.2f°C)",
+                    elapsed, target_c,
+                    f"{last_temp:.2f}" if last_temp is not None else "unknown",
+                    tolerance_c,
+                )
+                return False
+
+            await asyncio.sleep(poll_interval_s)
+
     # =========================================================================
     # COOLING CONTROL (Step 94)
     # =========================================================================
@@ -1945,6 +2091,13 @@ class ASICamera:
 
         Returns:
             True if target reached within timeout
+
+        See also:
+            cool_to: Closed-loop variant with stability window. Requires the
+                temperature to remain in-tolerance for ``stable_secs`` continuous
+                seconds before returning True. Uses ``time.monotonic()``
+                (NTP-safe). Preferred for code that must not start an exposure
+                on a still-ramping cooler.
         """
         if not self._info or not self._info.has_cooler:
             return True

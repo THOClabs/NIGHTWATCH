@@ -6,6 +6,7 @@ HWS-001: Tests for real-SDK capture path (capture_single, _capture_loop)
 """
 
 import asyncio
+import logging
 from datetime import datetime
 from pathlib import Path
 from unittest.mock import MagicMock, patch  # noqa: F401  retained for existing tests
@@ -256,6 +257,218 @@ class TestCaptureAbort:
         """Verify abort returns False when no capture in progress."""
         result = await camera.abort_capture()
         assert result is False
+
+
+# ============================================================================
+# TEC Cooling Tests (HWS-002)
+# ============================================================================
+
+class TestTECCooling:
+    """Tests for closed-loop TEC cooling controller (cool_to method)."""
+
+    @pytest.fixture
+    def cooled_camera(self):
+        """Create a camera wired with a mock SDK + camera handle and has_cooler=True."""
+        cam = ASICamera(camera_index=0)
+        # Wire up the mock SDK constants
+        cam._asi = MagicMock()
+        cam._asi.ASI_TEMPERATURE = 18
+        cam._asi.ASI_TARGET_TEMP = 19
+        cam._asi.ASI_COOLER_ON = 20
+        cam._asi.ASI_COOLER_POWER_PERC = 21
+        # Mock camera handle
+        cam._camera = MagicMock()
+        # Cooled-camera info
+        cam._info = CameraInfo(
+            name="ZWO ASI1600MM-Cool",
+            camera_id=1,
+            max_width=4656,
+            max_height=3520,
+            pixel_size_um=3.8,
+            is_color=False,
+            has_cooler=True,
+            bit_depth=12,
+            usb_host="USB3",
+        )
+        return cam
+
+    @pytest.mark.asyncio
+    async def test_cool_to_returns_false_when_no_cooler(self, camera):
+        """No cooler available → return False immediately, no SDK calls."""
+        # Default camera fixture has _info=None and _camera=None
+        result = await camera.cool_to(-10.0, tolerance_c=0.5, timeout_s=1.0)
+        assert result is False
+
+    @pytest.mark.asyncio
+    async def test_cool_to_returns_false_when_info_says_no_cooler(self):
+        """has_cooler=False on info → return False immediately."""
+        cam = ASICamera(camera_index=0)
+        cam._camera = MagicMock()
+        cam._asi = MagicMock()
+        cam._info = CameraInfo(
+            name="ZWO ASI290MC",
+            camera_id=1,
+            max_width=1936,
+            max_height=1096,
+            pixel_size_um=2.9,
+            is_color=True,
+            has_cooler=False,
+            bit_depth=12,
+            usb_host="USB3",
+        )
+        result = await cam.cool_to(-10.0, tolerance_c=0.5, timeout_s=1.0)
+        assert result is False
+        # Ensure we did NOT touch the SDK
+        cam._camera.set_control_value.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_cool_to_returns_true_when_temp_stabilises(self, cooled_camera):
+        """
+        Spec verify case: ramping temp that stabilizes within tolerance for >= stable_secs
+        → returns True. Uses sped-up timing for the unit test.
+        """
+        # SDK returns tenths-of-a-degree integers. Ramp: 25, 15, 5, then stable at -10.
+        # After ramp reaches target, hold for enough polls to satisfy stable_secs.
+        # stable_secs=0.05 + poll_interval_s=0.01 → ~5 stable polls needed (with margin).
+        readings = [250, 150, 50, -50, -100, -100, -100, -100, -100, -100, -100, -100,
+                    -100, -100, -100, -100]
+        cooled_camera._camera.get_control_value.side_effect = [
+            (r, 0) for r in readings
+        ]
+
+        result = await cooled_camera.cool_to(
+            target_c=-10.0,
+            tolerance_c=0.5,
+            timeout_s=2.0,
+            stable_secs=0.05,
+            poll_interval_s=0.01,
+        )
+        assert result is True
+
+        # Verify cooler was enabled with target temp.
+        # Should have written ASI_TARGET_TEMP=-10 and ASI_COOLER_ON=1.
+        set_calls = cooled_camera._camera.set_control_value.call_args_list
+        ctrls_written = [c.args[0] for c in set_calls]
+        assert 19 in ctrls_written  # ASI_TARGET_TEMP
+        assert 20 in ctrls_written  # ASI_COOLER_ON
+        # And cooler ON was set to 1
+        cooler_on_calls = [c for c in set_calls if c.args[0] == 20]
+        assert any(c.args[1] == 1 for c in cooler_on_calls)
+
+    @pytest.mark.asyncio
+    async def test_cool_to_resets_stability_timer_on_drift(self, cooled_camera):
+        """
+        Temp reaches target, drifts out of tolerance, then re-stabilizes.
+        cool_to must wait for the SECOND continuous stable window, not the first.
+        """
+        # Ramp in → stable briefly → drift out → stable again long enough.
+        # With stable_secs=0.05 and poll_interval_s=0.01, ~5 polls = ~0.05s stable.
+        # First "stable" run is only 2 polls (insufficient), then drifts, then 8 polls (sufficient).
+        readings = [
+            250, 50,           # ramping
+            -100, -100,        # in tolerance (2 polls, ~0.02s — not enough)
+            -50,               # DRIFTS OUT (-5.0°C, diff=5°C > 0.5°C tolerance) → reset
+            -100, -100, -100, -100, -100, -100, -100, -100, -100, -100,  # stable run #2
+        ]
+        cooled_camera._camera.get_control_value.side_effect = [
+            (r, 0) for r in readings
+        ]
+
+        result = await cooled_camera.cool_to(
+            target_c=-10.0,
+            tolerance_c=0.5,
+            timeout_s=2.0,
+            stable_secs=0.05,
+            poll_interval_s=0.01,
+        )
+        assert result is True
+
+        # Verify that the loop polled past the drift sample (i.e., did NOT
+        # short-circuit on the first stable run).
+        # Count of get_control_value calls should be >= len(readings up to drift) + a few more.
+        # The drift sample is index 4 (the 5th reading). To succeed we need at least
+        # the drift sample + ~5 more stable polls = 10+ reads.
+        assert cooled_camera._camera.get_control_value.call_count >= 10
+
+    @pytest.mark.asyncio
+    async def test_cool_to_returns_false_on_timeout(self, cooled_camera, caplog):
+        """
+        Temp never reaches target → timeout elapses → returns False with warning.
+        """
+        # Always read 25°C (250 tenths) — far from target.
+        cooled_camera._camera.get_control_value.return_value = (250, 0)
+
+        caplog.set_level(logging.WARNING, logger="NIGHTWATCH.Camera")
+
+        result = await cooled_camera.cool_to(
+            target_c=-10.0,
+            tolerance_c=0.5,
+            timeout_s=0.05,   # 50ms total budget
+            stable_secs=0.02,
+            poll_interval_s=0.01,
+        )
+        assert result is False
+
+        # A warning about timing out should have been logged, naming current + target.
+        timeout_warnings = [
+            r for r in caplog.records
+            if r.levelno == logging.WARNING and "timeout" in r.message.lower()
+        ]
+        assert len(timeout_warnings) >= 1
+        # The warning should mention temps
+        msg = timeout_warnings[-1].message
+        assert "-10" in msg or "target" in msg.lower()
+
+    @pytest.mark.asyncio
+    async def test_cool_to_handles_temp_read_failure(self, cooled_camera):
+        """
+        get_control_value raises on some polls → cool_to does not crash;
+        treats failed reads as 'not stable', eventually stabilizes when reads succeed.
+        """
+        # Sequence: bad read, bad read, then steady stream of stable readings.
+        responses = [
+            Exception("SDK transient error"),
+            Exception("SDK transient error"),
+        ] + [(-100, 0)] * 12  # stable at -10°C
+
+        def side_effect(*args, **kwargs):
+            resp = responses.pop(0)
+            if isinstance(resp, Exception):
+                raise resp
+            return resp
+
+        cooled_camera._camera.get_control_value.side_effect = side_effect
+
+        result = await cooled_camera.cool_to(
+            target_c=-10.0,
+            tolerance_c=0.5,
+            timeout_s=2.0,
+            stable_secs=0.05,
+            poll_interval_s=0.01,
+        )
+        assert result is True
+
+    @pytest.mark.asyncio
+    async def test_cool_to_already_at_target_still_waits_for_stable_window(
+        self, cooled_camera
+    ):
+        """Sensor already at target on poll 0 — cool_to should still require
+        stable_secs of in-tolerance readings before returning True (defense
+        against momentary at-boundary readings)."""
+        # All readings already at -10°C (raw = -100 in tenths).
+        cooled_camera._camera.get_control_value.side_effect = [(-100, 0)] * 20
+
+        result = await cooled_camera.cool_to(
+            target_c=-10.0,
+            tolerance_c=0.5,
+            poll_interval_s=0.01,
+            stable_secs=0.05,
+            timeout_s=2.0,
+        )
+
+        assert result is True
+        # Should still have polled multiple times to fulfill stable_secs.
+        assert cooled_camera._camera.get_control_value.call_count >= 5
 
 
 # ============================================================================
