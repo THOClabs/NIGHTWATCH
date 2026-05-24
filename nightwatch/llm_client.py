@@ -741,6 +741,7 @@ class LLMClient:
         ``LLMClient`` before the ``SafetyMonitor`` is up, then attach the
         provider once both services are running.
         """
+        logger.info("Safety provider %s", "wired" if provider else "cleared")
         self._safety_provider = provider
 
     def _inject_safety_context(self) -> Optional[str]:
@@ -768,7 +769,9 @@ class LLMClient:
             # Never block the LLM call on a flaky safety provider — the
             # SafetyInterlock is still the authoritative veto downstream.
             logger.warning(
-                "Safety provider raised, omitting safety context: %s", exc
+                "Safety provider raised, omitting safety context: %s",
+                exc,
+                exc_info=True,
             )
             return None
 
@@ -790,8 +793,8 @@ class LLMClient:
 
         if not status.is_safe:
             lines.append(
-                "If UNSAFE, refuse mount/exposure tool calls and explain WHY "
-                "using the reasons above."
+                "If UNSAFE, refuse mount, camera, and enclosure tool calls "
+                "and explain WHY using the reasons above."
             )
 
         return "\n".join(lines)
