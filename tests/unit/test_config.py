@@ -4,6 +4,7 @@ Unit tests for NIGHTWATCH configuration system.
 Tests configuration loading, validation, and environment variable overrides.
 """
 
+import logging
 import os
 import tempfile
 from pathlib import Path
@@ -11,6 +12,7 @@ from pathlib import Path
 import pytest
 import yaml
 
+from nightwatch import config as config_module
 from nightwatch.config import (
     AlertConfig,
     CameraConfig,
@@ -398,14 +400,10 @@ class TestSafetyEnvOverrideAllowlist:
         Verifies the SAFE-003 spec line: starting with a safety env override
         falls back to the YAML/default value (default wind_limit_park=25.0).
         """
-        import logging
-
-        from nightwatch.config import SAFETY_ENV_OVERRIDE_ALLOWLIST
-
         # Sanity: the target key must NOT be on the allowlist for this test
         # to exercise the rejection path. If a future commit allowlists it,
         # this assertion will catch the test drift.
-        assert "wind_limit_park" not in SAFETY_ENV_OVERRIDE_ALLOWLIST
+        assert "wind_limit_park" not in config_module.SAFETY_ENV_OVERRIDE_ALLOWLIST
 
         os.environ["NIGHTWATCH_SAFETY_WIND_LIMIT_PARK"] = "999"
         try:
@@ -436,8 +434,6 @@ class TestSafetyEnvOverrideAllowlist:
         env override and must trip the allowlist guard — operators should see
         a loud warning rather than a silent no-op.
         """
-        import logging
-
         os.environ["NIGHTWATCH_SAFETY_WIND_LIMIT_MPH"] = "999"
         try:
             with caplog.at_level(logging.CRITICAL, logger="nightwatch.config"):
@@ -465,10 +461,6 @@ class TestSafetyEnvOverrideAllowlist:
         so an operator can either edit the allowlist (code review) or use the
         correct config-file path.
         """
-        import logging
-
-        from nightwatch.config import SAFETY_ENV_OVERRIDE_ALLOWLIST
-
         os.environ["NIGHTWATCH_SAFETY_HUMIDITY_LIMIT_EMERGENCY"] = "100"
         try:
             with caplog.at_level(logging.CRITICAL, logger="nightwatch.config"):
@@ -477,8 +469,8 @@ class TestSafetyEnvOverrideAllowlist:
                 r for r in caplog.records if r.levelno == logging.CRITICAL
             ]
             joined = " ".join(r.getMessage() for r in critical_records)
-            if SAFETY_ENV_OVERRIDE_ALLOWLIST:
-                for allowed in SAFETY_ENV_OVERRIDE_ALLOWLIST:
+            if config_module.SAFETY_ENV_OVERRIDE_ALLOWLIST:
+                for allowed in config_module.SAFETY_ENV_OVERRIDE_ALLOWLIST:
                     assert allowed in joined
             else:
                 # Empty allowlist must still be mentioned (e.g. "allowlist=set()"
@@ -500,12 +492,10 @@ class TestSafetyEnvOverrideAllowlist:
         value flows through. This ensures the guard is a real allowlist
         (deny-by-default with an explicit allow) rather than a blanket block.
         """
-        from nightwatch import config as config_module
-
         monkeypatch.setattr(
             config_module,
             "SAFETY_ENV_OVERRIDE_ALLOWLIST",
-            {"wind_limit_park"},
+            frozenset({"wind_limit_park"}),
         )
         os.environ["NIGHTWATCH_SAFETY_WIND_LIMIT_PARK"] = "27"
         try:

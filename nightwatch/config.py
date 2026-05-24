@@ -30,7 +30,7 @@ from __future__ import annotations
 import logging
 import os
 from pathlib import Path
-from typing import Literal, Optional
+from typing import Final, Literal, Optional
 
 import yaml
 from pydantic import BaseModel, Field, field_validator, model_validator
@@ -80,7 +80,14 @@ __all__ = [
 # accordingly. Per the CLAUDE.md prohibited-edits list, the safety_monitor
 # itself cannot be edited without explicit approval — same spirit applies to
 # loosening this allowlist.
-SAFETY_ENV_OVERRIDE_ALLOWLIST: set[str] = set()
+#
+# `Final[frozenset[str]]` is load-bearing: the `Final` annotation prevents
+# rebinding the module-level name, and `frozenset` blocks in-place mutation
+# (`.add()` / `.discard()`). Together they enforce by type what the design
+# contract requires — loosening the allowlist must be a reviewed code change,
+# not a runtime mutation buried in some service initializer. (Matches the
+# `Final[...]` convention in `nightwatch/constants.py`.)
+SAFETY_ENV_OVERRIDE_ALLOWLIST: Final[frozenset[str]] = frozenset()
 
 
 # =============================================================================
