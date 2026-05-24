@@ -17,7 +17,7 @@ from nightwatch.tool_executor import (
     ToolExecutionError,
 )
 from nightwatch.config import NightwatchConfig
-from nightwatch.orchestrator import Orchestrator
+from nightwatch.orchestrator import Orchestrator, ServiceStatus
 
 
 class TestToolResult:
@@ -151,7 +151,13 @@ class TestMountHandlers:
 
     @pytest.fixture
     def orchestrator(self, config):
-        """Create orchestrator with mock mount."""
+        """Create orchestrator with mock mount.
+
+        ARCH-002: ``register_*`` leaves status as UNKNOWN; the public
+        ``orchestrator.mount`` property only returns the service when
+        status is RUNNING. The fixture sets RUNNING explicitly to mirror
+        the post-``orchestrator.start()`` state.
+        """
         orch = Orchestrator(config)
         mock_mount = AsyncMock()
         mock_mount.is_parked = False
@@ -160,6 +166,7 @@ class TestMountHandlers:
         mock_mount.park = AsyncMock(return_value=True)
         mock_mount.unpark = AsyncMock(return_value=True)
         orch.register_mount(mock_mount)
+        orch.registry.set_status("mount", ServiceStatus.RUNNING)
         return orch
 
     @pytest.fixture
@@ -186,6 +193,8 @@ class TestMountHandlers:
         mock_catalog = Mock()
         mock_catalog.resolve_object = Mock(return_value=(10.5, 41.2))
         orchestrator.register_catalog(mock_catalog)
+        # ARCH-002: gated property requires RUNNING.
+        orchestrator.registry.set_status("catalog", ServiceStatus.RUNNING)
 
         result = await executor.execute("goto_object", {"object_name": "M31"})
         assert result.status == ToolStatus.SUCCESS
@@ -224,7 +233,7 @@ class TestSafetyVeto:
 
     @pytest.fixture
     def orchestrator(self, config):
-        """Create orchestrator with mock services."""
+        """Create orchestrator with mock services (ARCH-002: mark RUNNING)."""
         orch = Orchestrator(config)
 
         mock_mount = AsyncMock()
@@ -239,6 +248,9 @@ class TestSafetyVeto:
         mock_safety.is_safe = False
         mock_safety.get_unsafe_reasons = Mock(return_value=["Wind too high"])
         orch.register_safety(mock_safety)
+
+        for name in ("mount", "catalog", "safety"):
+            orch.registry.set_status(name, ServiceStatus.RUNNING)
 
         return orch
 
@@ -271,7 +283,7 @@ class TestWeatherHandlers:
 
     @pytest.fixture
     def orchestrator(self, config):
-        """Create orchestrator with mock weather."""
+        """Create orchestrator with mock weather (ARCH-002: mark RUNNING)."""
         orch = Orchestrator(config)
         mock_weather = Mock()
         mock_weather.is_safe = True
@@ -281,6 +293,7 @@ class TestWeatherHandlers:
             "wind_speed": 10,
         }
         orch.register_weather(mock_weather)
+        orch.registry.set_status("weather", ServiceStatus.RUNNING)
         return orch
 
     @pytest.fixture
@@ -337,6 +350,89 @@ class TestSessionHandlers:
         result = await executor.execute("get_session_status", {})
         assert result.status == ToolStatus.SUCCESS
         assert result.data["is_observing"] is True
+
+
+class TestArch002HealthGating:
+    """ARCH-002: tool handlers fail fast when mount status is not RUNNING.
+
+    Implements the Verify line from the modernization manual: "stop the mount
+    service, then invoke goto_object; the tool returns 'mount service not
+    available' without crashing instead of waiting on a dead connection."
+    """
+
+    @pytest.fixture
+    def config(self):
+        return NightwatchConfig()
+
+    @pytest.fixture
+    def orchestrator(self, config):
+        """Orchestrator with mount + catalog registered and RUNNING."""
+        orch = Orchestrator(config)
+
+        mock_mount = AsyncMock()
+        mock_mount.slew_to_coordinates = AsyncMock(return_value=True)
+        orch.register_mount(mock_mount)
+        orch.registry.set_status("mount", ServiceStatus.RUNNING)
+
+        mock_catalog = Mock()
+        mock_catalog.resolve_object = Mock(return_value=(0.712, 41.269))
+        orch.register_catalog(mock_catalog)
+        orch.registry.set_status("catalog", ServiceStatus.RUNNING)
+
+        return orch
+
+    @pytest.fixture
+    def executor(self, orchestrator):
+        return ToolExecutor(orchestrator)
+
+    @pytest.mark.asyncio
+    async def test_goto_object_succeeds_when_mount_running(self, executor, orchestrator):
+        """Sanity check: with mount RUNNING, goto_object succeeds."""
+        result = await executor.execute("goto_object", {"object_name": "M31"})
+        assert result.status == ToolStatus.SUCCESS
+        orchestrator.registry.get("mount").slew_to_coordinates.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_goto_object_returns_mount_unavailable_when_stopped(
+        self, executor, orchestrator
+    ):
+        """ARCH-002 Verify line: mount STOPPED -> 'Mount service not available'."""
+        # Stop the mount service (status STOPPED), as if `stop_service("mount")` ran.
+        orchestrator.registry.set_status("mount", ServiceStatus.STOPPED)
+
+        result = await executor.execute("goto_object", {"object_name": "M31"})
+
+        assert result.status == ToolStatus.ERROR
+        assert result.error == "Mount service not available"
+        # And critically: slew_to_coordinates was NOT invoked — we short-circuited
+        # before reaching the (potentially dead) mount connection.
+        orchestrator.registry.get("mount").slew_to_coordinates.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_goto_object_returns_mount_unavailable_when_errored(
+        self, executor, orchestrator
+    ):
+        """ARCH-002: mount ERROR -> 'Mount service not available' (no dead-connection wait)."""
+        orchestrator.registry.set_status("mount", ServiceStatus.ERROR, "comms lost")
+
+        result = await executor.execute("goto_object", {"object_name": "M31"})
+
+        assert result.status == ToolStatus.ERROR
+        assert result.error == "Mount service not available"
+        orchestrator.registry.get("mount").slew_to_coordinates.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_goto_object_returns_mount_unavailable_when_restarting(
+        self, executor, orchestrator
+    ):
+        """ARCH-002: mount RESTARTING -> 'Mount service not available'."""
+        orchestrator.registry.set_status("mount", ServiceStatus.RESTARTING)
+
+        result = await executor.execute("goto_object", {"object_name": "M31"})
+
+        assert result.status == ToolStatus.ERROR
+        assert result.error == "Mount service not available"
+        orchestrator.registry.get("mount").slew_to_coordinates.assert_not_called()
 
 
 class TestCoordinateParsing:

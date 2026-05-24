@@ -129,6 +129,77 @@ class TestServiceRegistry:
 
         assert registry.all_required_running() is False
 
+    # =========================================================================
+    # ARCH-002: ServiceRegistry health gating (get_running)
+    # =========================================================================
+
+    def test_get_running_returns_service_when_running(self):
+        """get_running returns the instance when status is RUNNING."""
+        registry = ServiceRegistry()
+        mock_service = Mock()
+        registry.register("mount", mock_service)
+        registry.set_status("mount", ServiceStatus.RUNNING)
+
+        assert registry.get_running("mount") is mock_service
+
+    def test_get_running_returns_none_for_error_status(self):
+        """get_running returns None when status is ERROR."""
+        registry = ServiceRegistry()
+        registry.register("mount", Mock())
+        registry.set_status("mount", ServiceStatus.ERROR, "boom")
+
+        assert registry.get_running("mount") is None
+
+    def test_get_running_returns_none_for_restarting_status(self):
+        """get_running returns None when status is RESTARTING."""
+        registry = ServiceRegistry()
+        registry.register("mount", Mock())
+        registry.set_status("mount", ServiceStatus.RESTARTING)
+
+        assert registry.get_running("mount") is None
+
+    def test_get_running_returns_none_for_stopped_status(self):
+        """get_running returns None when status is STOPPED."""
+        registry = ServiceRegistry()
+        registry.register("mount", Mock())
+        registry.set_status("mount", ServiceStatus.STOPPED)
+
+        assert registry.get_running("mount") is None
+
+    def test_get_running_returns_none_for_unknown_status(self):
+        """get_running returns None when status is UNKNOWN (initial)."""
+        registry = ServiceRegistry()
+        registry.register("mount", Mock())
+        # No set_status call: status stays UNKNOWN.
+
+        assert registry.get_running("mount") is None
+
+    def test_get_running_returns_none_for_starting_status(self):
+        """get_running returns None when status is STARTING (not yet healthy)."""
+        registry = ServiceRegistry()
+        registry.register("mount", Mock())
+        registry.set_status("mount", ServiceStatus.STARTING)
+
+        assert registry.get_running("mount") is None
+
+    def test_get_running_returns_none_for_degraded_status(self):
+        """get_running returns None when status is DEGRADED.
+
+        Per ARCH-002: ONLY RUNNING counts as healthy. DEGRADED gates out too —
+        a degraded mount may not be reliable enough to accept new slew commands.
+        """
+        registry = ServiceRegistry()
+        registry.register("mount", Mock())
+        registry.set_status("mount", ServiceStatus.DEGRADED)
+
+        assert registry.get_running("mount") is None
+
+    def test_get_running_returns_none_for_unregistered_service(self):
+        """get_running returns None for a service that was never registered."""
+        registry = ServiceRegistry()
+
+        assert registry.get_running("nonexistent") is None
+
 
 class TestSessionState:
     """Tests for SessionState dataclass."""
@@ -225,33 +296,98 @@ class TestOrchestrator:
         assert orchestrator.camera is None
 
     def test_register_mount(self, orchestrator):
-        """Test registering mount service."""
+        """Test registering mount service.
+
+        ARCH-002: ``orchestrator.mount`` is gated to RUNNING status. The
+        registry plumbing is verified via ``registry.get`` (returns the
+        instance regardless of status); the public property is exercised by
+        ``test_mount_property_returns_none_when_mount_status_error`` below.
+        """
         mock_mount = Mock()
         orchestrator.register_mount(mock_mount)
 
-        assert orchestrator.mount is mock_mount
+        assert orchestrator.registry.get("mount") is mock_mount
         assert "mount" in orchestrator.registry.list_services()
 
     def test_register_catalog(self, orchestrator):
-        """Test registering catalog service."""
+        """Test registering catalog service (ARCH-002: see test_register_mount)."""
         mock_catalog = Mock()
         orchestrator.register_catalog(mock_catalog)
 
-        assert orchestrator.catalog is mock_catalog
+        assert orchestrator.registry.get("catalog") is mock_catalog
 
     def test_register_ephemeris(self, orchestrator):
-        """Test registering ephemeris service."""
+        """Test registering ephemeris service (ARCH-002: see test_register_mount)."""
         mock_ephemeris = Mock()
         orchestrator.register_ephemeris(mock_ephemeris)
 
-        assert orchestrator.ephemeris is mock_ephemeris
+        assert orchestrator.registry.get("ephemeris") is mock_ephemeris
 
     def test_register_weather(self, orchestrator):
-        """Test registering weather service."""
+        """Test registering weather service (ARCH-002: see test_register_mount)."""
         mock_weather = Mock()
         orchestrator.register_weather(mock_weather)
 
-        assert orchestrator.weather is mock_weather
+        assert orchestrator.registry.get("weather") is mock_weather
+
+    # =========================================================================
+    # ARCH-002: Property-level health gating tests
+    # =========================================================================
+
+    def test_mount_property_returns_service_when_running(self, orchestrator):
+        """ARCH-002: orchestrator.mount returns the service when RUNNING."""
+        mock_mount = Mock()
+        orchestrator.register_mount(mock_mount, required=False)
+        orchestrator.registry.set_status("mount", ServiceStatus.RUNNING)
+
+        assert orchestrator.mount is mock_mount
+
+    def test_mount_property_returns_none_when_mount_status_error(self, orchestrator):
+        """ARCH-002: orchestrator.mount returns None when status is ERROR."""
+        mock_mount = Mock()
+        orchestrator.register_mount(mock_mount, required=False)
+        orchestrator.registry.set_status("mount", ServiceStatus.ERROR, "boom")
+
+        assert orchestrator.mount is None
+
+    def test_all_properties_gated_by_running_status(self, orchestrator):
+        """ARCH-002: every public service property is gated by RUNNING status.
+
+        Verifies the 11 properties listed in the ARCH-002 spec all go through
+        ``ServiceRegistry.get_running``. Each one returns the registered
+        instance only after status is flipped to RUNNING.
+        """
+        registrations = [
+            ("mount", orchestrator.register_mount, lambda: orchestrator.mount),
+            ("catalog", orchestrator.register_catalog, lambda: orchestrator.catalog),
+            ("ephemeris", orchestrator.register_ephemeris, lambda: orchestrator.ephemeris),
+            ("weather", orchestrator.register_weather, lambda: orchestrator.weather),
+            ("safety", orchestrator.register_safety, lambda: orchestrator.safety),
+            ("camera", orchestrator.register_camera, lambda: orchestrator.camera),
+            ("guiding", orchestrator.register_guiding, lambda: orchestrator.guiding),
+            ("focus", orchestrator.register_focus, lambda: orchestrator.focus),
+            ("astrometry", orchestrator.register_astrometry, lambda: orchestrator.astrometry),
+            ("alerts", orchestrator.register_alerts, lambda: orchestrator.alerts),
+            ("power", orchestrator.register_power, lambda: orchestrator.power),
+            ("enclosure", orchestrator.register_enclosure, lambda: orchestrator.enclosure),
+        ]
+        mocks = {name: Mock() for name, _, _ in registrations}
+
+        for name, register, _ in registrations:
+            register(mocks[name], required=False)
+
+        # Pre-RUNNING: every property gated out (status defaults to UNKNOWN).
+        for name, _, accessor in registrations:
+            assert accessor() is None, f"{name} should be None pre-RUNNING"
+
+        # Flip each to RUNNING in turn; property should yield the mock.
+        for name, _, accessor in registrations:
+            orchestrator.registry.set_status(name, ServiceStatus.RUNNING)
+            assert accessor() is mocks[name], f"{name} should be returned when RUNNING"
+
+        # Flip one to ERROR and re-confirm it gates out.
+        orchestrator.registry.set_status("mount", ServiceStatus.ERROR)
+        assert orchestrator.mount is None
 
     def test_register_all_services(self, orchestrator):
         """Test registering all services."""
@@ -752,38 +888,48 @@ class TestSafeShutdown:
 
     @pytest.mark.asyncio
     async def test_safe_shutdown_parks_mount(self, orchestrator):
-        """Test safe shutdown parks the mount."""
+        """Test safe shutdown parks the mount.
+
+        ARCH-002: ``shutdown()`` flips status to STOPPED after _safe_shutdown,
+        so the gated ``orchestrator.mount`` property returns None at assert
+        time. Use ``registry.get`` to reach the registered mock unconditionally.
+        """
+        mount_mock = orchestrator.registry.get("mount")
         await orchestrator.start()
         await orchestrator.shutdown(safe=True)
 
-        orchestrator.mount.park.assert_called_once()
+        mount_mock.park.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_safe_shutdown_closes_enclosure(self, orchestrator):
-        """Test safe shutdown closes enclosure."""
+        """Test safe shutdown closes enclosure (ARCH-002: see test_safe_shutdown_parks_mount)."""
+        enclosure_mock = orchestrator.registry.get("enclosure")
         await orchestrator.start()
         await orchestrator.shutdown(safe=True)
 
-        orchestrator.enclosure.close.assert_called_once()
+        enclosure_mock.close.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_safe_shutdown_skips_parked_mount(self, orchestrator):
         """Test safe shutdown skips already parked mount."""
-        orchestrator.mount.is_parked = True
+        mount_mock = orchestrator.registry.get("mount")
+        mount_mock.is_parked = True
 
         await orchestrator.start()
         await orchestrator.shutdown(safe=True)
 
-        orchestrator.mount.park.assert_not_called()
+        mount_mock.park.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_unsafe_shutdown_skips_safe_steps(self, orchestrator):
         """Test unsafe shutdown skips safe steps."""
+        mount_mock = orchestrator.registry.get("mount")
+        enclosure_mock = orchestrator.registry.get("enclosure")
         await orchestrator.start()
         await orchestrator.shutdown(safe=False)
 
-        orchestrator.mount.park.assert_not_called()
-        orchestrator.enclosure.close.assert_not_called()
+        mount_mock.park.assert_not_called()
+        enclosure_mock.close.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_shutdown_emits_event(self, orchestrator):
@@ -799,7 +945,7 @@ class TestSafeShutdown:
     @pytest.mark.asyncio
     async def test_safe_shutdown_handles_mount_error(self, orchestrator):
         """Test safe shutdown handles mount park error gracefully."""
-        orchestrator.mount.park.side_effect = Exception("Park failed")
+        orchestrator.registry.get("mount").park.side_effect = Exception("Park failed")
 
         await orchestrator.start()
         # Should not raise
@@ -811,7 +957,7 @@ class TestSafeShutdown:
     @pytest.mark.asyncio
     async def test_safe_shutdown_handles_enclosure_error(self, orchestrator):
         """Test safe shutdown handles enclosure close error gracefully."""
-        orchestrator.enclosure.close.side_effect = Exception("Close failed")
+        orchestrator.registry.get("enclosure").close.side_effect = Exception("Close failed")
 
         await orchestrator.start()
         # Should not raise
@@ -877,6 +1023,29 @@ class TestSafeShutdown:
         assert "metrics" in loaded
 
         await orchestrator.shutdown(safe=False)
+
+    @pytest.mark.asyncio
+    async def test_safe_shutdown_still_attempts_park_on_errored_mount(self, orchestrator):
+        """ARCH-002 design choice (b): shutdown ATTEMPTS park even on ERRORed mount.
+
+        The public ``orchestrator.mount`` property is gated to RUNNING (ARCH-002),
+        but ``_safe_shutdown`` bypasses that gating via ``registry.get`` so
+        park is always attempted. The exception handler still catches a real
+        failure — but we don't want to skip the *attempt* and risk leaving a
+        mount unparked just because its status is ERROR.
+        """
+        # Start (sets status to RUNNING), then flip mount to ERROR.
+        await orchestrator.start()
+        orchestrator.registry.set_status("mount", ServiceStatus.ERROR, "comms lost")
+        # Sanity check: gated property returns None.
+        assert orchestrator.mount is None
+
+        await orchestrator.shutdown(safe=True)
+
+        # park() must still have been attempted via the registry bypass.
+        registered_mount = orchestrator.registry.get("mount")
+        assert registered_mount is not None
+        registered_mount.park.assert_called_once()
 
 
 # =============================================================================

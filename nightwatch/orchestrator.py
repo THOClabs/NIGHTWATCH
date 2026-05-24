@@ -1138,6 +1138,33 @@ class ServiceRegistry:
         info = self._services.get(name)
         return info.service if info else None
 
+    def get_running(self, name: str) -> Optional[Any]:
+        """
+        Get a service by name only if its status is RUNNING (ARCH-002).
+
+        Health-gated accessor used by the orchestrator's public service
+        properties (``Orchestrator.mount``, ``.camera``, etc.). A service whose
+        status is anything other than ``ServiceStatus.RUNNING`` —
+        ``UNKNOWN``, ``STARTING``, ``DEGRADED``, ``STOPPED``, ``ERROR``, or
+        ``RESTARTING`` — is treated as unavailable: callers receive ``None``
+        and tool handlers short-circuit with "<service> not available" instead
+        of hanging on a dead connection.
+
+        Note: ``_safe_shutdown`` deliberately uses :meth:`get` rather than
+        ``get_running`` so park/close attempts still fire on ERRORed services
+        (best-effort safe shutdown — see ARCH-002 comment there).
+
+        Args:
+            name: Service identifier
+
+        Returns:
+            Service instance if registered and status is RUNNING, else None.
+        """
+        info = self._services.get(name)
+        if info is None or info.status is not ServiceStatus.RUNNING:
+            return None
+        return info.service
+
     def get_status(self, name: str) -> ServiceStatus:
         """Get service status."""
         info = self._services.get(name)
@@ -1420,65 +1447,72 @@ class Orchestrator:
         """Check if orchestrator is running."""
         return self._running
 
+    # ARCH-002: All service properties below route through ``get_running`` so
+    # that callers (tool handlers, command pipeline, etc.) automatically see
+    # ``None`` for any service whose status is not RUNNING. This prevents
+    # dispatching work to ERROR/RESTARTING/STOPPED services and hanging on
+    # dead connections. ``_safe_shutdown`` deliberately bypasses this — see
+    # the comment in that method.
+
     @property
     def mount(self) -> Optional[MountServiceProtocol]:
-        """Get mount service."""
-        return self.registry.get("mount")
+        """Get mount service if running, else None (ARCH-002)."""
+        return self.registry.get_running("mount")
 
     @property
     def catalog(self) -> Optional[CatalogServiceProtocol]:
-        """Get catalog service."""
-        return self.registry.get("catalog")
+        """Get catalog service if running, else None (ARCH-002)."""
+        return self.registry.get_running("catalog")
 
     @property
     def ephemeris(self) -> Optional[EphemerisServiceProtocol]:
-        """Get ephemeris service."""
-        return self.registry.get("ephemeris")
+        """Get ephemeris service if running, else None (ARCH-002)."""
+        return self.registry.get_running("ephemeris")
 
     @property
     def weather(self) -> Optional[WeatherServiceProtocol]:
-        """Get weather service."""
-        return self.registry.get("weather")
+        """Get weather service if running, else None (ARCH-002)."""
+        return self.registry.get_running("weather")
 
     @property
     def safety(self) -> Optional[SafetyServiceProtocol]:
-        """Get safety monitor service."""
-        return self.registry.get("safety")
+        """Get safety monitor service if running, else None (ARCH-002)."""
+        return self.registry.get_running("safety")
 
     @property
     def camera(self) -> Optional[CameraServiceProtocol]:
-        """Get camera service."""
-        return self.registry.get("camera")
+        """Get camera service if running, else None (ARCH-002)."""
+        return self.registry.get_running("camera")
 
     @property
     def guiding(self) -> Optional[GuidingServiceProtocol]:
-        """Get guiding service."""
-        return self.registry.get("guiding")
+        """Get guiding service if running, else None (ARCH-002)."""
+        return self.registry.get_running("guiding")
 
     @property
     def focus(self) -> Optional[FocusServiceProtocol]:
-        """Get focus service."""
-        return self.registry.get("focus")
+        """Get focus service if running, else None (ARCH-002)."""
+        return self.registry.get_running("focus")
 
     @property
     def astrometry(self) -> Optional[AstrometryServiceProtocol]:
-        """Get astrometry service."""
-        return self.registry.get("astrometry")
+        """Get astrometry service if running, else None (ARCH-002)."""
+        return self.registry.get_running("astrometry")
 
     @property
     def alerts(self) -> Optional[AlertServiceProtocol]:
-        """Get alert service."""
-        return self.registry.get("alerts")
+        """Get alert service if running, else None (ARCH-002)."""
+        return self.registry.get_running("alerts")
 
     @property
     def power(self) -> Optional[PowerServiceProtocol]:
-        """Get power service."""
-        return self.registry.get("power")
+        """Get power service if running, else None (ARCH-002)."""
+        return self.registry.get_running("power")
 
     @property
     def enclosure(self) -> Optional[EnclosureServiceProtocol]:
-        """Get enclosure service."""
-        return self.registry.get("enclosure")
+        """Get enclosure service if running, else None (ARCH-002)."""
+        return self.registry.get_running("enclosure")
 
     # =========================================================================
     # Service Registration (Steps 215-226)
@@ -1649,12 +1683,22 @@ class Orchestrator:
         """
         logger.info("Performing safe shutdown sequence...")
 
+        # ARCH-002: Use registry.get() (not self.mount / self.enclosure) so we
+        # still ATTEMPT park/close even when status is ERROR / RESTARTING /
+        # DEGRADED. The public properties gate to RUNNING-only to protect tool
+        # handlers from dead services, but at shutdown the calculus inverts:
+        # the cost of a futile park attempt is low (we catch the exception
+        # below); the cost of not parking on an ERRORed mount is hardware
+        # damage. Best-effort beats correctness here.
+        mount = self.registry.get("mount")
+        enclosure = self.registry.get("enclosure")
+
         # Step 252: Park the telescope mount
-        if self.mount:
+        if mount:
             try:
-                if hasattr(self.mount, 'is_parked') and not self.mount.is_parked:
+                if hasattr(mount, 'is_parked') and not mount.is_parked:
                     logger.info("Parking telescope mount...")
-                    await self.mount.park()
+                    await mount.park()
                     await self.emit_event(
                         EventType.MOUNT_PARKED,
                         source="mount",
@@ -1666,11 +1710,11 @@ class Orchestrator:
                 self.record_service_error("mount")
 
         # Step 253: Close the enclosure/roof
-        if self.enclosure:
+        if enclosure:
             try:
-                if hasattr(self.enclosure, 'close'):
+                if hasattr(enclosure, 'close'):
                     logger.info("Closing enclosure...")
-                    await self.enclosure.close()
+                    await enclosure.close()
                     logger.info("Enclosure closed successfully")
             except Exception as e:
                 logger.error(f"Failed to close enclosure during shutdown: {e}")
