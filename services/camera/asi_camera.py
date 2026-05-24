@@ -641,26 +641,102 @@ class ASICamera:
         return session
 
     async def _capture_loop(self, session: CaptureSession, duration_sec: float):
-        """Background capture loop."""
-        try:
-            # In real implementation, would use ASI video capture
-            # For now, simulate capture
-            start_time = datetime.now()
-            frame_count = 0
+        """
+        Background burst capture loop (HWS-001).
 
+        Drives ``capture_frame()`` repeatedly until ``duration_sec`` elapses
+        or ``self._capturing`` is cleared (e.g. by ``stop_capture``). Each
+        successfully captured frame is written as a FITS sibling of
+        ``session.output_path``:
+
+            <session.output_path.parent>/<session.output_path.stem>_frame_NNNN.fits
+
+        The session's primary ``output_path`` (set in ``start_capture``) is
+        retained as the logical session marker. Sibling-frame naming keeps
+        the public ``start_capture`` API unchanged while allowing the burst
+        loop to persist every exposure for downstream stacking.
+
+        Per-frame failures are logged but do NOT abort the session: a
+        transient SDK timeout or save failure increments the failure counter
+        and the loop continues until ``duration_sec`` is reached. Only the
+        most recent error is retained on ``session.error``.
+        """
+        start_time = datetime.now()
+        frame_count = 0
+        failed_frames = 0
+        # We are the body of an asyncio.create_task spawned by start_capture, so
+        # self._capturing has just been flipped True there. Note that we must
+        # clear it in the finally block (existing semantics) so subsequent
+        # calls to start_capture / capture_frame work — but capture_frame
+        # itself also touches self._capturing, so we toggle it OFF for each
+        # frame call and back ON after, otherwise capture_frame would refuse.
+        try:
             while self._capturing:
                 elapsed = (datetime.now() - start_time).total_seconds()
                 if elapsed >= duration_sec:
                     break
 
-                # Simulate frame capture
-                await asyncio.sleep(session.settings.exposure_ms / 1000.0)
-                frame_count += 1
-                session.frame_count = frame_count
+                try:
+                    # capture_frame guards on self._capturing — temporarily
+                    # release the flag for the duration of the single frame
+                    # capture, then re-assert it so external stop_capture
+                    # still works between frames.
+                    self._capturing = False
+                    bytes_data = await self.capture_frame(
+                        exposure_sec=session.settings.exposure_ms / 1000.0
+                    )
+                    self._capturing = True
+
+                    if bytes_data is None:
+                        failed_frames += 1
+                        session.error = "capture_frame returned None"
+                        logger.warning(
+                            f"Frame {frame_count + 1} capture failed (None); continuing"
+                        )
+                        continue
+
+                    # Determine width/height from the active ROI
+                    roi = self.get_roi()
+                    width, height = roi[2], roi[3]
+
+                    # Sibling filename pattern keeps start_capture's output_path stable
+                    frame_path = (
+                        session.output_path.parent
+                        / f"{session.output_path.stem}_frame_{frame_count + 1:04d}.fits"
+                    )
+                    saved = self._save_fits(bytes_data, frame_path, width, height)
+                    if not saved:
+                        failed_frames += 1
+                        session.error = f"FITS save failed for frame {frame_count + 1}"
+                        logger.warning(
+                            f"Frame {frame_count + 1} FITS save failed; continuing"
+                        )
+                        continue
+
+                    frame_count += 1
+                    session.frame_count = frame_count
+
+                except Exception as e:  # pragma: no cover — broad guard for SDK churn
+                    failed_frames += 1
+                    session.error = str(e)
+                    logger.warning(
+                        f"Frame {frame_count + 1} raised {type(e).__name__}: {e}; "
+                        "continuing burst"
+                    )
+                    # Re-assert capturing flag for the next iteration
+                    self._capturing = True
 
             session.complete = True
             session.frame_count = frame_count
-            logger.info(f"Capture complete: {session.session_id} ({frame_count} frames)")
+            if failed_frames:
+                logger.info(
+                    f"Capture complete: {session.session_id} "
+                    f"({frame_count} frames, {failed_frames} failures)"
+                )
+            else:
+                logger.info(
+                    f"Capture complete: {session.session_id} ({frame_count} frames)"
+                )
 
         except Exception as e:
             session.error = str(e)
@@ -727,9 +803,21 @@ class ASICamera:
         output_path = self.data_dir / filename
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
-        # Capture frame
+        # Capture frame via the real SDK path (HWS-001)
         try:
-            # In real implementation: self._camera.capture()
+            bytes_data = await self.capture_frame(exposure_sec=exposure_sec)
+            if bytes_data is None:
+                raise RuntimeError("Capture failed: capture_frame returned None")
+
+            # Persist via the central format dispatcher. save_image() handles
+            # FITS via _save_fits (astropy + numpy), PNG via _save_png
+            # (PIL + numpy), and RAW8/RAW16 as bare bytes. Unsupported formats
+            # log + return False.
+            if not self.save_image(bytes_data, output_path, format=format):
+                raise RuntimeError(
+                    f"Failed to save captured frame to {output_path} (format={format})"
+                )
+
             logger.info(f"Captured single frame: {output_path}")
             return output_path
 
