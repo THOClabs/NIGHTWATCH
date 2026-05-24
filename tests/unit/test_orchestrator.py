@@ -200,6 +200,43 @@ class TestServiceRegistry:
 
         assert registry.get_running("nonexistent") is None
 
+    # =========================================================================
+    # ARCH-002: get_for_shutdown (safety-shutdown bypass accessor)
+    # =========================================================================
+
+    @pytest.mark.parametrize(
+        "status",
+        [
+            ServiceStatus.RUNNING,
+            ServiceStatus.STOPPED,
+            ServiceStatus.ERROR,
+            ServiceStatus.RESTARTING,
+            ServiceStatus.UNKNOWN,
+            ServiceStatus.STARTING,
+            ServiceStatus.DEGRADED,
+        ],
+    )
+    def test_get_for_shutdown_returns_service_regardless_of_status(self, status):
+        """get_for_shutdown returns the instance for EVERY status (no health gate).
+
+        ARCH-002: shutdown paths (park, close) must still fire on ERRORed /
+        RESTARTING services because the cost of attempting park is a
+        try/except trace, but the cost of NOT attempting park on an ERRORed
+        mount is hardware damage.
+        """
+        registry = ServiceRegistry()
+        mock_service = Mock()
+        registry.register("mount", mock_service)
+        registry.set_status("mount", status)
+
+        assert registry.get_for_shutdown("mount") is mock_service
+
+    def test_get_for_shutdown_returns_none_for_unknown_service(self):
+        """get_for_shutdown returns None for a service that was never registered."""
+        registry = ServiceRegistry()
+
+        assert registry.get_for_shutdown("nonexistent") is None
+
 
 class TestSessionState:
     """Tests for SessionState dataclass."""
@@ -1029,8 +1066,8 @@ class TestSafeShutdown:
         """ARCH-002 design choice (b): shutdown ATTEMPTS park even on ERRORed mount.
 
         The public ``orchestrator.mount`` property is gated to RUNNING (ARCH-002),
-        but ``_safe_shutdown`` bypasses that gating via ``registry.get`` so
-        park is always attempted. The exception handler still catches a real
+        but ``_safe_shutdown`` bypasses that gating via ``registry.get_for_shutdown``
+        so park is always attempted. The exception handler still catches a real
         failure — but we don't want to skip the *attempt* and risk leaving a
         mount unparked just because its status is ERROR.
         """
@@ -1046,6 +1083,71 @@ class TestSafeShutdown:
         registered_mount = orchestrator.registry.get("mount")
         assert registered_mount is not None
         registered_mount.park.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_end_session_still_attempts_park_on_errored_mount(self, orchestrator):
+        """ARCH-002 missed-scope fix: end_session bypasses the RUNNING gate too.
+
+        Before the fix, ``end_session`` used ``self.mount`` / ``self.enclosure``
+        (gated to RUNNING by ARCH-002), so an ERRORed mount silently skipped
+        park — exactly the hardware-damage scenario the gating rationale calls
+        out. After the fix, it uses ``registry.get_for_shutdown`` like
+        ``_safe_shutdown`` does.
+        """
+        registered_mount = orchestrator.registry.get("mount")
+        registered_enclosure = orchestrator.registry.get("enclosure")
+        # end_session checks `enclosure.is_open` before calling close().
+        registered_enclosure.is_open = True
+
+        await orchestrator.start()
+        await orchestrator.start_session("regression_end_session")
+
+        # Flip BOTH to ERROR — the bug we're regressing affects both.
+        orchestrator.registry.set_status("mount", ServiceStatus.ERROR, "comms lost")
+        orchestrator.registry.set_status("enclosure", ServiceStatus.ERROR, "comms lost")
+        # Sanity check: gated properties return None.
+        assert orchestrator.mount is None
+        assert orchestrator.enclosure is None
+
+        result = await orchestrator.end_session(park=True, close=True)
+
+        # park() and close() must still have been attempted via the bypass.
+        registered_mount.park.assert_called_once()
+        registered_enclosure.close.assert_called_once()
+        # Session state still flips to not-observing regardless of errors.
+        assert orchestrator.session.is_observing is False
+        # end_session returns True because mock park/close succeed.
+        assert result is True
+
+        await orchestrator.shutdown(safe=False)
+
+    @pytest.mark.asyncio
+    async def test_emergency_shutdown_still_attempts_park_on_errored_mount(self, orchestrator):
+        """ARCH-002 missed-scope fix: emergency_shutdown bypasses the RUNNING gate too.
+
+        ``emergency_shutdown`` is the critical-safety path. Before the fix it
+        used ``self.mount`` / ``self.enclosure`` and silently skipped park on
+        ERRORed services — inverting the behavior of a path the docstring
+        labels "critical safety" during exactly the failure modes that warrant
+        emergency shutdown. After the fix, it uses ``registry.get_for_shutdown``.
+        """
+        registered_mount = orchestrator.registry.get("mount")
+        registered_enclosure = orchestrator.registry.get("enclosure")
+
+        await orchestrator.start()
+        # Flip BOTH to ERROR.
+        orchestrator.registry.set_status("mount", ServiceStatus.ERROR, "comms lost")
+        orchestrator.registry.set_status("enclosure", ServiceStatus.ERROR, "comms lost")
+        # Sanity check: gated properties return None.
+        assert orchestrator.mount is None
+        assert orchestrator.enclosure is None
+
+        result = await orchestrator.emergency_shutdown()
+
+        # park() and close() must still have been attempted via the bypass.
+        registered_mount.park.assert_called_once()
+        registered_enclosure.close.assert_called_once()
+        assert result is True
 
 
 # =============================================================================

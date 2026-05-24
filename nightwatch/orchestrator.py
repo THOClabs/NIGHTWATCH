@@ -1150,9 +1150,10 @@ class ServiceRegistry:
         and tool handlers short-circuit with "<service> not available" instead
         of hanging on a dead connection.
 
-        Note: ``_safe_shutdown`` deliberately uses :meth:`get` rather than
-        ``get_running`` so park/close attempts still fire on ERRORed services
-        (best-effort safe shutdown — see ARCH-002 comment there).
+        Note: safety-shutdown paths (``_safe_shutdown``, ``end_session``,
+        ``emergency_shutdown``) deliberately use :meth:`get_for_shutdown`
+        rather than ``get_running`` so park/close attempts still fire on
+        ERRORed services (best-effort safe shutdown).
 
         Args:
             name: Service identifier
@@ -1161,9 +1162,40 @@ class ServiceRegistry:
             Service instance if registered and status is RUNNING, else None.
         """
         info = self._services.get(name)
-        if info is None or info.status is not ServiceStatus.RUNNING:
+        if info is None or info.status != ServiceStatus.RUNNING:
             return None
         return info.service
+
+    def get_for_shutdown(self, name: str) -> Optional[Any]:
+        """Get a service by name for safety-shutdown paths, BYPASSING health gating.
+
+        ARCH-002: The public Orchestrator.<service> properties route through
+        :meth:`get_running` and return ``None`` on any non-RUNNING status. That
+        gating is correct for the command pipeline (don't dispatch goto_object
+        to a STOPPED mount). But park/close on shutdown paths needs the
+        opposite calculus: the cost of attempting park on an ERRORed mount is
+        a try/except trace; the cost of NOT attempting park on an ERRORed
+        mount is hardware damage.
+
+        Call sites (all in ``nightwatch/orchestrator.py``):
+
+        - :meth:`Orchestrator._safe_shutdown` (timed shutdown sequence)
+        - :meth:`Orchestrator.end_session` (graceful session teardown)
+        - :meth:`Orchestrator.emergency_shutdown` (critical-safety path)
+
+        Behaviorally identical to :meth:`get`, but the named accessor signals
+        intent and lets ``grep get_for_shutdown`` enumerate every
+        safety-shutdown site.
+
+        Args:
+            name: Service identifier
+
+        Returns:
+            Service instance, or ``None`` if not registered. Status is NOT
+            checked.
+        """
+        info = self._services.get(name)
+        return info.service if info else None
 
     def get_status(self, name: str) -> ServiceStatus:
         """Get service status."""
@@ -1451,8 +1483,8 @@ class Orchestrator:
     # that callers (tool handlers, command pipeline, etc.) automatically see
     # ``None`` for any service whose status is not RUNNING. This prevents
     # dispatching work to ERROR/RESTARTING/STOPPED services and hanging on
-    # dead connections. ``_safe_shutdown`` deliberately bypasses this — see
-    # the comment in that method.
+    # dead connections. Safety-shutdown paths deliberately bypass this via
+    # ``ServiceRegistry.get_for_shutdown`` — see that method's docstring.
 
     @property
     def mount(self) -> Optional[MountServiceProtocol]:
@@ -1683,15 +1715,10 @@ class Orchestrator:
         """
         logger.info("Performing safe shutdown sequence...")
 
-        # ARCH-002: Use registry.get() (not self.mount / self.enclosure) so we
-        # still ATTEMPT park/close even when status is ERROR / RESTARTING /
-        # DEGRADED. The public properties gate to RUNNING-only to protect tool
-        # handlers from dead services, but at shutdown the calculus inverts:
-        # the cost of a futile park attempt is low (we catch the exception
-        # below); the cost of not parking on an ERRORed mount is hardware
-        # damage. Best-effort beats correctness here.
-        mount = self.registry.get("mount")
-        enclosure = self.registry.get("enclosure")
+        # ARCH-002: see ServiceRegistry.get_for_shutdown for rationale (bypass
+        # the RUNNING-only gate so park/close still fire on ERRORed services).
+        mount = self.registry.get_for_shutdown("mount")
+        enclosure = self.registry.get_for_shutdown("enclosure")
 
         # Step 252: Park the telescope mount
         if mount:
@@ -2019,12 +2046,17 @@ class Orchestrator:
                 logger.error(f"Error stopping guiding: {e}")
                 success = False
 
+        # ARCH-002: see ServiceRegistry.get_for_shutdown for rationale (bypass
+        # the RUNNING-only gate so park/close still fire on ERRORed services).
+        mount = self.registry.get_for_shutdown("mount")
+        enclosure = self.registry.get_for_shutdown("enclosure")
+
         # Park the mount (Step 232)
-        if park and self.mount:
+        if park and mount:
             try:
-                if hasattr(self.mount, 'is_parked') and not self.mount.is_parked:
+                if hasattr(mount, 'is_parked') and not mount.is_parked:
                     logger.info("Parking telescope mount...")
-                    await self.mount.park()
+                    await mount.park()
                     await self.emit_event(
                         EventType.MOUNT_PARKED,
                         source="mount",
@@ -2037,11 +2069,11 @@ class Orchestrator:
                 success = False
 
         # Close enclosure (Step 232)
-        if close and self.enclosure:
+        if close and enclosure:
             try:
-                if hasattr(self.enclosure, 'is_open') and self.enclosure.is_open:
+                if hasattr(enclosure, 'is_open') and enclosure.is_open:
                     logger.info("Closing enclosure...")
-                    await self.enclosure.close()
+                    await enclosure.close()
                     logger.info("Enclosure closed successfully")
             except Exception as e:
                 logger.error(f"Failed to close enclosure: {e}")
@@ -2570,18 +2602,23 @@ class Orchestrator:
             except Exception:
                 pass
 
+        # ARCH-002: see ServiceRegistry.get_for_shutdown for rationale (bypass
+        # the RUNNING-only gate so park/close still fire on ERRORed services).
+        mount = self.registry.get_for_shutdown("mount")
+        enclosure = self.registry.get_for_shutdown("enclosure")
+
         # Park mount (critical safety)
-        if self.mount:
+        if mount:
             try:
-                await self.mount.park()
+                await mount.park()
                 logger.info("Mount parked (emergency)")
             except Exception as e:
                 logger.error(f"EMERGENCY: Failed to park mount: {e}")
 
         # Close enclosure (critical safety)
-        if self.enclosure:
+        if enclosure:
             try:
-                await self.enclosure.close()
+                await enclosure.close()
                 logger.info("Enclosure closed (emergency)")
             except Exception as e:
                 logger.error(f"EMERGENCY: Failed to close enclosure: {e}")
