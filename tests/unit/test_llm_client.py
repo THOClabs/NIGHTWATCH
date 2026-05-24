@@ -668,7 +668,7 @@ class TestObservatorySystemPromptGrounding:
         assert "SAFETY STATUS" in OBSERVATORY_SYSTEM_PROMPT
 
     def test_prompt_teaches_refusal_on_unsafe(self):
-        """Prompt instructs the model to refuse mount/camera tools on UNSAFE."""
+        """Prompt instructs the model to refuse mount, camera, and enclosure tools on UNSAFE."""
         text = OBSERVATORY_SYSTEM_PROMPT.lower()
         assert "unsafe" in text
         assert "refuse" in text
