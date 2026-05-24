@@ -27,6 +27,7 @@ Usage:
 
 from __future__ import annotations
 
+import logging
 import os
 from pathlib import Path
 from typing import Literal, Optional
@@ -35,6 +36,8 @@ import yaml
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 from nightwatch.exceptions import ConfigurationError
+
+logger = logging.getLogger(__name__)
 
 __all__ = [
     "NightwatchConfig",
@@ -51,9 +54,33 @@ __all__ = [
     "AlertConfig",
     "PowerConfig",
     "EnclosureConfig",
+    "SAFETY_ENV_OVERRIDE_ALLOWLIST",
     "load_config",
     "get_config_paths",
 ]
+
+
+# =============================================================================
+# Safety env-var override allowlist (SAFE-003)
+# =============================================================================
+#
+# Risk #5 from the Phase 1 audit: the original `_apply_env_overrides` accepted
+# ANY `NIGHTWATCH_SAFETY_*` env var, which means a misconfigured deployment or
+# a hostile actor could silently disable wind/humidity/temperature protection
+# with e.g. `NIGHTWATCH_SAFETY_WIND_LIMIT_PARK=60`. Sensors keep reporting,
+# the safety monitor never trips, the roof never closes.
+#
+# The fix is an explicit deny-by-default allowlist: a safety threshold may be
+# overridden via env var ONLY if its key is listed here. The default is empty
+# — any safety override requires a code change (this set) so it goes through
+# code review. The YAML config file remains the supported way to tune safety
+# thresholds for a specific deployment.
+#
+# Adding a key to this set is a safety-critical change and should be reviewed
+# accordingly. Per the CLAUDE.md prohibited-edits list, the safety_monitor
+# itself cannot be edited without explicit approval — same spirit applies to
+# loosening this allowlist.
+SAFETY_ENV_OVERRIDE_ALLOWLIST: set[str] = set()
 
 
 # =============================================================================
@@ -863,6 +890,11 @@ def _apply_env_overrides(config_dict: dict) -> dict:
 
     Environment variables are in format: NIGHTWATCH_SECTION_KEY
     Example: NIGHTWATCH_MOUNT_HOST=192.168.1.100
+
+    Safety section is special: per SAFE-003 (Risk #5), env overrides for
+    `NIGHTWATCH_SAFETY_*` keys are rejected with a CRITICAL log unless the
+    key appears in ``SAFETY_ENV_OVERRIDE_ALLOWLIST``. This prevents silent
+    disabling of wind/humidity/temperature protection via misconfiguration.
     """
     prefix = "NIGHTWATCH_"
 
@@ -877,6 +909,29 @@ def _apply_env_overrides(config_dict: dict) -> dict:
 
         section = parts[0]
         setting = "_".join(parts[1:])
+
+        # SAFE-003: deny-by-default for safety section. Reject (with a loud
+        # warning) any safety key not on the allowlist BEFORE applying it.
+        if section == "safety" and setting not in SAFETY_ENV_OVERRIDE_ALLOWLIST:
+            if SAFETY_ENV_OVERRIDE_ALLOWLIST:
+                allowed_repr = (
+                    "allowlist={"
+                    + ", ".join(sorted(SAFETY_ENV_OVERRIDE_ALLOWLIST))
+                    + "}"
+                )
+            else:
+                allowed_repr = "allowlist=set() (no safety overrides permitted)"
+            logger.critical(
+                "Refusing safety env override %s=%r (key %r not in allowlist); "
+                "falling back to YAML/default. %s. "
+                "To permit this key, add it to SAFETY_ENV_OVERRIDE_ALLOWLIST "
+                "in nightwatch/config.py (code review required).",
+                key,
+                value,
+                setting,
+                allowed_repr,
+            )
+            continue
 
         # Apply to config dict
         if section not in config_dict:

@@ -381,6 +381,153 @@ class TestEnvironmentOverrides:
             os.unlink(temp_path)
 
 
+class TestSafetyEnvOverrideAllowlist:
+    """Tests for SAFE-003: env-var override allowlist for safety thresholds.
+
+    Risk #5: Without the allowlist, an operator could silently disable wind/
+    humidity/temperature protection via `NIGHTWATCH_SAFETY_*=<unsafe value>`.
+    The allowlist is the conservative default (empty set) — any safety env
+    override is rejected with a CRITICAL log and the YAML/default value wins.
+    """
+
+    def test_safety_env_override_rejected_when_not_in_allowlist(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """A safety env var not in the allowlist must NOT take effect.
+
+        Verifies the SAFE-003 spec line: starting with a safety env override
+        falls back to the YAML/default value (default wind_limit_park=25.0).
+        """
+        import logging
+
+        from nightwatch.config import SAFETY_ENV_OVERRIDE_ALLOWLIST
+
+        # Sanity: the target key must NOT be on the allowlist for this test
+        # to exercise the rejection path. If a future commit allowlists it,
+        # this assertion will catch the test drift.
+        assert "wind_limit_park" not in SAFETY_ENV_OVERRIDE_ALLOWLIST
+
+        os.environ["NIGHTWATCH_SAFETY_WIND_LIMIT_PARK"] = "999"
+        try:
+            with caplog.at_level(logging.CRITICAL, logger="nightwatch.config"):
+                config = load_config()
+            # Default value preserved — env override was rejected
+            assert config.safety.wind_limit_park == 25.0
+            # A CRITICAL log was emitted naming the rejected env var
+            critical_records = [
+                r for r in caplog.records if r.levelno == logging.CRITICAL
+            ]
+            assert len(critical_records) >= 1, (
+                "Expected at least one CRITICAL log for rejected safety override"
+            )
+            joined = " ".join(r.getMessage() for r in critical_records)
+            assert "NIGHTWATCH_SAFETY_WIND_LIMIT_PARK" in joined
+            assert "wind_limit_park" in joined
+        finally:
+            del os.environ["NIGHTWATCH_SAFETY_WIND_LIMIT_PARK"]
+
+    def test_safety_env_override_wind_limit_mph_alias_also_rejected(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """The spec's literal verify line: WIND_LIMIT_MPH must be rejected too.
+
+        Even though `wind_limit_mph` is not a defined SafetyConfig field (and
+        would be silently dropped by pydantic), it is still a SAFETY-section
+        env override and must trip the allowlist guard — operators should see
+        a loud warning rather than a silent no-op.
+        """
+        import logging
+
+        os.environ["NIGHTWATCH_SAFETY_WIND_LIMIT_MPH"] = "999"
+        try:
+            with caplog.at_level(logging.CRITICAL, logger="nightwatch.config"):
+                config = load_config()
+            # Defaults preserved
+            assert config.safety.wind_limit_park == 25.0
+            assert config.safety.wind_limit_warning == 20.0
+            # CRITICAL log emitted
+            critical_records = [
+                r for r in caplog.records if r.levelno == logging.CRITICAL
+            ]
+            assert any(
+                "NIGHTWATCH_SAFETY_WIND_LIMIT_MPH" in r.getMessage()
+                for r in critical_records
+            )
+        finally:
+            del os.environ["NIGHTWATCH_SAFETY_WIND_LIMIT_MPH"]
+
+    def test_safety_env_override_critical_log_names_allowlist(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """For transparency, the rejection log must name the allowlist contents.
+
+        Per the SAFE-003 spec: the warning should identify what IS permitted
+        so an operator can either edit the allowlist (code review) or use the
+        correct config-file path.
+        """
+        import logging
+
+        from nightwatch.config import SAFETY_ENV_OVERRIDE_ALLOWLIST
+
+        os.environ["NIGHTWATCH_SAFETY_HUMIDITY_LIMIT_EMERGENCY"] = "100"
+        try:
+            with caplog.at_level(logging.CRITICAL, logger="nightwatch.config"):
+                load_config()
+            critical_records = [
+                r for r in caplog.records if r.levelno == logging.CRITICAL
+            ]
+            joined = " ".join(r.getMessage() for r in critical_records)
+            if SAFETY_ENV_OVERRIDE_ALLOWLIST:
+                for allowed in SAFETY_ENV_OVERRIDE_ALLOWLIST:
+                    assert allowed in joined
+            else:
+                # Empty allowlist must still be mentioned (e.g. "allowlist=set()"
+                # or "no safety overrides permitted")
+                assert (
+                    "allowlist" in joined.lower()
+                    or "no safety" in joined.lower()
+                )
+        finally:
+            del os.environ["NIGHTWATCH_SAFETY_HUMIDITY_LIMIT_EMERGENCY"]
+
+    def test_safety_env_override_permitted_when_in_allowlist(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """When a key IS on the allowlist, the env override takes effect.
+
+        Documents the positive path. Patches the allowlist in-place to permit
+        `wind_limit_park` for the duration of the test, then asserts the env
+        value flows through. This ensures the guard is a real allowlist
+        (deny-by-default with an explicit allow) rather than a blanket block.
+        """
+        from nightwatch import config as config_module
+
+        monkeypatch.setattr(
+            config_module,
+            "SAFETY_ENV_OVERRIDE_ALLOWLIST",
+            {"wind_limit_park"},
+        )
+        os.environ["NIGHTWATCH_SAFETY_WIND_LIMIT_PARK"] = "27"
+        try:
+            config = config_module.load_config()
+            assert config.safety.wind_limit_park == 27.0
+        finally:
+            del os.environ["NIGHTWATCH_SAFETY_WIND_LIMIT_PARK"]
+
+    def test_non_safety_env_overrides_unaffected_by_allowlist(self) -> None:
+        """Allowlist guards ONLY the safety section — others continue to work.
+
+        Regression check: SAFE-003 must not break the existing env-override
+        contract for mount/site/weather/etc.
+        """
+        os.environ["NIGHTWATCH_MOUNT_HOST"] = "non-safety-host.local"
+        try:
+            config = load_config()
+            assert config.mount.host == "non-safety-host.local"
+        finally:
+            del os.environ["NIGHTWATCH_MOUNT_HOST"]
+
+
 class TestConfigIntegration:
     """Integration tests for configuration system."""
 
