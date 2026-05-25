@@ -4,9 +4,13 @@ NIGHTWATCH Focuser Service Unit Tests
 Step 191: Write unit tests for autofocus algorithms
 """
 
-import pytest
+import asyncio
+import logging
+import random
 from datetime import datetime, timedelta
-from unittest.mock import MagicMock, AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 from services.focus.focuser_service import (
     FocuserService,
@@ -558,6 +562,195 @@ class TestVCurveFitting:
 
         # Should return position of minimum HFD
         assert best_pos == 25500
+
+    def test_fit_vcurve_recovers_synthetic_quadratic_within_one_step(self, focuser):
+        """HWS-005 spec verify: synthetic HFD = a(x - x*)^2 + c with known vertex.
+
+        The least-squares parabolic fit must recover the true vertex x* within
+        +/- 1 focuser step. This is the headline acceptance criterion for
+        HWS-005 ("simulator harness with synthetic HFD-vs-position quadratic
+        returns predicted vertex +/-1 step").
+
+        Uses noise-free samples so the recoverable precision is bounded only
+        by numerical conditioning of the normal-equations solver in
+        ``_fit_vcurve_full``.
+        """
+        # Known vertex at x* = 25000, minimum HFD = 1.5, curvature a = 1e-4
+        true_vertex = 25000
+        a = 1e-4
+        c = 1.5
+        positions = [24500, 24700, 24900, 25000, 25100, 25300, 25500]
+        hfds = [a * (p - true_vertex) ** 2 + c for p in positions]
+
+        best_pos = focuser._fit_vcurve(positions, hfds)
+
+        assert abs(best_pos - true_vertex) <= 1, (
+            f"Vertex recovery error {abs(best_pos - true_vertex)} > 1 step "
+            f"(predicted {best_pos}, true {true_vertex})"
+        )
+
+    def test_fit_vcurve_full_reports_confidence_on_clean_fit(self, focuser):
+        """HWS-005: a clean synthetic V-curve should yield ``confidence='high'``.
+
+        Downstream callers (``_vcurve_focus``) gate behaviour on the
+        ``confidence`` field; this test pins the contract that a textbook
+        parabola is classified as high-confidence so the gating threshold
+        in production code stays meaningful.
+        """
+        true_vertex = 25000
+        a = 1e-4
+        c = 1.5
+        positions = [24500, 24700, 24900, 25000, 25100, 25300, 25500]
+        hfds = [a * (p - true_vertex) ** 2 + c for p in positions]
+
+        result = focuser._fit_vcurve_full(positions, hfds)
+
+        assert result["confidence"] == "high"
+        assert result["r_squared"] > 0.99
+        assert result["method"] == "parabolic_fit"
+
+    def test_fit_vcurve_full_low_confidence_on_inverted_curve(self, focuser):
+        """HWS-005: data that doesn't form a V (e.g. monotone or inverted)
+        should be flagged ``confidence='low'`` so ``_vcurve_focus`` can act on
+        the warning instead of trusting a garbage vertex.
+        """
+        # Inverted parabola (opens downward) — not a focus curve
+        positions = [24500, 24700, 24900, 25000, 25100, 25300, 25500]
+        hfds = [1.5, 2.5, 3.2, 3.5, 3.2, 2.5, 1.5]
+
+        result = focuser._fit_vcurve_full(positions, hfds)
+
+        assert result["confidence"] == "low"
+
+
+# ============================================================================
+# HWS-005: Confidence-aware V-curve autofocus
+# ============================================================================
+
+
+class TestVCurveFocusConfidence:
+    """HWS-005: ``_vcurve_focus`` must propagate fit quality into FocusRun
+    and log critical warnings when the fit is below ``min_r_squared``.
+    """
+
+    def test_min_r_squared_config_default(self, config):
+        """``FocuserConfig.min_r_squared`` defaults to 0.85.
+
+        Threshold derived from the existing ``_fit_vcurve_full`` 'medium'
+        boundary (>0.80) — slightly above to require a clear V before the
+        run is considered trustworthy.
+        """
+        assert hasattr(config, "min_r_squared"), (
+            "FocuserConfig missing min_r_squared field"
+        )
+        assert config.min_r_squared == pytest.approx(0.85)
+
+    def test_focus_run_carries_fit_quality_fields(self):
+        """``FocusRun`` must surface ``fit_r_squared``, ``fit_confidence``,
+        and ``low_confidence_warning`` so the orchestrator/voice tools can
+        warn the operator without re-running the fit.
+        """
+        run = FocusRun(
+            run_id="test",
+            start_time=datetime.now(),
+        )
+        assert hasattr(run, "fit_r_squared")
+        assert hasattr(run, "fit_confidence")
+        assert hasattr(run, "low_confidence_warning")
+        # Defaults should be sentinel/empty so a run that hasn't fitted yet
+        # is unambiguous.
+        assert run.fit_r_squared is None
+        assert run.fit_confidence is None
+        assert run.low_confidence_warning is False
+
+    @pytest.mark.asyncio
+    async def test_vcurve_focus_populates_fit_quality_on_run(self, focuser):
+        """After a successful sweep, ``FocusRun.fit_r_squared`` and
+        ``fit_confidence`` reflect the actual fit (not None).
+        """
+        focuser._connected = True
+        focuser._position = 25000
+        result = await focuser.auto_focus(method=AutoFocusMethod.VCURVE)
+
+        assert result.success is True
+        assert result.fit_r_squared is not None
+        assert result.fit_confidence in {"high", "medium", "low"}
+
+    @pytest.mark.asyncio
+    async def test_vcurve_focus_flags_low_confidence_when_fit_poor(self, focuser, caplog):
+        """When the fit's r_squared is below ``min_r_squared``,
+        ``FocusRun.low_confidence_warning`` is True and a critical log
+        record is emitted.
+
+        We force this by stubbing ``_measure_hfd`` to return random noise so
+        the parabolic fit cannot find a real vertex.
+        """
+        focuser._connected = True
+        focuser._position = 25000
+        # Tighten threshold to guarantee tripping the warning regardless of
+        # default randomness in the simulator
+        focuser.config.min_r_squared = 0.99
+        # Need >3 samples so noise actually degrades the fit (a parabola
+        # always interpolates 3 points exactly, so r^2=1.0 on n=3).
+        focuser.config.autofocus_samples = 9
+
+        rng = random.Random(42)
+
+        async def noise_hfd(_camera):
+            return 3.0 + rng.uniform(-1.0, 1.0)
+
+        focuser._measure_hfd = noise_hfd  # type: ignore[method-assign]
+
+        with caplog.at_level(logging.CRITICAL, logger="services.focus.focuser_service"):
+            result = await focuser.auto_focus(method=AutoFocusMethod.VCURVE)
+
+        assert result.success is True
+        assert result.low_confidence_warning is True
+        assert any(
+            "low confidence" in rec.message.lower() or "low-confidence" in rec.message.lower()
+            for rec in caplog.records
+            if rec.levelno >= logging.CRITICAL
+        ), "Expected a CRITICAL log mentioning low confidence"
+
+    @pytest.mark.asyncio
+    async def test_vcurve_focus_propagates_cancelled_error_and_halts(self, focuser):
+        """``_vcurve_focus`` must propagate ``asyncio.CancelledError`` from
+        the sampling loop (per HWS-003 pattern). The focuser must be halted
+        before re-raising so it does not keep moving after cancel.
+        """
+        focuser._connected = True
+        focuser._position = 25000
+
+        call_count = {"n": 0}
+
+        async def cancelling_hfd(_camera):
+            call_count["n"] += 1
+            if call_count["n"] >= 2:
+                raise asyncio.CancelledError()
+            return 3.0
+
+        focuser._measure_hfd = cancelling_hfd  # type: ignore[method-assign]
+
+        halt_calls = {"n": 0}
+        original_halt = focuser.halt
+
+        async def counting_halt():
+            halt_calls["n"] += 1
+            await original_halt()
+
+        focuser.halt = counting_halt  # type: ignore[method-assign]
+
+        with pytest.raises(asyncio.CancelledError):
+            await focuser.auto_focus(method=AutoFocusMethod.VCURVE)
+
+        # State should be reset to IDLE by the finally-block, not stuck in
+        # AUTOFOCUS.
+        assert focuser.state == FocuserState.IDLE
+        # Halt-on-cancel: focuser was explicitly halted before the
+        # CancelledError propagated out.
+        assert halt_calls["n"] >= 1, (
+            "halt() must be called when CancelledError interrupts the sweep"
+        )
 
 
 # ============================================================================

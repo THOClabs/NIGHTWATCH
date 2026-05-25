@@ -182,12 +182,27 @@ class MockFocusService:
         self.is_moving = False
         return True
 
-    async def autofocus(self):
+    async def auto_focus(
+        self,
+        camera: object = None,  # noqa: ARG002 (mock matches Protocol)
+        method: object = None,  # noqa: ARG002 (mock matches Protocol)
+    ):
+        """HWS-005: matches the FocusServiceProtocol signature.
+
+        Returns a duck-typed result with ``position`` and ``hfd`` keys for
+        the integration assertions; production code uses the FocusRun
+        dataclass from services.focus.focuser_service.
+        """
         self.is_moving = True
         await asyncio.sleep(0.01)
         self.position = 25500  # Optimal focus
         self.is_moving = False
         return {"position": self.position, "hfd": 2.5}
+
+    # HWS-005: keep the old name as a thin alias so existing call sites
+    # that bypassed the Protocol (e.g. legacy integration tests) keep
+    # working; new code should use ``auto_focus``.
+    autofocus = auto_focus
 
 
 class MockEnclosureService:

@@ -4439,14 +4439,55 @@ def create_default_handlers(
                 return "V-curve autofocus failed"
 
             elif hasattr(focuser_service, 'auto_focus'):
-                # Simple autofocus method
-                success = await asyncio.wait_for(
-                    focuser_service.auto_focus(),
-                    timeout=timeout
+                # HWS-005: canonical FocuserService.auto_focus path.
+                # Returns a FocusRun dataclass carrying:
+                #   - success / final_position / best_hfd
+                #   - fit_r_squared / fit_confidence / low_confidence_warning
+                # Surface the fit warning to the operator so a degraded
+                # focus is not announced as a clean success.
+                #
+                # Map the voice 'algorithm' arg onto AutoFocusMethod; on
+                # unknown strings, let auto_focus() fall through to its
+                # configured default (passing method=None).
+                method_enum = None
+                try:
+                    # Inline import: keeps voice/tools/telescope_tools.py
+                    # importable without the focus-service deps (numpy
+                    # etc.) — the per-file test runner relies on this to
+                    # avoid heavy collection-time imports.
+                    from services.focus.focuser_service import (  # noqa: PLC0415
+                        AutoFocusMethod,
+                    )
+                    method_enum = AutoFocusMethod(algorithm.lower())
+                except (ImportError, ValueError):
+                    method_enum = None
+
+                run = await asyncio.wait_for(
+                    focuser_service.auto_focus(
+                        camera=camera_client,
+                        method=method_enum,
+                    ),
+                    timeout=timeout,
                 )
-                if success:
-                    return "Autofocus complete"
-                return "Autofocus failed"
+
+                if run is None or not getattr(run, "success", False):
+                    err = getattr(run, "error", None) if run else None
+                    return f"Autofocus failed: {err}" if err else "Autofocus failed"
+
+                pos = getattr(run, "final_position", None)
+                hfd = getattr(run, "best_hfd", None)
+                msg = "Autofocus complete"
+                if pos is not None:
+                    msg += f". Position: {pos}"
+                if hfd is not None and hfd != float("inf"):
+                    msg += f" (HFD: {hfd:.2f})"
+                # HWS-005: warn on low-confidence fit so the operator can
+                # decide whether to re-run with a wider sweep.
+                if getattr(run, "low_confidence_warning", False):
+                    r2 = getattr(run, "fit_r_squared", None)
+                    r2_str = f"{r2:.2f}" if isinstance(r2, (int, float)) else "?"
+                    msg += f" (warning: low-confidence fit, R^2={r2_str})"
+                return msg
 
             return "Focuser does not support autofocus"
 

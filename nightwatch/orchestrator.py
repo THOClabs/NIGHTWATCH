@@ -70,6 +70,13 @@ if TYPE_CHECKING:
     # importing under TYPE_CHECKING keeps the type hints accurate without
     # creating an import cycle.
     from services.astrometry.plate_solver import PlateSolveHint, SolveResult
+    # HWS-005: FocusRun / AutoFocusMethod are intentionally NOT imported
+    # here. Pulling services.focus.focuser_service under TYPE_CHECKING adds
+    # ~20 pre-existing mypy errors from that module to the nightwatch/*
+    # check (the imports become transitive). FocusServiceProtocol.auto_focus
+    # uses ``Any`` for ``camera`` / ``method`` / return type and documents
+    # the real shape (a ``services.focus.focuser_service.FocusRun``) in its
+    # docstring; concrete callers import the dataclass directly.
 
 logger = logging.getLogger("NIGHTWATCH.Orchestrator")
 
@@ -1034,10 +1041,29 @@ class GuidingServiceProtocol(ServiceProtocol, Protocol):
 
 
 class FocusServiceProtocol(ServiceProtocol, Protocol):
-    """Protocol for focus service."""
+    """Protocol for focus service.
 
-    async def autofocus(self) -> bool:
-        """Run autofocus routine."""
+    HWS-005: aligned with the concrete ``FocuserService.auto_focus`` —
+    the method is named ``auto_focus`` (not ``autofocus``), accepts a
+    camera handle and method enum, and returns a ``FocusRun`` dataclass
+    carrying full fit quality (R^2, confidence, low_confidence_warning)
+    so the orchestrator can react without re-running the fit.
+    """
+
+    async def auto_focus(
+        self,
+        camera: Any = None,
+        method: Any = None,
+    ) -> Any:
+        """Run auto-focus routine.
+
+        Concrete return type is ``services.focus.focuser_service.FocusRun``;
+        ``method`` is ``AutoFocusMethod | None`` and ``camera`` is the
+        camera-service handle (duck-typed; any object with ``capture()``).
+        ``Any`` is used so this Protocol stays decoupled from the focus
+        service module's heavier imports (keeps the nightwatch/* mypy
+        baseline stable).
+        """
         ...
 
     async def move_to(self, position: int) -> bool:

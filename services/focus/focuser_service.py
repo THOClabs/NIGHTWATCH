@@ -61,6 +61,15 @@ class FocuserConfig:
     hfd_target: float = 3.0             # Target HFD in pixels
     focus_tolerance: int = 10           # Position tolerance in steps
 
+    # HWS-005: V-curve fit quality gate. When the parabolic regression's
+    # R^2 falls below this threshold, _vcurve_focus still moves to the
+    # computed vertex (best available estimate) but emits a CRITICAL log
+    # record and flips FocusRun.low_confidence_warning so the operator /
+    # orchestrator can decide whether to re-run with a wider sweep.
+    # Default 0.85 is one notch above the existing 'medium' boundary
+    # (>0.80) in _fit_vcurve_full's confidence classifier.
+    min_r_squared: float = 0.85
+
 
 @dataclass
 class FocusMetric:
@@ -87,6 +96,13 @@ class FocusRun:
     best_hfd: float = float('inf')
     success: bool = False
     error: Optional[str] = None
+    # HWS-005: V-curve fit quality surfaced from _fit_vcurve_full so the
+    # orchestrator / voice tools can decide whether to trust the resulting
+    # position or schedule a re-run. None when no fit was performed (e.g.
+    # the run failed before fitting, or the method does not fit a curve).
+    fit_r_squared: Optional[float] = None
+    fit_confidence: Optional[str] = None  # 'high' | 'medium' | 'low'
+    low_confidence_warning: bool = False
 
 
 @dataclass
@@ -910,11 +926,21 @@ class FocuserService:
         return run
 
     async def _vcurve_focus(self, run: FocusRun, camera):
-        """V-curve auto-focus algorithm."""
+        """V-curve auto-focus algorithm (HWS-005).
+
+        Sweeps ``autofocus_samples`` positions centred on the current focus,
+        measures HFD at each, fits a parabola via ``_fit_vcurve_full``, and
+        moves to the predicted vertex. Surfaces fit-quality (R^2,
+        confidence) on the FocusRun; emits a CRITICAL log when R^2 is below
+        ``config.min_r_squared`` so a degraded fit is not silently trusted.
+
+        Cancellation: ``asyncio.CancelledError`` raised during the sampling
+        loop halts the focuser before propagating so it does not keep
+        moving after the operator cancels.
+        """
         # Calculate focus range
         half_range = (self.config.autofocus_samples // 2) * self.config.autofocus_step_size
         start_pos = self._position - half_range
-        end_pos = self._position + half_range
 
         # Move to start position
         await self.move_to(start_pos - self.config.backlash_steps, False)
@@ -924,30 +950,49 @@ class FocuserService:
         positions = []
         hfds = []
 
-        for i in range(self.config.autofocus_samples):
-            pos = start_pos + i * self.config.autofocus_step_size
-            await self.move_to(pos, compensate_backlash=False)
+        try:
+            for i in range(self.config.autofocus_samples):
+                pos = start_pos + i * self.config.autofocus_step_size
+                await self.move_to(pos, compensate_backlash=False)
 
-            # Capture and measure HFD
-            hfd = await self._measure_hfd(camera)
+                # Capture and measure HFD
+                hfd = await self._measure_hfd(camera)
 
-            positions.append(pos)
-            hfds.append(hfd)
+                positions.append(pos)
+                hfds.append(hfd)
 
-            run.measurements.append(FocusMetric(
-                timestamp=datetime.now(),
-                position=pos,
-                hfd=hfd,
-                fwhm=hfd * 0.6,  # Approximate conversion
-                peak_value=0,
-                star_count=0,
-                temperature_c=self._temperature
-            ))
+                run.measurements.append(FocusMetric(
+                    timestamp=datetime.now(),
+                    position=pos,
+                    hfd=hfd,
+                    fwhm=hfd * 0.6,  # Approximate conversion
+                    peak_value=0,
+                    star_count=0,
+                    temperature_c=self._temperature
+                ))
 
-            logger.debug(f"Focus sample: pos={pos}, HFD={hfd:.2f}")
+                logger.debug(f"Focus sample: pos={pos}, HFD={hfd:.2f}")
+        except asyncio.CancelledError:
+            # HWS-005: cancel-then-cleanup — stop the focuser before the
+            # exception escapes the orchestrator. Pattern matches HWS-003
+            # (calibrate_and_guide) cancellation discipline.
+            logger.critical(
+                "V-curve auto-focus cancelled mid-sweep "
+                f"after {len(positions)} of {self.config.autofocus_samples} samples; "
+                "halting focuser"
+            )
+            try:
+                await self.halt()
+            except Exception as halt_err:
+                logger.error(f"halt() during cancel raised: {halt_err}")
+            raise
 
-        # Fit parabola to V-curve
-        best_pos = self._fit_vcurve(positions, hfds)
+        # Fit parabola to V-curve (HWS-005: use the full fit so we can
+        # surface r_squared/confidence, not just the vertex).
+        fit = self._fit_vcurve_full(positions, hfds)
+        best_pos = fit["best_position"]
+        r_squared = fit["r_squared"]
+        confidence = fit["confidence"]
 
         # Move to best position
         await self.move_to(best_pos, reason="auto_focus")
@@ -957,6 +1002,21 @@ class FocuserService:
 
         run.final_position = best_pos
         run.best_hfd = final_hfd
+        run.fit_r_squared = r_squared
+        run.fit_confidence = confidence
+
+        # HWS-005: low-confidence gate. Log CRITICAL and flag the run so
+        # downstream callers can decide (re-run with wider sweep, alert
+        # operator, etc.) — but still complete the move; a noisy fit's
+        # vertex is the best estimate we have.
+        if r_squared < self.config.min_r_squared:
+            run.low_confidence_warning = True
+            logger.critical(
+                "V-curve auto-focus low-confidence fit: "
+                f"R^2={r_squared:.3f} < min_r_squared={self.config.min_r_squared:.2f}, "
+                f"confidence={confidence}, method={fit.get('method')}, "
+                f"vertex={best_pos}; downstream consumers should treat as suspect"
+            )
 
         # Step 188: Record final position with HFD
         self._record_position("auto_focus_complete", hfd=final_hfd)
