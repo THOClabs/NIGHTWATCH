@@ -2,23 +2,26 @@
 NIGHTWATCH Camera Service Unit Tests
 
 Step 100: Write unit tests for camera control
+HWS-001: Tests for real-SDK capture path (capture_single, _capture_loop)
 """
 
+import asyncio
 import logging
-import pytest
-from pathlib import Path
-from unittest.mock import MagicMock, patch
 from datetime import datetime
+from pathlib import Path
+from unittest.mock import MagicMock
+
+import pytest
 
 from services.camera.asi_camera import (
     ASICamera,
-    CameraSettings,
+    ASISDKWrapper,
     CameraInfo,
+    CameraSettings,
+    CaptureMode,
     CaptureSession,
     ImageFormat,
-    CaptureMode,
 )
-
 
 # ============================================================================
 # Test Fixtures
@@ -519,6 +522,318 @@ class TestCaptureMode:
         assert CaptureMode.LUNAR.value == "lunar"
         assert CaptureMode.DEEP_SKY.value == "deep_sky"
         assert CaptureMode.PREVIEW.value == "preview"
+
+
+# ============================================================================
+# Real SDK Capture Tests (HWS-001)
+# ============================================================================
+
+
+def _build_mocked_real_sdk_camera(
+    tmp_data_dir: Path,
+    width: int = 64,
+    height: int = 48,
+    bit_depth: int = 16,
+) -> ASICamera:
+    """
+    Build a fully-mocked ASICamera that exercises the real-SDK branch.
+
+    Sets up:
+      - ``_camera`` mock supporting start_exposure/get_exposure_status/get_data_after_exposure
+      - ``_asi`` mock with the ASI_EXP_SUCCESS/ASI_EXP_FAILED constants
+      - ``_info`` populated with mono 16-bit defaults
+      - get_roi() returning the requested width/height
+      - _initialized = True so capture_single() does not bail
+    """
+    camera = ASICamera(camera_index=0, data_dir=tmp_data_dir)
+
+    camera._asi = MagicMock()
+    camera._asi.ASI_EXP_SUCCESS = 0
+    camera._asi.ASI_EXP_FAILED = 1
+    camera._asi.ASI_GAIN = 0
+    camera._asi.ASI_EXPOSURE = 1
+    camera._asi.ASI_BANDWIDTHOVERLOAD = 6
+    camera._asi.ASI_HIGH_SPEED_MODE = 14
+    camera._asi.ASI_FLIP = 17
+    camera._asi.ASI_TEMPERATURE = 18
+    camera._asi.ASI_TARGET_TEMP = 19
+    camera._asi.ASI_COOLER_ON = 20
+    camera._asi.ASI_COOLER_POWER_PERC = 21
+
+    mock_cam = MagicMock()
+    # start_exposure / get_exposure_status / get_data_after_exposure define the
+    # real-SDK capture path. Default: exposure succeeds, payload is non-zero
+    # bytes sized for the ROI at the requested bit depth.
+    bytes_per_pixel = 2 if bit_depth > 8 else 1
+    mock_cam.get_exposure_status.return_value = camera._asi.ASI_EXP_SUCCESS
+    mock_cam.get_data_after_exposure.return_value = bytes([1] * (width * height * bytes_per_pixel))
+    mock_cam.get_roi.return_value = (0, 0, width, height)
+    camera._camera = mock_cam
+
+    camera._info = CameraInfo(
+        name="ZWO ASI Mock",
+        camera_id=1,
+        max_width=width,
+        max_height=height,
+        pixel_size_um=2.9,
+        is_color=False,
+        has_cooler=False,
+        bit_depth=bit_depth,
+        usb_host="USB3",
+    )
+    camera._initialized = True
+    return camera
+
+
+class TestRealSDKCapture:
+    """HWS-001 verification: capture_single and _capture_loop call the real SDK."""
+
+    @pytest.mark.asyncio
+    async def test_capture_single_writes_fits_file_with_real_dimensions(
+        self, tmp_path, monkeypatch
+    ):
+        """Spec verify line: writes a non-zero FITS file >= ROI dimensions."""
+        monkeypatch.setattr(ASISDKWrapper, "SDK_AVAILABLE", True)
+        camera = _build_mocked_real_sdk_camera(tmp_path, width=64, height=48)
+
+        output_path = await camera.capture_single(
+            exposure_sec=0.001,
+            format=ImageFormat.FITS,
+            filename="hws001_test.fits",
+        )
+
+        # File must exist with non-zero size
+        assert output_path.exists(), f"Expected FITS file at {output_path}"
+        assert output_path.stat().st_size > 0, "FITS file should be non-zero"
+
+        # Verify the FITS data matches ROI dimensions
+        from astropy.io import fits  # noqa: PLC0415  test-local import
+        with fits.open(str(output_path)) as hdul:
+            hdr = hdul[0].header
+            assert hdr["NAXIS1"] == 64, f"NAXIS1 expected 64, got {hdr['NAXIS1']}"
+            assert hdr["NAXIS2"] == 48, f"NAXIS2 expected 48, got {hdr['NAXIS2']}"
+            assert hdul[0].data is not None
+            assert hdul[0].data.shape == (48, 64)
+
+        # The real SDK was actually called (not just the simulation branch)
+        camera._camera.start_exposure.assert_called_once()
+        camera._camera.get_data_after_exposure.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_capture_single_raises_on_capture_failure(self, tmp_path, monkeypatch):
+        """If capture_frame returns None, capture_single must raise RuntimeError."""
+        monkeypatch.setattr(ASISDKWrapper, "SDK_AVAILABLE", True)
+        camera = _build_mocked_real_sdk_camera(tmp_path, width=32, height=32)
+
+        # Force capture_frame to fail by simulating ASI_EXP_FAILED
+        camera._camera.get_exposure_status.return_value = camera._asi.ASI_EXP_FAILED
+
+        with pytest.raises(RuntimeError, match="Capture failed"):
+            await camera.capture_single(
+                exposure_sec=0.001,
+                format=ImageFormat.FITS,
+                filename="hws001_fail.fits",
+            )
+
+    @pytest.mark.asyncio
+    async def test_capture_single_raises_on_fits_save_failure(
+        self, tmp_path, monkeypatch
+    ):
+        """If save_image returns False, capture_single must raise."""
+        monkeypatch.setattr(ASISDKWrapper, "SDK_AVAILABLE", True)
+        camera = _build_mocked_real_sdk_camera(tmp_path, width=32, height=32)
+
+        # Patch save_image to simulate a save failure
+        camera.save_image = MagicMock(return_value=False)
+
+        with pytest.raises(RuntimeError, match="Failed to save"):
+            await camera.capture_single(
+                exposure_sec=0.001,
+                format=ImageFormat.FITS,
+                filename="hws001_save_fail.fits",
+            )
+
+    @pytest.mark.asyncio
+    async def test_capture_loop_writes_multiple_frames(self, tmp_path, monkeypatch):
+        """_capture_loop should write multiple FITS files as siblings of output_path."""
+        monkeypatch.setattr(ASISDKWrapper, "SDK_AVAILABLE", True)
+        camera = _build_mocked_real_sdk_camera(tmp_path, width=32, height=32)
+
+        session = await camera.start_capture(
+            target="moon",
+            duration_sec=0.2,
+            settings=CameraSettings(exposure_ms=5.0, format=ImageFormat.FITS),
+        )
+
+        # Let the background task run
+        await asyncio.sleep(0.4)
+
+        assert session.complete is True
+        assert session.frame_count >= 2, (
+            f"Expected >=2 frames in 0.2s @ 5ms, got {session.frame_count}"
+        )
+
+        # Frame files should be siblings of session.output_path
+        frame_dir = session.output_path.parent
+        frame_files = sorted(frame_dir.glob("*_frame_*.fits"))
+        assert len(frame_files) >= 2, (
+            f"Expected >=2 frame_*.fits files in {frame_dir}, found {frame_files}"
+        )
+
+        # Each frame must be a valid non-zero FITS at the ROI size
+        for ff in frame_files:
+            assert ff.stat().st_size > 0
+            from astropy.io import fits  # noqa: PLC0415
+            with fits.open(str(ff)) as hdul:
+                assert hdul[0].header["NAXIS1"] == 32
+                assert hdul[0].header["NAXIS2"] == 32
+
+    @pytest.mark.asyncio
+    async def test_capture_loop_per_frame_failure_does_not_abort(
+        self, tmp_path, monkeypatch
+    ):
+        """A single failed frame should not abort the whole loop."""
+        monkeypatch.setattr(ASISDKWrapper, "SDK_AVAILABLE", True)
+        camera = _build_mocked_real_sdk_camera(tmp_path, width=16, height=16)
+
+        # First call to get_exposure_status returns FAILED, then SUCCESS for the rest.
+        call_results = [
+            camera._asi.ASI_EXP_FAILED,
+        ]
+
+        def status_side_effect(*args, **kwargs):
+            if call_results:
+                return call_results.pop(0)
+            return camera._asi.ASI_EXP_SUCCESS
+
+        camera._camera.get_exposure_status.side_effect = status_side_effect
+
+        session = await camera.start_capture(
+            target="moon",
+            duration_sec=0.15,
+            settings=CameraSettings(exposure_ms=5.0, format=ImageFormat.FITS),
+        )
+
+        await asyncio.sleep(0.35)
+
+        # Session should have completed without raising; at least one frame succeeded.
+        assert session.complete is True
+        assert session.frame_count >= 1, (
+            "Expected at least one frame after recovering from a per-frame failure"
+        )
+
+    @pytest.mark.asyncio
+    async def test_stop_capture_during_burst_aborts_within_one_frame(
+        self, tmp_path, monkeypatch
+    ):
+        """
+        Regression test for the ``_capturing`` toggle race.
+
+        Pre-fix ``_capture_loop`` flipped ``_capturing = False`` around every
+        ``capture_frame`` call (to placate the wrapper's guard) and back to
+        True after. During that window — up to a full inter-frame period at
+        high frame rates — ``stop_capture`` observed False and silently
+        no-op'd, leaving the loop running. In production this meant a
+        SafetyMonitor rain-stop could be silently dropped while the roof
+        was closing on a live exposure.
+
+        After the fix, ``_capture_loop`` drives :meth:`_do_exposure`
+        directly without touching ``_capturing``, so ``stop_capture`` always
+        observes True for the lifetime of the burst.
+        """
+        monkeypatch.setattr(ASISDKWrapper, "SDK_AVAILABLE", True)
+        camera = _build_mocked_real_sdk_camera(tmp_path, width=16, height=16)
+
+        # Replace _do_exposure with a slow stub: each frame takes ~50 ms.
+        # Returns valid bytes so _save_fits succeeds (sized for the 16x16 ROI
+        # at 2 bytes/pixel = 512 bytes).
+        async def slow_do_exposure(
+            exposure_sec=None, gain=None, callback=None
+        ):
+            await asyncio.sleep(0.05)
+            return bytes([1] * (16 * 16 * 2))
+
+        monkeypatch.setattr(camera, "_do_exposure", slow_do_exposure)
+
+        # Start a "long" burst (5 s) so we know stop_capture interrupts it.
+        session = await camera.start_capture(
+            target="moon",
+            duration_sec=5.0,
+            settings=CameraSettings(exposure_ms=50.0, format=ImageFormat.FITS),
+        )
+
+        # Let ~1.5 frames go by, then issue the stop. _capturing must read
+        # True throughout — observable here as stop_capture returning the
+        # session (not None).
+        await asyncio.sleep(0.075)
+        stopped = await camera.stop_capture()
+
+        assert stopped is not None, (
+            "stop_capture returned None — _capturing was observed False "
+            "mid-burst (toggle race window)"
+        )
+        assert stopped is session
+
+        # Give the loop's finally block time to run.
+        await asyncio.sleep(0.2)
+
+        # The burst was interrupted long before 5 s elapsed — very few frames.
+        assert session.frame_count < 10, (
+            f"Expected stop_capture to abort burst within ~1 frame, "
+            f"got {session.frame_count} frames"
+        )
+
+        # The loop must have unwound; _capturing back to False, no zombie task.
+        assert camera._capturing is False
+        assert camera._current_session is None
+
+    @pytest.mark.asyncio
+    async def test_capture_loop_records_failed_frame_count(
+        self, tmp_path, monkeypatch
+    ):
+        """
+        Verify ``CaptureSession.failed_frame_count`` accumulates per-frame
+        failures even after ``complete`` flips True. Pre-fix the count was
+        a local variable in ``_capture_loop`` and only ``session.error``
+        (most-recent message) survived — making the 7-failures-in-1000
+        case indistinguishable from a clean run on the session object.
+        """
+        monkeypatch.setattr(ASISDKWrapper, "SDK_AVAILABLE", True)
+        camera = _build_mocked_real_sdk_camera(tmp_path, width=16, height=16)
+
+        # 2 failures, then 3 successes, then SUCCESS forever (timer ends loop).
+        call_results = [
+            camera._asi.ASI_EXP_FAILED,
+            camera._asi.ASI_EXP_FAILED,
+            camera._asi.ASI_EXP_SUCCESS,
+            camera._asi.ASI_EXP_SUCCESS,
+            camera._asi.ASI_EXP_SUCCESS,
+        ]
+
+        def status_side_effect(*args, **kwargs):
+            if call_results:
+                return call_results.pop(0)
+            return camera._asi.ASI_EXP_SUCCESS
+
+        camera._camera.get_exposure_status.side_effect = status_side_effect
+
+        session = await camera.start_capture(
+            target="moon",
+            duration_sec=0.05,  # short window — just enough for ~5 frames at 5 ms
+            settings=CameraSettings(exposure_ms=5.0, format=ImageFormat.FITS),
+        )
+
+        await asyncio.sleep(0.25)
+
+        assert session.complete is True
+        # 2 failures from the FAILED status codes were observed
+        assert session.failed_frame_count == 2, (
+            f"Expected failed_frame_count == 2, got {session.failed_frame_count}"
+        )
+        # At least the 3 forced-SUCCESS frames landed (more if duration allowed)
+        assert session.frame_count >= 3, (
+            f"Expected at least 3 successful frames, got {session.frame_count}"
+        )
 
 
 # ============================================================================
