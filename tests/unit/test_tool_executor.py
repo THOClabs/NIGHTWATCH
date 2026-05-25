@@ -6,7 +6,7 @@ Tests tool execution, parameter validation, and service integration.
 
 import asyncio
 from datetime import datetime
-from unittest.mock import Mock, AsyncMock, MagicMock
+from unittest.mock import Mock, AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -16,6 +16,7 @@ from nightwatch.tool_executor import (
     ToolStatus,
     ToolExecutionError,
 )
+from nightwatch.tool_params import NoParams
 from nightwatch.config import NightwatchConfig
 from nightwatch.orchestrator import Orchestrator, ServiceStatus
 
@@ -98,8 +99,10 @@ class TestToolExecutor:
     def test_register_handler(self, executor):
         """Test handler registration."""
         handler = AsyncMock()
-        executor.register_handler("custom_tool", handler)
+        # ARCH-001: ad-hoc tools need a param_model so execute() can validate them.
+        executor.register_handler("custom_tool", handler, param_model=NoParams)
         assert "custom_tool" in executor._handlers
+        assert executor._param_models["custom_tool"] is NoParams
 
     @pytest.mark.asyncio
     async def test_execute_unknown_tool(self, executor):
@@ -119,7 +122,7 @@ class TestToolExecutor:
                 message="Done",
             )
 
-        executor.register_handler("slow_tool", slow_handler)
+        executor.register_handler("slow_tool", slow_handler, param_model=NoParams)
         result = await executor.execute("slow_tool", {}, timeout=0.1)
         assert result.status == ToolStatus.TIMEOUT
 
@@ -129,7 +132,7 @@ class TestToolExecutor:
         async def failing_handler(params):
             raise ValueError("Test error")
 
-        executor.register_handler("failing_tool", failing_handler)
+        executor.register_handler("failing_tool", failing_handler, param_model=NoParams)
         result = await executor.execute("failing_tool", {})
         assert result.status == ToolStatus.ERROR
         assert "Test error" in result.error
@@ -465,3 +468,112 @@ class TestCoordinateParsing:
         """Test Dec parsing from sDD:MM."""
         assert executor._parse_dec("+45:30") == pytest.approx(45.5, rel=0.01)
         assert executor._parse_dec("-45:30") == pytest.approx(-45.5, rel=0.01)
+
+
+class TestArch001ParamValidation:
+    """ARCH-001: Pydantic param validation at execute() entry.
+
+    Risk #1 from the Phase 1 audit: garbage LLM-generated tool args could
+    silently slip through (params.get returns None) and hang downstream
+    handlers. After ARCH-001, every tool's parameters are validated against
+    a registered Pydantic model before the handler is dispatched.
+    """
+
+    @pytest.fixture
+    def config(self):
+        return NightwatchConfig()
+
+    @pytest.fixture
+    def orchestrator(self, config):
+        return Orchestrator(config)
+
+    @pytest.fixture
+    def executor(self, orchestrator):
+        return ToolExecutor(orchestrator)
+
+    @pytest.mark.asyncio
+    async def test_goto_object_rejects_non_string_object_name(self, executor):
+        """Spec verify line: {object_name: 42} -> INVALID_PARAMS, handler never reached."""
+        with patch.object(executor, "_handle_goto_object") as mock_handler:
+            result = await executor.execute("goto_object", {"object_name": 42})
+        assert result.status == ToolStatus.INVALID_PARAMS
+        assert "object_name" in result.error.lower()
+        assert "str" in result.error.lower() or "string" in result.error.lower()
+        mock_handler.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_goto_object_missing_param_returns_invalid_params(self, executor):
+        """Missing required field -> INVALID_PARAMS, not a downstream crash."""
+        result = await executor.execute("goto_object", {})
+        assert result.status == ToolStatus.INVALID_PARAMS
+
+    @pytest.mark.asyncio
+    async def test_zero_arg_tool_accepts_empty_dict(self, executor):
+        """park_telescope uses NoParams; {} is valid."""
+        result = await executor.execute("park_telescope", {})
+        assert result.status != ToolStatus.INVALID_PARAMS
+
+    @pytest.mark.asyncio
+    async def test_extra_param_rejected_when_forbid(self, executor):
+        """extra='forbid' means stray fields halt before the handler runs."""
+        with patch.object(executor, "_handle_goto_object") as mock_handler:
+            result = await executor.execute(
+                "goto_object", {"object_name": "M31", "extra_field": "x"}
+            )
+        assert result.status == ToolStatus.INVALID_PARAMS
+        mock_handler.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_goto_coordinates_accepts_floats(self, executor):
+        """Coordinates as float pass validation (handler-level errors are separate)."""
+        result = await executor.execute(
+            "goto_coordinates", {"ra": 10.5, "dec": 41.2}
+        )
+        # Handler will return ERROR (no mount registered) — the point is that
+        # validation passed and we got past the INVALID_PARAMS gate.
+        assert result.status != ToolStatus.INVALID_PARAMS
+
+    @pytest.mark.asyncio
+    async def test_goto_coordinates_accepts_strings(self, executor):
+        """RA/Dec as HH:MM:SS / sDD:MM:SS strings pass validation (Union[float, str])."""
+        result = await executor.execute(
+            "goto_coordinates", {"ra": "10:30:00", "dec": "+41:12:00"}
+        )
+        assert result.status != ToolStatus.INVALID_PARAMS
+
+    @pytest.mark.asyncio
+    async def test_goto_coordinates_missing_dec_returns_invalid_params(self, executor):
+        result = await executor.execute("goto_coordinates", {"ra": 10.5})
+        assert result.status == ToolStatus.INVALID_PARAMS
+        assert "dec" in result.error.lower()
+
+    @pytest.mark.asyncio
+    async def test_lookup_object_rejects_non_string(self, executor):
+        with patch.object(executor, "_handle_lookup_object") as mock_handler:
+            result = await executor.execute("lookup_object", {"object_name": 99})
+        assert result.status == ToolStatus.INVALID_PARAMS
+        mock_handler.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_get_planet_position_rejects_non_string(self, executor):
+        with patch.object(executor, "_handle_get_planet_position") as mock_handler:
+            result = await executor.execute("get_planet_position", {"planet": 7})
+        assert result.status == ToolStatus.INVALID_PARAMS
+        mock_handler.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_start_session_id_optional(self, executor):
+        """session_id is optional — empty dict validates, orchestrator generates one."""
+        # Need _running to test start_session end-to-end; we only need to assert
+        # validation does NOT reject.
+        executor.orchestrator._running = True
+        result = await executor.execute("start_session", {})
+        assert result.status != ToolStatus.INVALID_PARAMS
+
+    @pytest.mark.asyncio
+    async def test_zero_arg_tool_rejects_extra_param(self, executor):
+        """park_telescope with bogus param -> INVALID_PARAMS."""
+        with patch.object(executor, "_handle_park") as mock_handler:
+            result = await executor.execute("park_telescope", {"force": True})
+        assert result.status == ToolStatus.INVALID_PARAMS
+        mock_handler.assert_not_called()

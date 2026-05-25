@@ -41,7 +41,19 @@ from datetime import datetime
 from enum import Enum
 from typing import Any, Callable, Dict, List, Optional, Union
 
+from pydantic import BaseModel, ValidationError
+
 from nightwatch.exceptions import NightwatchError, CommandError
+from nightwatch.tool_params import (
+    TOOL_PARAM_MODELS,
+    GetPlanetPositionParams,
+    GotoCoordinatesParams,
+    GotoObjectParams,
+    LookupObjectParams,
+    NoParams,
+    StartSessionParams,
+    WhatIsParams,
+)
 
 logger = logging.getLogger("NIGHTWATCH.ToolExecutor")
 
@@ -135,6 +147,10 @@ class ToolExecutor:
         self.orchestrator = orchestrator
         self.default_timeout = default_timeout
         self._handlers: Dict[str, Callable] = {}
+        # ARCH-001: per-instance param-model overrides. Set via register_handler's
+        # param_model kwarg to register an ad-hoc tool (e.g. test fixtures) whose
+        # schema is not in the global TOOL_PARAM_MODELS registry.
+        self._param_models: Dict[str, type[BaseModel]] = {}
         self._execution_log: List[ToolResult] = []
 
         # Register built-in handlers
@@ -146,15 +162,28 @@ class ToolExecutor:
     # Handler Registration
     # =========================================================================
 
-    def register_handler(self, tool_name: str, handler: Callable):
+    def register_handler(
+        self,
+        tool_name: str,
+        handler: Callable,
+        param_model: Optional[type[BaseModel]] = None,
+    ):
         """
         Register a handler for a tool.
 
         Args:
             tool_name: Name of the tool
             handler: Async function to handle the tool call
+            param_model: Optional Pydantic BaseModel subclass used to validate
+                the parameters dict before dispatch. Useful for ad-hoc tools
+                (e.g. test fixtures) whose schema is not in the global
+                ``TOOL_PARAM_MODELS`` registry. For built-in tools the model
+                is looked up by name in ``TOOL_PARAM_MODELS`` and this
+                argument is unnecessary.
         """
         self._handlers[tool_name] = handler
+        if param_model is not None:
+            self._param_models[tool_name] = param_model
         logger.debug(f"Registered handler for tool: {tool_name}")
 
     def _register_default_handlers(self):
@@ -227,10 +256,41 @@ class ToolExecutor:
             self._log_execution(result)
             return result
 
+        # ARCH-001: validate parameters against the registered Pydantic model
+        # before dispatch. Risk #1 from the Phase 1 audit — garbage LLM args
+        # (wrong types, missing fields, stray extras) must never reach a handler.
+        # Per-instance overrides take precedence over the global registry.
+        model_cls = self._param_models.get(tool_name) or TOOL_PARAM_MODELS.get(tool_name)
+        if model_cls is None:
+            result = ToolResult(
+                tool_name=tool_name,
+                status=ToolStatus.INVALID_PARAMS,
+                error=f"No parameter schema registered for tool: {tool_name}",
+                message="Internal error: tool schema missing",
+            )
+            self._log_execution(result)
+            return result
+        try:
+            validated_params = model_cls.model_validate(parameters)
+        except ValidationError as exc:
+            field_msgs = []
+            for err in exc.errors():
+                loc = ".".join(str(p) for p in err["loc"]) or "<root>"
+                field_msgs.append(f"{loc}: {err['msg']}")
+            error_text = "; ".join(field_msgs)
+            result = ToolResult(
+                tool_name=tool_name,
+                status=ToolStatus.INVALID_PARAMS,
+                error=f"Invalid parameters: {error_text}",
+                message=f"Tool {tool_name} got invalid parameters - {error_text}",
+            )
+            self._log_execution(result)
+            return result
+
         # Execute with timeout
         try:
             async with asyncio.timeout(timeout):
-                result = await handler(parameters)
+                result = await handler(validated_params)
 
         except asyncio.TimeoutError:
             result = ToolResult(
@@ -286,16 +346,14 @@ class ToolExecutor:
     # Mount Handlers
     # =========================================================================
 
-    async def _handle_goto_object(self, params: Dict[str, Any]) -> ToolResult:
-        """Handle goto_object tool."""
-        object_name = params.get("object_name")
-        if not object_name:
-            return ToolResult(
-                tool_name="goto_object",
-                status=ToolStatus.INVALID_PARAMS,
-                error="Missing object_name parameter",
-                message="Please specify an object name",
-            )
+    async def _handle_goto_object(self, params: GotoObjectParams) -> ToolResult:
+        """Handle goto_object tool.
+
+        ARCH-001: params is a validated GotoObjectParams — the previous
+        params.get('object_name') / missing-field check is now redundant
+        with the Pydantic gate in ``execute()``.
+        """
+        object_name = params.object_name
 
         # Check safety first
         if self.orchestrator.safety:
@@ -362,18 +420,14 @@ class ToolExecutor:
                 message=f"Error slewing to {object_name}: {e}",
             )
 
-    async def _handle_goto_coordinates(self, params: Dict[str, Any]) -> ToolResult:
-        """Handle goto_coordinates tool."""
-        ra = params.get("ra")
-        dec = params.get("dec")
+    async def _handle_goto_coordinates(self, params: GotoCoordinatesParams) -> ToolResult:
+        """Handle goto_coordinates tool.
 
-        if not ra or not dec:
-            return ToolResult(
-                tool_name="goto_coordinates",
-                status=ToolStatus.INVALID_PARAMS,
-                error="Missing ra or dec parameter",
-                message="Please specify both RA and Dec coordinates",
-            )
+        ARCH-001: ra/dec are validated as Union[float, str]. The string form
+        is parsed below via ``_parse_ra`` / ``_parse_dec``.
+        """
+        ra = params.ra
+        dec = params.dec
 
         # Check safety
         if self.orchestrator.safety and not self.orchestrator.safety.is_safe:
@@ -428,7 +482,7 @@ class ToolExecutor:
                 message=f"Error slewing: {e}",
             )
 
-    async def _handle_park(self, params: Dict[str, Any]) -> ToolResult:
+    async def _handle_park(self, params: NoParams) -> ToolResult:
         """Handle park_telescope tool."""
         if not self.orchestrator.mount:
             return ToolResult(
@@ -461,7 +515,7 @@ class ToolExecutor:
                 message=f"Error parking: {e}",
             )
 
-    async def _handle_unpark(self, params: Dict[str, Any]) -> ToolResult:
+    async def _handle_unpark(self, params: NoParams) -> ToolResult:
         """Handle unpark_telescope tool."""
         if not self.orchestrator.mount:
             return ToolResult(
@@ -503,7 +557,7 @@ class ToolExecutor:
                 message=f"Error unparking: {e}",
             )
 
-    async def _handle_stop_mount(self, params: Dict[str, Any]) -> ToolResult:
+    async def _handle_stop_mount(self, params: NoParams) -> ToolResult:
         """Handle stop_mount tool."""
         if not self.orchestrator.mount:
             return ToolResult(
@@ -529,7 +583,7 @@ class ToolExecutor:
                 message=f"Error stopping mount: {e}",
             )
 
-    async def _handle_get_mount_status(self, params: Dict[str, Any]) -> ToolResult:
+    async def _handle_get_mount_status(self, params: NoParams) -> ToolResult:
         """Handle get_mount_status tool."""
         if not self.orchestrator.mount:
             return ToolResult(
@@ -562,16 +616,9 @@ class ToolExecutor:
     # Catalog Handlers
     # =========================================================================
 
-    async def _handle_lookup_object(self, params: Dict[str, Any]) -> ToolResult:
+    async def _handle_lookup_object(self, params: LookupObjectParams) -> ToolResult:
         """Handle lookup_object tool."""
-        object_name = params.get("object_name")
-        if not object_name:
-            return ToolResult(
-                tool_name="lookup_object",
-                status=ToolStatus.INVALID_PARAMS,
-                error="Missing object_name parameter",
-                message="Please specify an object name",
-            )
+        object_name = params.object_name
 
         if not self.orchestrator.catalog:
             return ToolResult(
@@ -605,16 +652,9 @@ class ToolExecutor:
                 message=f"Error looking up object: {e}",
             )
 
-    async def _handle_what_is(self, params: Dict[str, Any]) -> ToolResult:
+    async def _handle_what_is(self, params: WhatIsParams) -> ToolResult:
         """Handle what_is tool - conversational object info."""
-        object_name = params.get("object_name")
-        if not object_name:
-            return ToolResult(
-                tool_name="what_is",
-                status=ToolStatus.INVALID_PARAMS,
-                error="Missing object_name parameter",
-                message="What object would you like to know about?",
-            )
+        object_name = params.object_name
 
         if not self.orchestrator.catalog:
             return ToolResult(
@@ -661,16 +701,9 @@ class ToolExecutor:
     # Ephemeris Handlers
     # =========================================================================
 
-    async def _handle_get_planet_position(self, params: Dict[str, Any]) -> ToolResult:
+    async def _handle_get_planet_position(self, params: GetPlanetPositionParams) -> ToolResult:
         """Handle get_planet_position tool."""
-        planet = params.get("planet")
-        if not planet:
-            return ToolResult(
-                tool_name="get_planet_position",
-                status=ToolStatus.INVALID_PARAMS,
-                error="Missing planet parameter",
-                message="Which planet would you like to find?",
-            )
+        planet = params.planet
 
         if not self.orchestrator.ephemeris:
             return ToolResult(
@@ -705,7 +738,7 @@ class ToolExecutor:
                 message=f"Error getting planet position: {e}",
             )
 
-    async def _handle_get_sun_status(self, params: Dict[str, Any]) -> ToolResult:
+    async def _handle_get_sun_status(self, params: NoParams) -> ToolResult:
         """Handle get_sun_status tool."""
         if not self.orchestrator.ephemeris:
             return ToolResult(
@@ -747,7 +780,7 @@ class ToolExecutor:
                 message=f"Error getting sun status: {e}",
             )
 
-    async def _handle_get_twilight_times(self, params: Dict[str, Any]) -> ToolResult:
+    async def _handle_get_twilight_times(self, params: NoParams) -> ToolResult:
         """Handle get_twilight_times tool."""
         if not self.orchestrator.ephemeris:
             return ToolResult(
@@ -777,7 +810,7 @@ class ToolExecutor:
     # Weather Handlers
     # =========================================================================
 
-    async def _handle_get_weather(self, params: Dict[str, Any]) -> ToolResult:
+    async def _handle_get_weather(self, params: NoParams) -> ToolResult:
         """Handle get_weather tool."""
         if not self.orchestrator.weather:
             return ToolResult(
@@ -803,7 +836,7 @@ class ToolExecutor:
                 message=f"Error getting weather: {e}",
             )
 
-    async def _handle_is_weather_safe(self, params: Dict[str, Any]) -> ToolResult:
+    async def _handle_is_weather_safe(self, params: NoParams) -> ToolResult:
         """Handle is_weather_safe tool."""
         if not self.orchestrator.weather:
             return ToolResult(
@@ -833,7 +866,7 @@ class ToolExecutor:
     # Safety Handlers
     # =========================================================================
 
-    async def _handle_get_safety_status(self, params: Dict[str, Any]) -> ToolResult:
+    async def _handle_get_safety_status(self, params: NoParams) -> ToolResult:
         """Handle get_safety_status tool."""
         if not self.orchestrator.safety:
             return ToolResult(
@@ -860,7 +893,7 @@ class ToolExecutor:
                 message=f"Error getting safety status: {e}",
             )
 
-    async def _handle_check_can_observe(self, params: Dict[str, Any]) -> ToolResult:
+    async def _handle_check_can_observe(self, params: NoParams) -> ToolResult:
         """Handle check_can_observe tool."""
         can_observe = True
         reasons = []
@@ -893,9 +926,9 @@ class ToolExecutor:
     # Session Handlers
     # =========================================================================
 
-    async def _handle_start_session(self, params: Dict[str, Any]) -> ToolResult:
+    async def _handle_start_session(self, params: StartSessionParams) -> ToolResult:
         """Handle start_session tool."""
-        session_id = params.get("session_id")
+        session_id = params.session_id
 
         try:
             success = await self.orchestrator.start_session(session_id)
@@ -921,7 +954,7 @@ class ToolExecutor:
                 message=f"Error starting session: {e}",
             )
 
-    async def _handle_end_session(self, params: Dict[str, Any]) -> ToolResult:
+    async def _handle_end_session(self, params: NoParams) -> ToolResult:
         """Handle end_session tool."""
         try:
             await self.orchestrator.end_session()
@@ -938,7 +971,7 @@ class ToolExecutor:
                 message=f"Error ending session: {e}",
             )
 
-    async def _handle_get_session_status(self, params: Dict[str, Any]) -> ToolResult:
+    async def _handle_get_session_status(self, params: NoParams) -> ToolResult:
         """Handle get_session_status tool."""
         session = self.orchestrator.session
         return ToolResult(
