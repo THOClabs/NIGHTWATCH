@@ -15,7 +15,7 @@ import logging
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Optional, Callable, List, Any
+from typing import Any, Callable, List, Literal, Optional
 
 logger = logging.getLogger("NIGHTWATCH.Guiding")
 
@@ -480,6 +480,201 @@ class PHD2Client:
             return True
         except asyncio.TimeoutError:
             logger.warning(f"Dither settle timeout after {settle_timeout}s")
+            return False
+
+    # =========================================================================
+    # FULL GUIDE ORCHESTRATION (HWS-003)
+    # =========================================================================
+
+    async def calibrate_and_guide(  # noqa: PLR0911, PLR0912
+        self,
+        *,
+        settle_pixels: float = 1.5,
+        settle_time_s: float = 10.0,
+        settle_timeout_s: float = 60.0,
+        calibration_timeout_s: float = 120.0,
+        star_selection: Literal["auto"] | tuple[float, float] = "auto",
+        skip_calibration_if_calibrated: bool = True,
+    ) -> bool:
+        """HWS-003: full PHD2 orchestration: connect-check, calibrate, select-star, guide, settle.
+
+        Composes the existing primitives into a single unattended sequence so
+        the imaging pipeline can start guiding without operator hand-holding.
+        Sequence:
+          1. Verify connected. If not, return False (do NOT auto-connect; the
+             caller owns the lifecycle).
+          2. Skip-or-calibrate: if ``skip_calibration_if_calibrated`` and a
+             prior calibration exists (``get_calibration_data()`` returns
+             non-None), skip; otherwise ``calibrate()`` and wait for the
+             calibration settle within ``calibration_timeout_s``.
+          3. Star selection: if ``"auto"``, ``auto_select_star()``; otherwise
+             pass the explicit ``(x, y)`` to ``set_guide_star``.
+          4. Start the guide loop via ``start_guiding(settle_pixels,
+             settle_time_s, settle_timeout_s)`` — note: ``start_guiding``
+             already takes these settle params and triggers its own settle
+             cycle, so this method does NOT duplicate that work; see
+             ``start_guiding`` (this file) for the underlying RPC.
+          5. Wait for ``SettleDone`` via ``wait_for_settle(settle_timeout_s)``
+             — the event-driven wait already implemented for the dither path.
+          6. Return ``True`` only when guiding is settled and stable.
+
+        Failure policy — return ``False`` and log, NEVER raise:
+          - not connected -> False
+          - calibration timeout -> False (mount left in whatever state PHD2
+            put it in; operator may want to investigate)
+          - no star found -> False (operator may want manual star selection)
+          - settle timeout -> False (PHD2 likely still guiding; operator
+            decides whether to stop or wait)
+          - any RPC RuntimeError -> False
+
+        ``asyncio.CancelledError`` is the explicit exception to that rule:
+        it MUST propagate so ARCH-003's SafetyMonitor cancel-callback flow
+        can abort an in-flight calibrate_and_guide when conditions go unsafe.
+
+        Args:
+            settle_pixels: max RMS in pixels for the settle gate
+                (PHD2 default ~1.5).
+            settle_time_s: how long settle must hold before SettleDone fires.
+            settle_timeout_s: total time budget for each settle wait.
+            calibration_timeout_s: budget for the calibration settle.
+            star_selection: ``"auto"`` or an explicit ``(x, y)`` pixel coord.
+            skip_calibration_if_calibrated: if True and PHD2 reports a prior
+                calibration, skip step 2.
+
+        Returns:
+            True if guiding is settled and stable; False if any step failed
+            or timed out.
+
+        Cross-references:
+          - ``start_guiding`` (this file): already accepts ``settle_pixels``
+            and triggers settling; we do not duplicate that work here.
+          - ``wait_for_settle`` (this file): the event-driven settle gate.
+          - ``GuidingServiceProtocol.calibrate_and_guide`` (nightwatch/orchestrator.py):
+            the typed Protocol surface so this method is callable through
+            the orchestrator's typed registry (HWS-002 cross-task LEARNING).
+        """
+        # Step 1: connection check. We don't auto-connect; the caller owns
+        # the socket lifecycle (matches every other method on this client).
+        if not self._connected:
+            logger.critical("calibrate_and_guide: PHD2 not connected; aborting.")
+            return False
+
+        try:
+            # Step 2: skip-or-calibrate.
+            if skip_calibration_if_calibrated:
+                try:
+                    prior_cal = await self.get_calibration_data()
+                except asyncio.CancelledError:
+                    raise
+                except Exception as e:
+                    # get_calibration_data may raise on RPC error; treat as
+                    # no-prior-calibration and continue to the calibrate
+                    # branch below.
+                    logger.warning(
+                        f"calibrate_and_guide: get_calibration_data failed "
+                        f"({e}); will recalibrate."
+                    )
+                    prior_cal = None
+            else:
+                prior_cal = None
+
+            if prior_cal is None:
+                logger.info("calibrate_and_guide: no prior calibration; calibrating.")
+                # Clear settle event so the wait below sees a fresh signal.
+                self._dither_settle_event.clear()
+                if not await self.calibrate():
+                    logger.warning("calibrate_and_guide: calibrate RPC failed.")
+                    return False
+                # Wait for calibration's own settle. ``calibrate()`` issues
+                # a 'guide' RPC with recalibrate=True; PHD2 fires Settling
+                # then SettleDone when calibration completes.
+                if not await self._wait_for_settle_with_budget(calibration_timeout_s):
+                    logger.warning(
+                        f"calibrate_and_guide: calibration did not settle "
+                        f"within {calibration_timeout_s}s."
+                    )
+                    return False
+            else:
+                logger.info(
+                    "calibrate_and_guide: prior calibration present; skipping."
+                )
+
+            # Step 3: star selection.
+            if star_selection == "auto":
+                star = await self.auto_select_star()
+                if star is None:
+                    logger.warning(
+                        "calibrate_and_guide: no guide star found via "
+                        "auto_select_star; operator may need manual selection."
+                    )
+                    return False
+                logger.info(
+                    f"calibrate_and_guide: auto-selected star at "
+                    f"({star.x:.1f}, {star.y:.1f})."
+                )
+            else:
+                x, y = star_selection
+                if not await self.set_guide_star(x, y):
+                    logger.warning(
+                        f"calibrate_and_guide: failed to set manual guide "
+                        f"star at ({x}, {y})."
+                    )
+                    return False
+                logger.info(
+                    f"calibrate_and_guide: manual star set at ({x:.1f}, {y:.1f})."
+                )
+
+            # Step 4 + 5: start guiding and wait for settle.
+            # Clear settle event so wait_for_settle catches the NEXT SettleDone.
+            self._dither_settle_event.clear()
+            if not await self.start_guiding(
+                settle_pixels=settle_pixels,
+                settle_time=settle_time_s,
+                settle_timeout=settle_timeout_s,
+            ):
+                logger.warning("calibrate_and_guide: start_guiding RPC failed.")
+                return False
+
+            if not await self._wait_for_settle_with_budget(settle_timeout_s):
+                logger.warning(
+                    f"calibrate_and_guide: guide loop did not settle within "
+                    f"{settle_timeout_s}s (PHD2 may still be guiding)."
+                )
+                return False
+
+            logger.info("calibrate_and_guide: guiding settled and stable.")
+            return True
+
+        except asyncio.CancelledError:
+            # ARCH-003: propagate so SafetyMonitor's cancel pipe works.
+            logger.info("calibrate_and_guide: cancelled.")
+            raise
+        except Exception as e:
+            # Operator-facing surface: never raise non-cancel exceptions.
+            logger.critical(
+                f"calibrate_and_guide: unexpected error ({type(e).__name__}: {e})"
+            )
+            return False
+
+    async def _wait_for_settle_with_budget(self, timeout_s: float) -> bool:
+        """HWS-003 helper: wait for SettleDone within ``timeout_s``.
+
+        ``wait_for_settle`` already has the right event-driven semantics, but
+        it early-returns True if ``_settling`` is False at entry — which is
+        not what we want from the orchestrator since PHD2 may not have fired
+        Settling yet when we get here. This helper unconditionally waits on
+        ``_dither_settle_event`` for up to ``timeout_s`` seconds and returns
+        whether SettleDone arrived in time.
+
+        Cross-reference: ``wait_for_settle`` (this file).
+        """
+        try:
+            await asyncio.wait_for(
+                self._dither_settle_event.wait(),
+                timeout=timeout_s,
+            )
+            return True
+        except asyncio.TimeoutError:
             return False
 
     # =========================================================================

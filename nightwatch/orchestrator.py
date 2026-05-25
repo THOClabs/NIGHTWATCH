@@ -1008,6 +1008,30 @@ class GuidingServiceProtocol(ServiceProtocol, Protocol):
         """Check if currently guiding."""
         ...
 
+    async def calibrate_and_guide(
+        self,
+        *,
+        settle_pixels: float = 1.5,
+        settle_time_s: float = 10.0,
+        settle_timeout_s: float = 60.0,
+        calibration_timeout_s: float = 120.0,
+        skip_calibration_if_calibrated: bool = True,
+    ) -> bool:
+        """HWS-003: full calibrate-and-guide orchestration.
+
+        Connects (must already be connected), optionally calibrates,
+        auto-selects a guide star, starts the guide loop, and waits for
+        ``SettleDone``. Returns True only when guiding is settled and stable.
+
+        Failure surface: always returns bool, never raises (except
+        ``asyncio.CancelledError`` which propagates so ARCH-003's
+        SafetyMonitor cancel pipe works).
+
+        See ``services.guiding.phd2_client.PHD2Client.calibrate_and_guide``
+        for the full implementation contract.
+        """
+        ...
+
 
 class FocusServiceProtocol(ServiceProtocol, Protocol):
     """Protocol for focus service."""

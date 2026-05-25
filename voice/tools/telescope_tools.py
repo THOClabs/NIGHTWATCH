@@ -4885,8 +4885,30 @@ def create_default_handlers(
             if hasattr(guider, 'is_guiding') and guider.is_guiding():
                 return "Guiding is already active"
 
-            # Start guide star selection and guiding
-            if hasattr(guider, 'start_guiding'):
+            # HWS-003: prefer the full calibrate -> select-star -> guide ->
+            # settle orchestration when available. This is the production
+            # call site the ARCH-003 LEARNING ("infrastructure ship needs a
+            # production caller") asks for -- the orchestration method only
+            # has value if a real path exercises it. Falls back to the bare
+            # start_guiding RPC for callers that want the legacy behavior
+            # (and for guider implementations that haven't grown the new
+            # method yet -- e.g. test doubles).
+            if hasattr(guider, 'calibrate_and_guide'):
+                result = await guider.calibrate_and_guide(
+                    settle_pixels=settle_tolerance,
+                    settle_time_s=settle_time,
+                )
+                if result:
+                    return (
+                        f"Guiding started and settled "
+                        f"(<= {settle_tolerance} px in {settle_time}s)."
+                    )
+                return (
+                    "Failed to start guiding - check guide camera, "
+                    "calibration, and PHD2 logs."
+                )
+
+            elif hasattr(guider, 'start_guiding'):
                 result = await guider.start_guiding(
                     settle_time=settle_time,
                     settle_tolerance=settle_tolerance
