@@ -27,7 +27,7 @@ arguments before they reach ``ToolExecutor.execute`` at all.
 
 from __future__ import annotations
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 # =============================================================================
 # Param-taking tools
@@ -67,6 +67,15 @@ class GotoCoordinatesParams(BaseModel):
             "Declination — either decimal degrees (float) or 'sDD:MM:SS' string."
         ),
     )
+
+    @field_validator("ra", "dec", mode="before")
+    @classmethod
+    def _reject_bool(cls, v):
+        # Pydantic coerces bool→float by default (True→1.0). Reject explicitly:
+        # an LLM hallucination of {ra: true} should NOT silently aim the mount.
+        if isinstance(v, bool):
+            raise ValueError("must be a number or string, not bool")
+        return v
 
 
 class LookupObjectParams(BaseModel):

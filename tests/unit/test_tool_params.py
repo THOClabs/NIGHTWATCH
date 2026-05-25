@@ -11,6 +11,8 @@ read as the spec for ``nightwatch.tool_params``.
 
 from __future__ import annotations
 
+from typing import ClassVar
+
 import pytest
 from pydantic import ValidationError
 
@@ -33,7 +35,7 @@ from nightwatch.tool_params import (
 class TestRegistryCoverage:
     """Every registered tool name must map to a Pydantic BaseModel subclass."""
 
-    REGISTERED_TOOLS = {
+    REGISTERED_TOOLS: ClassVar[set[str]] = {
         # Mount control (1 param-taking, 4 no-param)
         "goto_object",
         "goto_coordinates",
@@ -144,6 +146,15 @@ class TestGotoCoordinatesParams:
     def test_extra_field_rejected(self):
         with pytest.raises(ValidationError):
             GotoCoordinatesParams(ra=10.5, dec=41.2, frame="J2000")
+
+    def test_bool_rejected_for_ra(self):
+        """Pydantic coerces bool→float by default; reject for safety."""
+        with pytest.raises(ValidationError, match="bool"):
+            GotoCoordinatesParams(ra=True, dec=0.0)
+
+    def test_bool_rejected_for_dec(self):
+        with pytest.raises(ValidationError, match="bool"):
+            GotoCoordinatesParams(ra=0.0, dec=False)
 
 
 # =============================================================================
