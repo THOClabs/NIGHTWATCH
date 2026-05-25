@@ -61,6 +61,8 @@ from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Protocol,
 from nightwatch.cancellation import CommandContext
 from nightwatch.config import NightwatchConfig
 from nightwatch.exceptions import NightwatchError
+from nightwatch.watchdog import ServiceType as WatchdogServiceType
+from nightwatch.watchdog import WatchdogManager
 
 if TYPE_CHECKING:
     # HWS-004 review Important #3: `from __future__ import annotations` is
@@ -1540,6 +1542,16 @@ class Orchestrator:
         # by design; multi-command orchestration is a separate concern.
         self._active_context: Optional[CommandContext] = None
 
+        # SAFE-004: watchdog with hardware-level fail-safe. The watchdog
+        # is owned by the orchestrator so that ``register_enclosure``
+        # can immediately wire the enclosure into the failsafe path
+        # (per LEARNINGS 2026-05-25 ARCH-003 — infrastructure needs a
+        # production caller). The default safety-veto callback fans the
+        # event out via the standard event bus (EventType.SAFETY_VETO)
+        # so TTS alerts, telemetry sinks, and dashboards all see it.
+        self.watchdog: WatchdogManager = WatchdogManager()
+        self.watchdog.set_safety_veto_callback(self._on_safety_veto)
+
         logger.info("Orchestrator initialized")
 
     # =========================================================================
@@ -1691,8 +1703,17 @@ class Orchestrator:
         self.registry.register("power", service, required)
 
     def register_enclosure(self, service: EnclosureServiceProtocol, required: bool = False):
-        """Register enclosure/roof service (Step 226)."""
+        """Register enclosure/roof service (Step 226).
+
+        SAFE-004: also wires the enclosure into the watchdog's
+        hardware-level fail-safe path so that a safety_monitor heartbeat
+        timeout closes the enclosure directly, bypassing the (possibly
+        hung) orchestrator. Without this hook the failsafe close is a
+        no-op (dev/simulator opt-out); registering an enclosure here is
+        the single sanctioned production caller.
+        """
         self.registry.register("enclosure", service, required)
+        self.watchdog.set_enclosure(service)
 
     # =========================================================================
     # Active Command Context (ARCH-003)
@@ -1787,6 +1808,49 @@ class Orchestrator:
             f"ARCH-003: cancelled active context {ctx.command_id} "
             f"due to safety:{action_name}"
         )
+
+    async def _on_safety_veto(
+        self, service_type: WatchdogServiceType, reason: str
+    ) -> None:
+        """Watchdog SAFETY_VETO callback: emit the standard SAFETY_VETO event (SAFE-004).
+
+        Wired in ``__init__`` via ``watchdog.set_safety_veto_callback``.
+        Runs AFTER the watchdog has already initiated the direct
+        enclosure close — this hook fans the event out via the standard
+        orchestrator event bus so TTS alerts, telemetry sinks, and
+        dashboards all learn the failsafe fired. We also cancel any
+        in-flight command context, because the enclosure is closing
+        underneath an unsuspecting long-running operation (e.g. a
+        30-minute exposure).
+        """
+        logger.critical(
+            "SAFETY_VETO: %s — %s; enclosure closed by watchdog",
+            service_type.value,
+            reason,
+        )
+
+        # Cancel any in-flight command — the enclosure is closing now,
+        # so whatever long-running op was active is no longer valid.
+        ctx = self._active_context
+        if ctx is not None:
+            try:
+                ctx.cancel(f"safety_veto:{service_type.value}: {reason}")
+                logger.warning(
+                    "SAFE-004: cancelled active context %s due to SAFETY_VETO",
+                    ctx.command_id,
+                )
+            except Exception as e:
+                logger.error(f"SAFE-004: failed to cancel active context: {e}")
+
+        try:
+            await self.emit_event(
+                EventType.SAFETY_VETO,
+                source="watchdog",
+                message=f"SAFETY_VETO: {service_type.value} timeout — {reason}",
+                data={"service": service_type.value, "reason": reason},
+            )
+        except Exception as e:
+            logger.error(f"SAFE-004: failed to emit SAFETY_VETO event: {e}")
 
     # =========================================================================
     # Lifecycle Management

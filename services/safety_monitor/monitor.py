@@ -54,6 +54,14 @@ class SafetyAction(Enum):
     NETWORK_FAILURE = "network_failure"
     # Step 485: Power failure response
     POWER_FAILURE = "power_failure"
+    # SAFE-004: Watchdog-driven hardware fail-safe. Fired when the
+    # safety_monitor service itself has gone silent past its heartbeat
+    # timeout and the watchdog has bypassed the (possibly hung)
+    # orchestrator to close the enclosure directly. This is NOT a
+    # normal safety evaluation — it is the last-resort signal that the
+    # safety pipeline itself has been declared unhealthy and the
+    # hardware has been driven to its protected state.
+    SAFETY_VETO = "safety_veto"
 
 
 class ObservatoryState(Enum):

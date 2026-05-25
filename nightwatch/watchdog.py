@@ -43,6 +43,11 @@ class ServiceType(Enum):
     LLM = "llm"
     STT = "stt"
     TTS = "tts"
+    # SAFE-004: safety_monitor as a watchdog-tracked service. The watchdog
+    # is the safety_monitor's watchdog of last resort — if safety_monitor
+    # stops heartbeating, the watchdog directly drives the enclosure
+    # closed without routing through the (possibly hung) orchestrator.
+    SAFETY_MONITOR = "safety_monitor"
 
 
 @dataclass
@@ -164,6 +169,23 @@ DEFAULT_CONFIGS = {
         timeout_sec=60.0,
         max_restart_attempts=3,
         critical=True,  # Power monitoring is safety-critical
+    ),
+    # SAFE-004: safety_monitor is the system's safety brain. If it stops
+    # heartbeating for >90s the watchdog initiates a hardware-level
+    # fail-safe close, bypassing the orchestrator. The heartbeat cadence
+    # (30s) is generous: safety_monitor's evaluation loop is typically
+    # faster than that, so a missed heartbeat past 90s reliably indicates
+    # a hang/crash, not transient load. ``critical=True`` ensures the
+    # status flows through the existing critical-failure pipeline; the
+    # dedicated SAFETY_VETO path is additive (it runs even if no
+    # safe-state callback is wired).
+    ServiceType.SAFETY_MONITOR: ServiceConfig(
+        service_type=ServiceType.SAFETY_MONITOR,
+        name="Safety Monitor",
+        heartbeat_interval_sec=30.0,
+        timeout_sec=90.0,
+        max_restart_attempts=3,
+        critical=True,
     ),
 }
 
@@ -301,6 +323,18 @@ class WatchdogManager:
         self._callbacks: List[Callable] = []
         self._safe_state_callback: Optional[Callable] = None
 
+        # SAFE-004: hardware fail-safe wiring. ``_enclosure`` is the
+        # direct hardware close path (bypasses the orchestrator) used
+        # when a critical safety service has gone silent. Left as None
+        # in dev/simulator setups so the failsafe close is a no-op,
+        # while the veto callback still fires so observers learn about
+        # the event. ``_safety_veto_fired`` is a latch that prevents
+        # re-firing on every 5s check iteration during a sustained
+        # outage; it resets when safety_monitor heartbeats again.
+        self._enclosure: Any = None
+        self._safety_veto_callback: Callable | None = None
+        self._safety_veto_fired: bool = False
+
         # Initialize default watchdogs
         for service_type, config in DEFAULT_CONFIGS.items():
             self._watchdogs[service_type] = ServiceWatchdog(config)
@@ -331,6 +365,13 @@ class WatchdogManager:
         watchdog = self._watchdogs.get(service_type)
         if watchdog:
             watchdog.record_heartbeat()
+            # SAFE-004: re-arm the safety-veto latch when safety_monitor
+            # recovers, so a future timeout episode fires the failsafe
+            # again. Without this, a one-off transient hang permanently
+            # disables the watchdog's last-resort close path.
+            if service_type == ServiceType.SAFETY_MONITOR and self._safety_veto_fired:
+                self._safety_veto_fired = False
+                logger.info("SAFE-004: safety_monitor recovered; veto latch reset")
         else:
             logger.warning(f"Heartbeat from unregistered service: {service_type.value}")
 
@@ -380,49 +421,143 @@ class WatchdogManager:
         """Periodic check of all services."""
         while self._running:
             try:
-                failed_critical = []
-
-                for service_type, watchdog in self._watchdogs.items():
-                    # Check for timeout
-                    if watchdog.check_timeout():
-                        if watchdog.config.critical:
-                            failed_critical.append(service_type)
-
-                        # Attempt restart if allowed
-                        if watchdog.can_restart():
-                            watchdog.record_restart_attempt()
-                            if watchdog._restart_callback:
-                                try:
-                                    await self._call_async(watchdog._restart_callback, service_type)
-                                except Exception as e:
-                                    logger.error(f"Restart callback failed: {e}")
-                        elif watchdog.status.restart_count >= watchdog.config.max_restart_attempts:
-                            # Max restarts exceeded
-                            if watchdog._failure_callback:
-                                try:
-                                    await self._call_async(watchdog._failure_callback, service_type)
-                                except Exception as e:
-                                    logger.error(f"Failure callback failed: {e}")
-
-                # Trigger safe state if critical services failed
-                if failed_critical and self._safe_state_callback:
-                    logger.critical(f"Critical services failed: {[s.value for s in failed_critical]}")
-                    try:
-                        await self._call_async(self._safe_state_callback, failed_critical)
-                    except Exception as e:
-                        logger.error(f"Safe state callback failed: {e}")
-
-                # Notify callbacks
-                for callback in self._callbacks:
-                    try:
-                        await self._call_async(callback, self.get_all_status())
-                    except Exception as e:
-                        logger.error(f"Status callback failed: {e}")
-
+                await self._check_services_once()
             except Exception as e:
                 logger.error(f"Watchdog check error: {e}")
 
             await asyncio.sleep(5.0)  # Check every 5 seconds
+
+    async def _check_services_once(self) -> None:
+        """Run a single iteration of the service-check loop.
+
+        Extracted from the ``_check_services`` while-loop so SAFE-004
+        tests can simulate one tick deterministically (backdate a
+        heartbeat, call this once, assert on the failsafe outcome)
+        without waiting wall-clock seconds.
+        """
+        failed_critical: list[ServiceType] = []
+
+        for service_type, watchdog in self._watchdogs.items():
+            if await self._process_service_timeout(service_type, watchdog):
+                failed_critical.append(service_type)
+
+        # SAFE-004: hardware-level fail-safe path. If safety_monitor has
+        # timed out, drive the enclosure closed DIRECTLY, bypassing the
+        # orchestrator and any safe-state callback (which may itself
+        # route through the hung safety pipeline). Latched so it fires
+        # once per timeout episode, not on every 5s check iteration.
+        if (
+            ServiceType.SAFETY_MONITOR in failed_critical
+            and not self._safety_veto_fired
+        ):
+            self._safety_veto_fired = True
+            sm = self._watchdogs[ServiceType.SAFETY_MONITOR]
+            reason = sm.status.last_error or "safety_monitor heartbeat timeout"
+            await self._execute_safety_veto(ServiceType.SAFETY_MONITOR, reason)
+
+        # Trigger safe state if critical services failed
+        if failed_critical and self._safe_state_callback:
+            logger.critical(f"Critical services failed: {[s.value for s in failed_critical]}")
+            try:
+                await self._call_async(self._safe_state_callback, failed_critical)
+            except Exception as e:
+                logger.error(f"Safe state callback failed: {e}")
+
+        # Notify callbacks
+        for callback in self._callbacks:
+            try:
+                await self._call_async(callback, self.get_all_status())
+            except Exception as e:
+                logger.error(f"Status callback failed: {e}")
+
+    async def _process_service_timeout(
+        self, service_type: ServiceType, watchdog: ServiceWatchdog
+    ) -> bool:
+        """Check a single service for timeout and dispatch restart/failure callbacks.
+
+        Returns:
+            True if the service is in a critical-failed state (caller
+            uses this to accumulate ``failed_critical``).
+        """
+        if not watchdog.check_timeout():
+            return False
+
+        is_critical = watchdog.config.critical
+
+        # Attempt restart if allowed
+        if watchdog.can_restart():
+            watchdog.record_restart_attempt()
+            if watchdog._restart_callback:
+                try:
+                    await self._call_async(watchdog._restart_callback, service_type)
+                except Exception as e:
+                    logger.error(f"Restart callback failed: {e}")
+        elif watchdog.status.restart_count >= watchdog.config.max_restart_attempts:
+            # Max restarts exceeded
+            if watchdog._failure_callback:
+                try:
+                    await self._call_async(watchdog._failure_callback, service_type)
+                except Exception as e:
+                    logger.error(f"Failure callback failed: {e}")
+
+        return is_critical
+
+    async def _execute_safety_veto(self, service_type: ServiceType, reason: str) -> None:
+        """SAFE-004: execute the hardware-level fail-safe close.
+
+        Called when ``safety_monitor`` (or any future safety service we
+        choose to extend this to) has gone silent past its watchdog
+        timeout. The sequence:
+
+        1. If an enclosure is registered, call ``close(emergency=True)``
+           directly. Any exception is logged and swallowed — we must
+           still notify observers.
+        2. If no enclosure is registered (dev/simulator opt-out), log a
+           critical message and reflect that in the veto reason so the
+           observability layer knows the close was not attempted.
+        3. Fire the registered ``_safety_veto_callback`` so observers,
+           TTS alerts, and the safety telemetry pipeline can record the
+           SAFETY_VETO event.
+
+        Args:
+            service_type: The critical safety service that timed out.
+            reason: Human-readable cause string.
+        """
+        veto_reason = reason
+
+        if self._enclosure is None:
+            logger.critical(
+                "SAFETY VETO: %s unrecoverable (%s); NO enclosure registered "
+                "— direct close skipped, manual intervention required",
+                service_type.value,
+                reason,
+            )
+            veto_reason = f"{reason}; no enclosure registered for direct close"
+        else:
+            logger.critical(
+                "SAFETY VETO: %s unrecoverable (%s); closing enclosure directly",
+                service_type.value,
+                reason,
+            )
+            try:
+                # ``emergency=True`` bypasses interlocks in the roof
+                # controller (RoofController.close docstring) — this is
+                # the protected-state hardware path.
+                result = await self._enclosure.close(emergency=True)
+                logger.critical(
+                    "SAFETY VETO: enclosure close returned %r", result
+                )
+            except Exception as e:
+                logger.critical("SAFETY VETO: enclosure close FAILED: %s", e)
+                veto_reason = f"{reason}; close failed: {e}"
+
+        if self._safety_veto_callback is not None:
+            try:
+                await self._call_async(
+                    self._safety_veto_callback, service_type, veto_reason
+                )
+            except Exception as e:
+                logger.error(f"Safety veto callback failed: {e}")
 
     async def _call_async(self, callback: Callable, *args):
         """Call a callback that may be sync or async."""
@@ -458,6 +593,39 @@ class WatchdogManager:
     def set_safe_state_callback(self, callback: Callable):
         """Set callback for triggering safe state."""
         self._safe_state_callback = callback
+
+    def set_enclosure(self, enclosure: Any) -> None:
+        """SAFE-004: wire the hardware enclosure for the fail-safe close.
+
+        The watchdog uses ``enclosure.close(emergency=True)`` as the
+        direct hardware path when ``safety_monitor`` times out. Pass
+        ``None`` to disable the failsafe close (the veto callback still
+        fires for observability).
+
+        Args:
+            enclosure: An object exposing an awaitable
+                ``close(emergency: bool = False) -> bool`` method
+                (e.g. ``RoofController`` from ``services.enclosure``).
+        """
+        self._enclosure = enclosure
+        if enclosure is not None:
+            logger.info("SAFE-004: enclosure wired for watchdog fail-safe path")
+
+    def set_safety_veto_callback(
+        self, callback: Callable | None
+    ) -> None:
+        """SAFE-004: register the observability callback for SAFETY_VETO events.
+
+        Fires AFTER the direct enclosure close attempt (regardless of
+        whether the close itself raised). Signature:
+        ``async def callback(service_type: ServiceType, reason: str) -> None``
+        (sync callables also work; ``_call_async`` handles both).
+
+        Args:
+            callback: Callback to invoke when the watchdog initiates a
+                hardware-level fail-safe, or ``None`` to clear.
+        """
+        self._safety_veto_callback = callback
 
 
 # =============================================================================
