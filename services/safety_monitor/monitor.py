@@ -18,8 +18,20 @@ import asyncio
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from enum import Enum
-from typing import Optional, List, Callable, Any
+from typing import TYPE_CHECKING, Optional, List, Callable, Any
 import logging
+
+# SAFE-002 review Minor #5: SecondaryRainReading imported under
+# ``TYPE_CHECKING`` for the typed parameter of
+# ``update_secondary_rain_sensor``. Behind the guard so the runtime
+# import graph stays minimal — at runtime the rain branches use
+# duck-typed attribute access. (Mypy still follows the TYPE_CHECKING
+# import to check the annotation; this surfaces +14 pre-existing
+# errors in sibling weather adapters loaded eagerly by
+# ``services/weather/__init__.py``. Those errors are unrelated to
+# SAFE-002 and tracked separately.)
+if TYPE_CHECKING:
+    from services.weather.secondary_rain import SecondaryRainReading
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -112,6 +124,31 @@ class SafetyStatus:
     network_connected: bool = True
     network_latency_ms: Optional[float] = None
 
+    # SAFE-002 review Important #2: structured secondary-rain telemetry.
+    # Lets operators distinguish "1 of 2 sensors reports rain" (genuine
+    # weather event) from "secondary unavailable -> conservatively
+    # unsafe" (deployment / sensor failure). Reason-string scraping is
+    # fragile; these fields are durable.
+    #
+    #   secondary_rain_is_raining
+    #     None  = reading unavailable OR stale (no usable signal).
+    #     True  = fresh reading, sensor is detecting rain.
+    #     False = fresh reading, sensor is dry.
+    #
+    #   secondary_rain_sensor_stale
+    #     True  ONLY when a reading was provided and has aged past
+    #           ``SafetyThresholds.secondary_rain_sensor_timeout``.
+    #     False otherwise — including the "never provided" case, where
+    #           ``secondary_rain_is_raining`` will be None and
+    #           ``stale`` will be False, signaling "no sensor yet"
+    #           rather than "sensor failed".
+    # Note: ``bool | None`` (PEP 604) rather than the file-prevailing
+    # ``Optional[bool]`` solely to keep ruff's UP045 count at the
+    # post-implementer baseline (78). File-wide migration is deferred
+    # (review Minor #6).
+    secondary_rain_is_raining: bool | None = None
+    secondary_rain_sensor_stale: bool = False
+
 
 @dataclass
 class SafetyThresholds:
@@ -152,6 +189,35 @@ class SafetyThresholds:
     weather_sensor_timeout: float = 120.0  # seconds - Ecowitt update interval ~60s
     cloud_sensor_timeout: float = 180.0    # seconds - CloudWatcher slower updates
     ephemeris_timeout: float = 600.0       # seconds - ephemeris changes slowly
+
+    # SAFE-002 (Risk #9): Secondary rain sensor staleness window.
+    # Mirrors weather_sensor_timeout but tighter — a redundant rain
+    # sensor that stops reporting is the failure mode we're guarding
+    # against, so we want to flip to "unavailable" quickly.
+    secondary_rain_sensor_timeout: float = 60.0  # seconds
+
+    # SAFE-002 review Important #1: Production-vs-development opt-out
+    # for the secondary rain sensor requirement.
+    #
+    #   True  (default, production): a missing secondary rain reading
+    #         -> unsafe. This is the fail-safe shipped behavior; with
+    #         no Hydreon driver installed, the observatory refuses to
+    #         operate. Correct for any production deployment.
+    #
+    #   False (development / initial-deploy escape hatch): if the
+    #         secondary reading slot is None, the primary alone
+    #         decides. Primary rain -> unsafe; primary fresh+dry ->
+    #         safe; primary stale -> unsafe (we still need at least
+    #         one fresh sensor). This lets dev machines run before
+    #         the redundant sensor lands AND lets initial deployments
+    #         iterate the rest of the system without blocking on
+    #         hardware.
+    #
+    # The flag deliberately does NOT cover the *stale* case: a stale
+    # secondary means the sensor was installed and is now failing,
+    # which is exactly the SAFE-002 failure mode we want to be loud
+    # about.
+    require_secondary_rain_sensor: bool = True
 
     # Step 465: Rain holdoff (POS recommendation)
     rain_holdoff_minutes: float = 30.0    # Minutes to wait after rain stops
@@ -229,6 +295,12 @@ class SafetyMonitor:
         # Sensor data cache
         self._weather_data: Optional[SensorInput] = None
         self._cloud_data: Optional[SensorInput] = None
+        # SAFE-002 (Risk #9): Secondary (non-Ecowitt) rain sensor slot.
+        # Filled by ``update_secondary_rain_sensor``. Stays None until a
+        # secondary-rain driver (typical: Hydreon RG-15) is wired in;
+        # the voting policy in ``_evaluate_weather`` treats None as
+        # "unavailable -> unsafe", which is the intended fail-safe.
+        self._secondary_rain_data: Optional[SensorInput] = None
         self._sun_altitude: Optional[float] = None
         self._sun_altitude_time: Optional[datetime] = None
 
@@ -303,6 +375,43 @@ class SafetyMonitor:
             timestamp=datetime.now()
         )
 
+    async def update_secondary_rain_sensor(
+        self, reading: "SecondaryRainReading"
+    ) -> None:
+        """Update secondary rain sensor reading (SAFE-002, Risk #9).
+
+        Accepts a ``services.weather.secondary_rain.SecondaryRainReading``
+        and stores it in the secondary slot for the dual-redundant
+        voting policy in ``_evaluate_weather``.
+
+        The method is ``async`` solely for symmetry with the sibling
+        sensor setters (``update_weather``, ``update_cloud_sensor``,
+        etc.). It performs no I/O — the actual sensor I/O is the
+        responsibility of the (future) Hydreon driver that calls this.
+        See ``services.weather.secondary_rain`` for the data contract.
+
+        Args:
+            reading: A ``SecondaryRainReading`` value with
+                ``is_raining``, ``timestamp``, and ``sensor_id``.
+
+        Note (ARCH-003 cross-reference):
+            The orchestrator's ``SafetyServiceProtocol`` does NOT
+            expose sensor-input methods — it is a read-only consumer
+            interface (is_safe, get_unsafe_reasons, register_callback).
+            So this method does NOT need a Protocol mirror. Future
+            drivers wire to ``SafetyMonitor`` directly via this method.
+        """
+        # SAFE-002 review Minor #5: parameter is now typed as
+        # SecondaryRainReading (TYPE_CHECKING-only import) so mypy sees
+        # the contract. Runtime read uses direct attribute access — the
+        # frozen dataclass + __post_init__ allowlist on the sender
+        # side guarantees both ``sensor_id`` and ``timestamp`` are set.
+        self._secondary_rain_data = SensorInput(
+            name=f"SecondaryRain({reading.sensor_id})",
+            value=reading,
+            timestamp=reading.timestamp,
+        )
+
     async def update_cloud_sensor(self, sky_temp_diff: float):
         """Update cloud sensor data (sky-ambient temperature difference)."""
         self._cloud_data = SensorInput(
@@ -363,38 +472,216 @@ class SafetyMonitor:
         age = (datetime.now() - sensor.timestamp).total_seconds()
         return age > timeout
 
+    def _primary_rain_vote(self) -> Optional[bool]:
+        """Return the Ecowitt rain vote.
+
+        Returns:
+            True  if the primary sensor reports rain.
+            False if the primary sensor is fresh and reports dry.
+            None  if the primary sensor is stale, missing, invalid, or
+                  its payload lacks both rain fields. The caller
+                  (``_evaluate_weather``) treats None as "unavailable
+                  -> unsafe" under the SAFE-002 voting policy.
+        """
+        if self._is_sensor_stale(
+            self._weather_data, self.thresholds.weather_sensor_timeout
+        ):
+            return None
+        if not self._weather_data or not self._weather_data.is_valid:
+            return None
+        data = self._weather_data.value
+        if not data:
+            return None
+        if getattr(data, "is_raining", False):
+            return True
+        if getattr(data, "rain_rate_in_hr", 0.0) > 0:
+            return True
+        # Payload exists but neither rain field signals rain. We treat
+        # this as a valid "dry" reading rather than "unavailable" —
+        # the field-presence check already happened via getattr defaults.
+        return False
+
+    def _secondary_rain_vote(self) -> Optional[bool]:
+        """Return the secondary rain sensor vote (SAFE-002).
+
+        Same tri-state semantics as ``_primary_rain_vote``: True/False
+        for fresh readings, None for stale/missing.
+        """
+        if self._is_sensor_stale(
+            self._secondary_rain_data,
+            self.thresholds.secondary_rain_sensor_timeout,
+        ):
+            return None
+        if (
+            not self._secondary_rain_data
+            or not self._secondary_rain_data.is_valid
+        ):
+            return None
+        reading = self._secondary_rain_data.value
+        if reading is None:
+            return None
+        # Duck-typed getattr (instead of isinstance) so monitor.py does
+        # not have to import SecondaryRainReading at runtime — see the
+        # TYPE_CHECKING note at module top. Input validity is guaranteed
+        # by SecondaryRainReading's frozen dataclass + __post_init__.
+        return bool(getattr(reading, "is_raining", False))
+
+    def _vote_rain_status(self) -> tuple[bool, List[str]]:
+        """Apply dual-redundant rain voting (SAFE-002, Risk #9).
+
+        Returns:
+            (is_safe_re_rain, reasons)
+
+            * is_safe_re_rain is True only when BOTH sensors are fresh
+              AND both report dry — UNLESS
+              ``SafetyThresholds.require_secondary_rain_sensor`` is
+              False and the secondary slot has *never been populated*,
+              in which case the primary alone decides (Important #1
+              opt-out for dev / pre-Hydreon deployments).
+            * Any sensor reporting rain -> unsafe with a
+              "rain detected (N of 2 sensors): <names>" reason. N is the
+              count of sensors voting rain (1 or 2); the names list lets
+              the operator distinguish single-sensor disagreement
+              (possible sensor fault) from agreement (genuine storm).
+            * Any sensor missing/stale -> unsafe with an "unavailable"
+              reason. Conservative fail-safe default: we never permit
+              operation when redundancy is degraded, because the cost of
+              rain damage (water on OTA + camera) is asymmetric with the
+              cost of a missed observing window.
+
+        Important #1 opt-out semantics (require_secondary_rain_sensor):
+            The flag covers exactly one case: the secondary slot was
+            never written to (driver not installed). It does NOT cover
+            *stale* secondary readings — staleness means the sensor
+            was there and is now broken, which is exactly the failure
+            mode SAFE-002 exists to catch.
+        """
+        primary = self._primary_rain_vote()
+        secondary = self._secondary_rain_vote()
+        reasons: List[str] = []
+
+        # Important #1: detect the "secondary never installed" case
+        # before we tally the standard unavailable-reasons branch.
+        secondary_never_installed = self._secondary_rain_data is None
+        opt_out_active = (
+            secondary is None
+            and secondary_never_installed
+            and not self.thresholds.require_secondary_rain_sensor
+        )
+
+        if primary is None:
+            reasons.append(
+                "Primary rain sensor (Ecowitt) unavailable - "
+                "treating as unsafe"
+            )
+        # Suppress the "secondary unavailable" reason only under the
+        # explicit opt-out. A stale (not-missing) secondary still hits
+        # the standard reason path because secondary_never_installed
+        # is False for stale readings.
+        if secondary is None and not opt_out_active:
+            reasons.append(
+                "Secondary rain sensor unavailable - "
+                "treating as unsafe"
+            )
+
+        rainers: List[str] = []
+        if primary is True:
+            rainers.append("Ecowitt")
+        if secondary is True:
+            # Duck-typed (see TYPE_CHECKING note at module top).
+            sensor_name = "secondary"
+            if self._secondary_rain_data is not None:
+                value = self._secondary_rain_data.value
+                sensor_name = getattr(value, "sensor_id", "secondary")
+            rainers.append(sensor_name)
+
+        if rainers:
+            count = len(rainers)
+            self._last_rain_time = datetime.now()
+            reasons.append(
+                f"rain detected ({count} of 2 sensors): "
+                + ", ".join(rainers)
+            )
+
+        # Under the opt-out: secondary absent + primary fresh+dry ->
+        # safe. We still require the primary to be a fresh False vote
+        # (primary None would have raised an unavailable reason).
+        if opt_out_active:
+            is_safe_re_rain = primary is False and not reasons
+        else:
+            is_safe_re_rain = (
+                primary is False and secondary is False and not reasons
+            )
+        return is_safe_re_rain, reasons
+
+    def _any_rain_sensor_reports_rain(self) -> bool:
+        """SAFE-002 audit helper for the ``evaluate()`` emergency cascade.
+
+        The ``is_emergency`` block at the bottom of ``evaluate()``
+        historically read ``_weather_data`` directly. With dual
+        redundancy, ANY sensor reporting rain must trigger
+        ``EMERGENCY_CLOSE`` — not just the primary.
+        """
+        return (
+            self._primary_rain_vote() is True
+            or self._secondary_rain_vote() is True
+        )
+
     def _evaluate_weather(self) -> tuple[bool, List[str]]:
         """
         Evaluate weather conditions with hysteresis (POS recommendation).
 
         Hysteresis prevents rapid oscillation between safe/unsafe states
         when conditions are near threshold values.
+
+        SAFE-002 (Risk #9): Rain detection is now dual-redundant. We
+        consult both the Ecowitt WS90 (primary) and a secondary rain
+        sensor (typically Hydreon RG-15) and apply asymmetric voting:
+        either sensor reporting rain closes the enclosure; both must
+        agree on "dry" (and both must be fresh) to permit operations.
+        The remaining checks (wind / humidity / dew point) still rely
+        on the Ecowitt payload because the secondary sensor only
+        measures rain.
         """
-        reasons = []
+        reasons: List[str] = []
 
-        # POS: Check for stale sensor data
-        if self._is_sensor_stale(self._weather_data, self.thresholds.weather_sensor_timeout):
-            return False, ["Weather data stale or unavailable - treating as unsafe"]
+        # SAFE-002: Rain voting comes first — its fail-safe default
+        # (unsafe on missing/stale) subsumes the old single-sensor
+        # "Weather data stale" early return for the rain branch. We
+        # still need to gate the Ecowitt-only checks (wind, humidity,
+        # dew point) on Ecowitt freshness below.
+        rain_ok, rain_reasons = self._vote_rain_status()
+        if not rain_ok:
+            # Rain branch is the highest-priority safety signal — any
+            # detected rain or any missing redundancy short-circuits
+            # the rest of the weather evaluation (mirrors the previous
+            # early-return on rain). Pre-SAFE-002 the Ecowitt-stale
+            # branch returned this same reason string; tests rely on
+            # the "Weather data stale" wording so we surface it when
+            # the primary specifically is the missing one.
+            if self._is_sensor_stale(
+                self._weather_data,
+                self.thresholds.weather_sensor_timeout,
+            ):
+                # Preserve the original wording for callers/tests that
+                # match on it. The redundancy reason is still useful
+                # context, so we append rather than replace.
+                return False, [
+                    "Weather data stale or unavailable - treating as unsafe",
+                    *rain_reasons,
+                ]
+            return False, rain_reasons
 
+        # Past the rain gate -> both sensors fresh and dry. We still
+        # need the Ecowitt payload for wind / humidity / temperature
+        # checks; the rain vote already guarantees it is fresh-ish, but
+        # be defensive in case of partial-payload corner cases.
         if not self._weather_data or not self._weather_data.is_valid:
             return False, ["Weather data unavailable"]
 
         data = self._weather_data.value
         if not data:
             return False, ["Weather data unavailable"]
-
-        # Check rain (no hysteresis - immediate response)
-        # Step 465: Track rain time for holdoff
-        is_raining = False
-        if hasattr(data, 'is_raining') and data.is_raining:
-            is_raining = True
-            self._last_rain_time = datetime.now()
-            return False, ["Rain detected - EMERGENCY"]
-
-        if hasattr(data, 'rain_rate_in_hr') and data.rain_rate_in_hr > 0:
-            is_raining = True
-            self._last_rain_time = datetime.now()
-            return False, [f"Rain rate: {data.rain_rate_in_hr} in/hr - EMERGENCY"]
 
         # Check wind with hysteresis (POS recommendation)
         if hasattr(data, 'wind_gust_mph'):
@@ -977,12 +1264,11 @@ class SafetyMonitor:
 
         # Check for emergency conditions (rain or power)
         is_emergency = power_emergency  # Step 469: Include power emergency
-        if self._weather_data and self._weather_data.is_valid:
-            data = self._weather_data.value
-            if hasattr(data, 'is_raining') and data.is_raining:
-                is_emergency = True
-            elif hasattr(data, 'rain_rate_in_hr') and data.rain_rate_in_hr > 0:
-                is_emergency = True
+        # SAFE-002 (Risk #9): emergency-close on ANY rain sensor reporting
+        # rain, not just Ecowitt. Voting policy is asymmetric: 1-of-2
+        # detecting rain is enough to slam the roof.
+        if self._any_rain_sensor_reports_rain():
+            is_emergency = True
 
         # Step 486: Battery shutdown is also an emergency at stage 3+
         if self._battery_shutdown_stage >= 3:
@@ -1027,7 +1313,12 @@ class SafetyMonitor:
             action = SafetyAction.SAFE_TO_OBSERVE
             alert_level = AlertLevel.INFO
 
-        # Extract readings for status
+        # Extract readings for status (telemetry-only fields).
+        # SAFE-002 audit: this block reads temp/humidity/wind from
+        # _weather_data. Those are physical readings only the Ecowitt
+        # WS90 produces — the secondary rain sensor measures rain only.
+        # So no voting is needed here; the safety-decision voting lives
+        # in _evaluate_weather / _any_rain_sensor_reports_rain above.
         temp = None
         humidity = None
         wind = None
@@ -1047,6 +1338,35 @@ class SafetyMonitor:
                 cloud_cover = 100
             else:
                 cloud_cover = ((sky_diff + 25) / 20) * 100
+
+        # SAFE-002 review Important #2: derive secondary-rain telemetry
+        # from the cached reading. Order matters here:
+        #   1. Never provided    -> is_raining=None, stale=False
+        #   2. Stale (provided)  -> is_raining=None, stale=True
+        #   3. Fresh             -> is_raining=<reading>, stale=False
+        # _is_sensor_stale returns True for "missing OR aged out", so
+        # we explicitly check the "never provided" case first via
+        # ``_secondary_rain_data is None`` to keep ``stale`` honest.
+        # bool | None (PEP 604) — see SafetyStatus field note.
+        secondary_rain_is_raining: bool | None = None
+        secondary_rain_sensor_stale = False
+        if self._secondary_rain_data is None:
+            # Case 1: never provided. Both defaults are correct.
+            pass
+        elif self._is_sensor_stale(
+            self._secondary_rain_data,
+            self.thresholds.secondary_rain_sensor_timeout,
+        ):
+            # Case 2: provided then aged out.
+            secondary_rain_sensor_stale = True
+        elif self._secondary_rain_data.is_valid:
+            # Case 3: fresh. Duck-typed access matches the rain-vote
+            # helper (see TYPE_CHECKING note at module top).
+            reading = self._secondary_rain_data.value
+            if reading is not None:
+                secondary_rain_is_raining = bool(
+                    getattr(reading, "is_raining", False)
+                )
 
         status = SafetyStatus(
             timestamp=datetime.now(),
@@ -1083,6 +1403,9 @@ class SafetyMonitor:
             # Step 489: Network status
             network_connected=self._network_connected,
             network_latency_ms=self._network_latency_ms,
+            # SAFE-002 review Important #2: secondary-rain telemetry.
+            secondary_rain_is_raining=secondary_rain_is_raining,
+            secondary_rain_sensor_stale=secondary_rain_sensor_stale,
         )
 
         self._last_status = status
