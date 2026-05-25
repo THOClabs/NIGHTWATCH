@@ -32,7 +32,11 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Union
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, Union
+
+from pydantic import ValidationError
+
+from nightwatch.tool_params import TOOL_PARAM_MODELS
 
 if TYPE_CHECKING:
     # Imported only for type hints — keeps a runtime cycle impossible and avoids
@@ -730,6 +734,74 @@ class LLMClient:
         self._clients[backend] = client
         return client
 
+    def _validate_tool_calls(
+        self, tool_calls: List[ToolCall]
+    ) -> Tuple[List[ToolCall], List[str]]:
+        """Validate LLM-emitted tool_calls against ARCH-001 Pydantic models.
+
+        VOX-003: every backend (LocalLlama, Anthropic, OpenAI) parses
+        tool_calls inline and hands the raw ``arguments`` dict straight to
+        ``ToolExecutor.execute``. ARCH-001 closed the validation gap at the
+        executor boundary, but garbage from a sloppy LLM was still reaching
+        the executor as an INVALID_PARAMS round-trip. This method pushes
+        validation one layer up so bogus tool_calls never reach the executor.
+
+        For each tool_call:
+          * Looks up the parameter model in ``TOOL_PARAM_MODELS``.
+          * Calls ``model_cls.model_validate(tc.arguments)``.
+          * On success: tool_call kept (with the model's parsed dict so any
+            type coercion the model performs is preserved downstream).
+          * On ``ValidationError``: tool_call dropped, a human-readable error
+            string appended to the errors list.
+          * Unknown tool_name (not in ``TOOL_PARAM_MODELS``): also dropped
+            with ``"Unknown tool: <name>"``.
+
+        Design choice: rather than silently strip extra fields (which would
+        contradict ARCH-001's deny-by-default ``extra='forbid'`` semantics),
+        the validator drops the invalid tool_call entirely. The manual's
+        VOX-003 verify line ("drops the extra key or errors cleanly") allows
+        either path — dropping the call + a clean error matches the
+        deny-by-default stance.
+
+        Returns:
+            (validated_tool_calls, error_strings) where every retained
+            tool_call's ``arguments`` is now the Pydantic-validated dict.
+        """
+        validated: List[ToolCall] = []
+        errors: List[str] = []
+
+        for tc in tool_calls:
+            model_cls = TOOL_PARAM_MODELS.get(tc.name)
+            if model_cls is None:
+                msg = f"Unknown tool: {tc.name}"
+                logger.warning("VOX-003 dropped tool_call: %s", msg)
+                errors.append(msg)
+                continue
+
+            try:
+                model = model_cls.model_validate(tc.arguments)
+            except ValidationError as exc:
+                # Compress the multi-line Pydantic error into one line per
+                # field for human-readable logging and LLM self-correction.
+                detail = "; ".join(
+                    f"{'.'.join(str(p) for p in e['loc']) or '<root>'}: {e['msg']}"
+                    for e in exc.errors()
+                )
+                msg = f"{tc.name}: {detail}"
+                logger.warning("VOX-003 dropped tool_call: %s", msg)
+                errors.append(msg)
+                continue
+
+            # Preserve any coercion the model performed (e.g. string→float
+            # for RA/Dec) by re-dumping the validated model back to a dict.
+            validated.append(ToolCall(
+                id=tc.id,
+                name=tc.name,
+                arguments=model.model_dump(),
+            ))
+
+        return validated, errors
+
     def set_safety_provider(
         self, provider: Optional[Callable[[], "SafetyStatus"]]
     ) -> None:
@@ -862,6 +934,25 @@ class LLMClient:
                     temperature=temperature,
                     max_tokens=max_tokens,
                 )
+
+                # VOX-003: validate tool_calls against ARCH-001 Pydantic models
+                # BEFORE downstream code (confidence scoring, history, the
+                # orchestrator's ToolExecutor.execute) sees them. Bogus
+                # tool_calls are dropped; a short error is appended to
+                # response.content so the next LLM turn (or operator) can
+                # see what was rejected and self-correct.
+                validated_tool_calls, validation_errors = self._validate_tool_calls(
+                    response.tool_calls or []
+                )
+                response.tool_calls = validated_tool_calls
+                if validation_errors and not validated_tool_calls:
+                    err_summary = "; ".join(validation_errors)
+                    annotation = f"[VOX-003: tool calls rejected: {err_summary}]"
+                    response.content = (
+                        f"{response.content}\n{annotation}"
+                        if response.content
+                        else annotation
+                    )
 
                 # Step 289: Calculate confidence score
                 confidence, factors = calculate_confidence_score(

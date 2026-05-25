@@ -672,3 +672,190 @@ class TestObservatorySystemPromptGrounding:
         text = OBSERVATORY_SYSTEM_PROMPT.lower()
         assert "unsafe" in text
         assert "refuse" in text
+
+
+class TestVox003ToolCallValidation:
+    """VOX-003: schema-validate LLM tool-call arguments before tool execution.
+
+    Risk #1 follow-on. ARCH-001 added Pydantic models that reject garbage at
+    the ToolExecutor.execute() boundary. VOX-003 pushes that validation one
+    layer up so bogus tool_calls never reach the executor at all — they get
+    dropped at the LLM client with a clean error string the LLM can see on
+    the next turn.
+    """
+
+    def test_valid_tool_call_passes_through(self):
+        """Valid args → tool_call retained, no errors."""
+        client = LLMClient(backend=LLMBackend.MOCK)
+        tool_calls = [
+            ToolCall(id="t1", name="goto_object", arguments={"object_name": "M31"})
+        ]
+        validated, errors = client._validate_tool_calls(tool_calls)
+        assert len(validated) == 1
+        assert validated[0].name == "goto_object"
+        assert validated[0].arguments == {"object_name": "M31"}
+        assert errors == []
+
+    def test_extra_field_rejected_cleanly(self):
+        """SPEC VERIFY (manual line 386): ``{object_name: M31, speed: fast}``
+        is rejected — the tool_call is dropped and a clean error string is
+        surfaced, rather than silently stripping ``speed`` and slewing.
+        """
+        client = LLMClient(backend=LLMBackend.MOCK)
+        tool_calls = [
+            ToolCall(
+                id="t1",
+                name="goto_object",
+                arguments={"object_name": "M31", "speed": "fast"},
+            )
+        ]
+        validated, errors = client._validate_tool_calls(tool_calls)
+        assert len(validated) == 0
+        assert len(errors) == 1
+        assert "goto_object" in errors[0]
+        assert "speed" in errors[0].lower()
+        # Pydantic v2 phrasing: "Extra inputs are not permitted"
+        assert "extra" in errors[0].lower() or "permitted" in errors[0].lower()
+
+    def test_unknown_tool_name_rejected(self):
+        """A tool_name not registered in TOOL_PARAM_MODELS is dropped."""
+        client = LLMClient(backend=LLMBackend.MOCK)
+        tool_calls = [
+            ToolCall(id="t1", name="does_not_exist", arguments={})
+        ]
+        validated, errors = client._validate_tool_calls(tool_calls)
+        assert len(validated) == 0
+        assert len(errors) == 1
+        assert "does_not_exist" in errors[0]
+
+    def test_missing_required_field_rejected(self):
+        """A required field (e.g. object_name) omitted → ValidationError."""
+        client = LLMClient(backend=LLMBackend.MOCK)
+        tool_calls = [
+            ToolCall(id="t1", name="goto_object", arguments={})
+        ]
+        validated, errors = client._validate_tool_calls(tool_calls)
+        assert len(validated) == 0
+        assert len(errors) == 1
+        assert "goto_object" in errors[0]
+
+    def test_wrong_type_rejected(self):
+        """Wrong-typed field (object_name as int) → ValidationError."""
+        client = LLMClient(backend=LLMBackend.MOCK)
+        tool_calls = [
+            ToolCall(id="t1", name="goto_object", arguments={"object_name": 42})
+        ]
+        validated, errors = client._validate_tool_calls(tool_calls)
+        assert len(validated) == 0
+        assert len(errors) == 1
+        assert "object_name" in errors[0].lower()
+
+    def test_mixed_valid_and_invalid_partial_pass(self):
+        """If the LLM emits 2 tool_calls and one is invalid, the valid one
+        survives (the LLM doesn't get penalized for one bad apple)."""
+        client = LLMClient(backend=LLMBackend.MOCK)
+        tool_calls = [
+            ToolCall(id="t1", name="goto_object", arguments={"object_name": "M31"}),
+            ToolCall(id="t2", name="goto_object", arguments={"speed": "fast"}),
+        ]
+        validated, errors = client._validate_tool_calls(tool_calls)
+        assert len(validated) == 1
+        assert validated[0].id == "t1"
+        assert len(errors) == 1
+
+    def test_empty_tool_calls_returns_empty(self):
+        """No tool_calls → empty validated, no errors."""
+        client = LLMClient(backend=LLMBackend.MOCK)
+        validated, errors = client._validate_tool_calls([])
+        assert validated == []
+        assert errors == []
+
+    def test_no_param_tool_passes_with_empty_args(self):
+        """A NoParams tool (e.g. park_telescope) with ``{}`` validates."""
+        client = LLMClient(backend=LLMBackend.MOCK)
+        tool_calls = [
+            ToolCall(id="t1", name="park_telescope", arguments={})
+        ]
+        validated, errors = client._validate_tool_calls(tool_calls)
+        assert len(validated) == 1
+        assert errors == []
+
+    def test_no_param_tool_rejects_extra_args(self):
+        """A NoParams tool with stray fields gets dropped (deny-by-default)."""
+        client = LLMClient(backend=LLMBackend.MOCK)
+        tool_calls = [
+            ToolCall(id="t1", name="park_telescope", arguments={"force": True})
+        ]
+        validated, errors = client._validate_tool_calls(tool_calls)
+        assert len(validated) == 0
+        assert len(errors) == 1
+        assert "park_telescope" in errors[0]
+
+    @pytest.mark.asyncio
+    async def test_chat_drops_invalid_tool_calls_and_surfaces_error(self):
+        """End-to-end: when the backend returns a malformed tool_call, the
+        aggregator chat() strips it from response.tool_calls and appends
+        a ``[VOX-003: tool calls rejected: ...]`` note to response.content
+        so the operator / next-turn LLM can see what happened.
+        """
+        client = LLMClient(backend=LLMBackend.MOCK)
+
+        # Hand-craft a backend response that includes a bogus tool_call.
+        bogus_response = LLMResponse(
+            content="Sure, slewing now.",
+            tool_calls=[
+                ToolCall(
+                    id="t1",
+                    name="goto_object",
+                    arguments={"object_name": "M31", "speed": "fast"},
+                )
+            ],
+            finish_reason="tool_calls",
+            latency_ms=10.0,
+        )
+
+        # Patch the MOCK backend's chat() to return our hand-crafted response.
+        mock_backend = client._get_client(LLMBackend.MOCK)
+        with (
+            patch.object(mock_backend, "chat", AsyncMock(return_value=bogus_response)),
+            patch.object(mock_backend, "health_check", AsyncMock(return_value=True)),
+        ):
+            response = await client.chat("slew to M31", tools=[])
+
+        # Bogus tool_call dropped before reaching downstream dispatch.
+        assert response.tool_calls == []
+        # Error surfaced in content so the next LLM turn (or operator) can see it.
+        assert "VOX-003" in response.content
+        assert "goto_object" in response.content
+        assert "speed" in response.content.lower()
+
+    @pytest.mark.asyncio
+    async def test_chat_preserves_valid_tool_calls_unchanged(self):
+        """End-to-end: valid tool_calls flow through chat() untouched, no
+        error annotation appended to content.
+        """
+        client = LLMClient(backend=LLMBackend.MOCK)
+
+        good_response = LLMResponse(
+            content="Slewing.",
+            tool_calls=[
+                ToolCall(
+                    id="t1",
+                    name="goto_object",
+                    arguments={"object_name": "M31"},
+                )
+            ],
+            finish_reason="tool_calls",
+            latency_ms=10.0,
+        )
+
+        mock_backend = client._get_client(LLMBackend.MOCK)
+        with (
+            patch.object(mock_backend, "chat", AsyncMock(return_value=good_response)),
+            patch.object(mock_backend, "health_check", AsyncMock(return_value=True)),
+        ):
+            response = await client.chat("slew to M31", tools=[])
+
+        assert len(response.tool_calls) == 1
+        assert response.tool_calls[0].name == "goto_object"
+        assert "VOX-003" not in response.content
