@@ -58,6 +58,7 @@ from datetime import datetime
 from enum import Enum
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Protocol, TypeVar
 
+from nightwatch.cancellation import CommandContext
 from nightwatch.config import NightwatchConfig
 from nightwatch.exceptions import NightwatchError
 
@@ -947,6 +948,23 @@ class SafetyServiceProtocol(ServiceProtocol, Protocol):
         """Get list of reasons if unsafe."""
         ...
 
+    def register_callback(self, callback: Callable[[Any], None]) -> None:
+        """Register a callback fired on safety status changes (ARCH-003).
+
+        The callback receives a SafetyStatus object whenever the monitor
+        evaluates a new status. ``services.safety_monitor.monitor.SafetyMonitor``
+        accepts both sync and coroutine callbacks; the Protocol pins the
+        sync shape because the Orchestrator's cancel-on-unsafe wiring is
+        cheap and synchronous.
+
+        We type the parameter as ``Any`` rather than importing
+        ``SafetyStatus`` here to avoid a runtime import cycle
+        (services.safety_monitor → nightwatch.orchestrator via the
+        Protocol). The concrete service typing remains tight at the
+        registration site (Orchestrator._on_safety_change).
+        """
+        ...
+
 
 class CameraServiceProtocol(ServiceProtocol, Protocol):
     """Protocol for camera service."""
@@ -1511,6 +1529,17 @@ class Orchestrator:
         # Event system (Steps 243-246)
         self._event_listeners: Dict[EventType, List[Callable]] = {}
 
+        # ARCH-003: cooperative-cancellation surface. Voice/MCP/automation
+        # entry points that dispatch a long-running tool (camera capture,
+        # mount slew, autofocus) call ``set_active_context(ctx)`` before
+        # invoking the tool and ``clear_active_context(ctx)`` in a finally
+        # block. The SafetyMonitor callback (``_on_safety_change``, wired
+        # at register_safety time) checks ``_active_context`` and cancels
+        # it on unsafe transitions. Concurrent contexts are intentionally
+        # OUT OF SCOPE for ARCH-003 — the voice pipeline is single-active
+        # by design; multi-command orchestration is a separate concern.
+        self._active_context: Optional[CommandContext] = None
+
         logger.info("Orchestrator initialized")
 
     # =========================================================================
@@ -1610,8 +1639,32 @@ class Orchestrator:
         self.registry.register("weather", service, required)
 
     def register_safety(self, service: SafetyServiceProtocol, required: bool = True):
-        """Register safety monitor service (Step 219)."""
+        """Register safety monitor service (Step 219).
+
+        ARCH-003: wire the cancel-on-unsafe callback as soon as the
+        service is registered, not lazily at first command — otherwise
+        the very first long-running command after startup is uncovered.
+        The callback is a no-op if no active CommandContext is set, so
+        registering early is harmless. We use ``getattr`` so callers
+        passing a stub that hasn't implemented ``register_callback`` yet
+        (e.g. in early test fixtures) degrade gracefully rather than
+        crashing on import.
+        """
         self.registry.register("safety", service, required)
+        register_cb = getattr(service, "register_callback", None)
+        if register_cb is not None:
+            try:
+                register_cb(self._on_safety_change)
+                logger.debug(
+                    "ARCH-003: registered cancel-on-unsafe callback with safety monitor"
+                )
+            except Exception as e:
+                # A failed registration is a quality-of-service degradation
+                # (cancellation won't fire), not a startup blocker — log
+                # loudly so it's visible in dev, then continue.
+                logger.error(
+                    f"ARCH-003: failed to register safety cancel callback: {e}"
+                )
 
     def register_camera(self, service: CameraServiceProtocol, required: bool = False):
         """Register camera service (Step 220)."""
@@ -1640,6 +1693,100 @@ class Orchestrator:
     def register_enclosure(self, service: EnclosureServiceProtocol, required: bool = False):
         """Register enclosure/roof service (Step 226)."""
         self.registry.register("enclosure", service, required)
+
+    # =========================================================================
+    # Active Command Context (ARCH-003)
+    # =========================================================================
+
+    def set_active_context(self, context: CommandContext) -> None:
+        """Mark ``context`` as the currently-in-flight command (ARCH-003).
+
+        Voice/MCP/automation dispatch wraps long-running tool calls in
+        ``set_active_context(ctx)`` ... ``clear_active_context(ctx)`` so
+        ``_on_safety_change`` (called by the SafetyMonitor callback) can
+        cancel the active context on an unsafe transition. If another
+        context is already active a logger.ERROR is emitted — concurrent
+        long-running commands are out of scope for ARCH-003 (the voice
+        pipeline is single-active by design) and the newer context wins
+        so the most-recent command's cancel reaches the right token.
+
+        Logged at ERROR (not WARNING) because the safety implication is
+        real: an in-flight 30-minute exposure can be silently displaced
+        by a newer short-running command, so a subsequent safety event
+        will only cancel the newer (cheap) context — the old in-flight
+        op runs uncancelled while the enclosure is closing.
+
+        TODO(SAFE-001): decide whether to raise on overwrite instead of
+        silently displacing the older context. Raising is the
+        correct-by-construction answer but needs a concurrent-command
+        story first (queueing? rejection? interrupt-and-cancel-older?).
+        Until that design lands, ERROR-level logging keeps the
+        displacement operator-visible without changing call-site
+        behavior.
+        """
+        if self._active_context is not None and self._active_context is not context:
+            logger.error(
+                "ARCH-003: set_active_context called while another context "
+                "is active (command_id=%s overwritten by %s). Safety cancel "
+                "will only target the newest context — older in-flight ops "
+                "may not be cancelled. (Concurrent contexts are out of scope "
+                "until SAFE-001+.)",
+                self._active_context.command_id,
+                context.command_id,
+            )
+        self._active_context = context
+
+    def clear_active_context(self, context: CommandContext) -> None:
+        """Clear the active context if it matches ``context`` (ARCH-003).
+
+        Compare-and-clear semantics: only clear if the active context
+        IS the one being released. Otherwise a stale finally-clause
+        could blow away a newer command's active marker.
+        """
+        if self._active_context is context:
+            self._active_context = None
+
+    def _on_safety_change(self, status: Any) -> None:
+        """SafetyMonitor callback: cancel the active context on unsafe (ARCH-003).
+
+        Wired by ``register_safety``. The SafetyMonitor's notify pipe
+        accepts both sync and coroutine callbacks; we deliberately keep
+        this sync — the cancel itself is a cheap one-shot bool flip,
+        and avoiding the coroutine path keeps the cancel-side latency
+        deterministic (no event-loop scheduling between "unsafe
+        detected" and "token.cancel called").
+
+        ``status`` is typed as ``Any`` to keep this module free of a
+        runtime dependency on services.safety_monitor (Protocol-only
+        coupling), but the duck-typed contract is the SafetyStatus
+        dataclass: ``.is_safe: bool``, ``.action`` (an enum with a
+        ``.name``), and ``.reasons: list[str]``.
+        """
+        try:
+            is_safe = bool(getattr(status, "is_safe", True))
+        except Exception:
+            # Defensive: a malformed status must not raise out of the
+            # SafetyMonitor's notify pipe and disturb the monitor loop.
+            logger.exception("ARCH-003: malformed safety status in callback")
+            return
+
+        if is_safe:
+            return
+
+        ctx = self._active_context
+        if ctx is None:
+            # No in-flight command — nothing to cancel. The safety
+            # subsystem's enclosure-close path still runs as usual.
+            return
+
+        action_name = getattr(getattr(status, "action", None), "name", "UNSAFE")
+        reasons = getattr(status, "reasons", []) or []
+        reason_str = "; ".join(str(r) for r in reasons) if reasons else "no reason given"
+        ctx.cancel(f"safety:{action_name}: {reason_str}")
+        logger.warning(
+            f"ARCH-003: cancelled active context {ctx.command_id} "
+            f"due to safety:{action_name}"
+        )
 
     # =========================================================================
     # Lifecycle Management

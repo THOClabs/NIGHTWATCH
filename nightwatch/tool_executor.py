@@ -34,6 +34,7 @@ Usage:
 from __future__ import annotations
 
 import asyncio
+import inspect
 import logging
 import time
 from dataclasses import dataclass, field
@@ -43,6 +44,7 @@ from typing import Any, Callable, Dict, List, Optional, Union
 
 from pydantic import BaseModel, ValidationError
 
+from nightwatch.cancellation import CancellationError, CommandContext
 from nightwatch.exceptions import NightwatchError, CommandError
 from nightwatch.tool_params import (
     TOOL_PARAM_MODELS,
@@ -82,6 +84,11 @@ class ToolStatus(Enum):
     VETOED = "vetoed"  # Safety system blocked the action
     NOT_FOUND = "not_found"
     INVALID_PARAMS = "invalid_params"
+    # ARCH-003: a long-running op was cooperatively cancelled (typically by
+    # SafetyMonitor flipping unsafe mid-flight). Distinct from ERROR so the
+    # voice formatter can say "stopped, not broken" and downstream metrics
+    # can separate user/safety cancellations from genuine failures.
+    CANCELLED = "cancelled"
 
 
 @dataclass
@@ -151,6 +158,13 @@ class ToolExecutor:
         # param_model kwarg to register an ad-hoc tool (e.g. test fixtures) whose
         # schema is not in the global TOOL_PARAM_MODELS registry.
         self._param_models: Dict[str, type[BaseModel]] = {}
+        # ARCH-003: cache "does this handler accept a ``context`` kwarg?"
+        # We resolve this once at register time so ``execute`` doesn't
+        # pay an ``inspect.signature`` cost on every voice command. Both
+        # legacy ``async def h(params)`` and new
+        # ``async def h(params, context=None)`` shapes are supported —
+        # the lookup table makes the call-site dispatch a O(1) dict hit.
+        self._handler_takes_context: Dict[str, bool] = {}
         self._execution_log: List[ToolResult] = []
 
         # Register built-in handlers
@@ -184,7 +198,26 @@ class ToolExecutor:
         self._handlers[tool_name] = handler
         if param_model is not None:
             self._param_models[tool_name] = param_model
+        # ARCH-003: probe once for the optional ``context`` kwarg. Cached
+        # so the per-call hot path stays a single dict lookup.
+        self._handler_takes_context[tool_name] = self._handler_accepts_context(handler)
         logger.debug(f"Registered handler for tool: {tool_name}")
+
+    @staticmethod
+    def _handler_accepts_context(handler: Callable) -> bool:
+        """Return True if ``handler`` declares a ``context`` keyword param.
+
+        Probes the signature at register time so callers don't have to
+        annotate handlers in two places (the function def AND a registry
+        flag). Falls back to False on any inspection error — long-running
+        handlers that genuinely need cancellation must add the kwarg
+        explicitly, so a False default is safe.
+        """
+        try:
+            sig = inspect.signature(handler)
+        except (TypeError, ValueError):
+            return False
+        return "context" in sig.parameters
 
     def _register_default_handlers(self):
         """Register default handlers for built-in tools."""
@@ -222,11 +255,12 @@ class ToolExecutor:
     # Execution
     # =========================================================================
 
-    async def execute(
+    async def execute(  # noqa: PLR0912 — ARCH-003 added active-context wiring (+2 branches); refactor deferred to SAFE-001
         self,
         tool_name: str,
         parameters: Dict[str, Any],
-        timeout: Optional[float] = None
+        timeout: Optional[float] = None,
+        context: Optional[CommandContext] = None,
     ) -> ToolResult:
         """
         Execute a tool with the given parameters.
@@ -235,6 +269,15 @@ class ToolExecutor:
             tool_name: Name of the tool to execute
             parameters: Tool parameters
             timeout: Optional timeout override
+            context: Optional per-command CommandContext (ARCH-003). When
+                provided, handlers that declare a ``context`` keyword
+                parameter receive it and can check
+                ``context.token.raise_if_cancelled()`` at iteration
+                boundaries. A ``CancellationError`` raised by the handler
+                is mapped to ``ToolStatus.CANCELLED`` rather than
+                ``ERROR``. Handlers that do NOT declare ``context`` (most
+                of the 30+ short-running query handlers) are unaffected
+                — backwards-compatible.
 
         Returns:
             ToolResult with execution status and data
@@ -287,10 +330,33 @@ class ToolExecutor:
             self._log_execution(result)
             return result
 
+        # ARCH-003: dispatch with optional context. Only handlers that
+        # opted in (declared a ``context`` kwarg) receive it; legacy
+        # handlers see the old single-arg call so the diff stays local
+        # to the long-running ops (capture, slew, autofocus).
+        takes_context = self._handler_takes_context.get(tool_name, False)
+
+        # ARCH-003: wire the active context on the orchestrator BEFORE
+        # dispatch so the SafetyMonitor callback (registered by
+        # ``orchestrator.register_safety``) can find the right token
+        # when an unsafe transition fires mid-flight. Without this, a
+        # rain event during a real voice-driven capture would hit
+        # ``_on_safety_change`` with ``_active_context is None`` and
+        # silently no-op while the exposure ran to completion AFTER
+        # the enclosure had already started closing. Compare-and-clear
+        # semantics on the clear side (see ``clear_active_context``)
+        # protect against a stale finally-clause blowing away a newer
+        # command's marker.
+        if context is not None:
+            self.orchestrator.set_active_context(context)
+
         # Execute with timeout
         try:
             async with asyncio.timeout(timeout):
-                result = await handler(validated_params)
+                if takes_context:
+                    result = await handler(validated_params, context=context)
+                else:
+                    result = await handler(validated_params)
 
         except asyncio.TimeoutError:
             result = ToolResult(
@@ -298,6 +364,19 @@ class ToolExecutor:
                 status=ToolStatus.TIMEOUT,
                 error=f"Tool execution timed out after {timeout}s",
                 message="The operation took too long and was cancelled",
+            )
+
+        except CancellationError as e:
+            # ARCH-003: distinct from ERROR so the voice formatter and
+            # metrics layer can separate "user/safety stopped this" from
+            # "this broke". The reason carries the human-readable why
+            # ("rain detected", "safety:EMERGENCY_CLOSE", etc.) which we
+            # surface unchanged on the error/message fields.
+            result = ToolResult(
+                tool_name=tool_name,
+                status=ToolStatus.CANCELLED,
+                error=e.reason,
+                message=f"Operation cancelled: {e.reason}",
             )
 
         except ToolExecutionError as e:
@@ -316,6 +395,15 @@ class ToolExecutor:
                 error=str(e),
                 message=f"An error occurred: {e}",
             )
+
+        finally:
+            # ARCH-003: compare-and-clear via the orchestrator helper —
+            # only clears the slot if THIS context is still the active
+            # one. Safe to run unconditionally on the context-supplied
+            # branch even after a CancellationError, ToolExecutionError,
+            # or generic Exception unwound the dispatch above.
+            if context is not None:
+                self.orchestrator.clear_active_context(context)
 
         # Record execution time
         result.execution_time_ms = (time.time() - start_time) * 1000

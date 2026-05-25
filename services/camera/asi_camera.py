@@ -21,6 +21,8 @@ from enum import Enum
 from pathlib import Path
 from typing import Optional, List, Tuple, Any, Callable
 
+from nightwatch.cancellation import CancelToken
+
 logger = logging.getLogger("NIGHTWATCH.Camera")
 
 
@@ -393,6 +395,17 @@ class CaptureSession:
     # message; this counter is the durable signal that the burst encountered
     # transient SDK / save errors even after ``complete`` flipped True.
     failed_frame_count: int = 0
+    # ARCH-003: cooperative cancellation. ``cancelled`` flips True when
+    # ``_capture_loop`` observes a CancelToken transition mid-burst and
+    # exits early. This is distinct from ``complete`` (which marks "the
+    # requested duration was served") and from ``error`` (which is set
+    # for genuine failure modes — SDK error, FITS write error). The
+    # tuple of (complete, cancelled, error) tells downstream consumers
+    # exactly how the session ended:
+    #   complete=True,  cancelled=False → normal end-of-duration
+    #   complete=False, cancelled=True  → cooperative cancel (safety)
+    #   complete=False, cancelled=False → catastrophic error mid-burst
+    cancelled: bool = False
 
 
 class ASICamera:
@@ -597,7 +610,8 @@ class ASICamera:
     async def start_capture(self,
                            target: str,
                            duration_sec: float = 60.0,
-                           settings: Optional[CameraSettings] = None) -> CaptureSession:
+                           settings: Optional[CameraSettings] = None,
+                           cancel_token: Optional[CancelToken] = None) -> CaptureSession:
         """
         Start planetary video capture.
 
@@ -605,6 +619,13 @@ class ASICamera:
             target: Target name (for filename and metadata)
             duration_sec: Capture duration in seconds
             settings: Camera settings (uses preset if None)
+            cancel_token: Optional ARCH-003 cooperative cancellation
+                signal. When provided, ``_capture_loop`` checks the
+                token at each iteration boundary and exits early
+                (marking the session ``cancelled=True``) if cancellation
+                was requested. SAFE-001 wires this into the SafetyMonitor
+                transition path so a rain detection aborts the burst
+                BEFORE the enclosure starts closing.
 
         Returns:
             CaptureSession with capture details
@@ -640,14 +661,152 @@ class ASICamera:
         self._capturing = True
 
         # Start capture in background
-        asyncio.create_task(self._capture_loop(session, duration_sec))
+        asyncio.create_task(self._capture_loop(session, duration_sec, cancel_token))
 
         logger.info(f"Started capture: {session_id} ({duration_sec}s)")
         return session
 
-    async def _capture_loop(self, session: CaptureSession, duration_sec: float):
+    @staticmethod
+    def _observe_cancel(
+        session: CaptureSession,
+        cancel_token: Optional[CancelToken],
+        stage: str,
+        frame_no: int,
+    ) -> bool:
+        """ARCH-003 cancellation check helper for ``_capture_loop``.
+
+        Returns True if the token reports cancellation; the caller
+        is expected to ``break`` out of the loop. Centralizing the
+        cancel-side bookkeeping (session.cancelled, session.error,
+        log line) here keeps ``_capture_loop`` under the
+        cyclomatic / statement-count thresholds.
         """
-        Background burst capture loop (HWS-001).
+        if cancel_token is None or not cancel_token.is_cancelled():
+            return False
+        reason = cancel_token.reason or "unknown"
+        session.cancelled = True
+        session.error = f"cancelled: {reason}"
+        logger.info(
+            f"Capture cancelled {stage} (frame {frame_no}): {reason}"
+        )
+        return True
+
+    async def _capture_one_frame(
+        self,
+        session: CaptureSession,
+        cancel_token: Optional[CancelToken],
+        frame_no: int,
+    ) -> str:
+        """Capture+save a single frame for ``_capture_loop``.
+
+        Returns ``'ok'`` (frame committed), ``'failed'`` (transient
+        per-frame failure — loop continues), or ``'cancelled'`` (token
+        fired mid-exposure — loop should break).
+
+        Extracted from ``_capture_loop`` so the outer loop body stays
+        under the cyclomatic-complexity threshold. The per-frame error
+        handling stays inside this helper; the outer loop only owns the
+        cancel-or-keep-going decision.
+        """
+        try:
+            bytes_data = await self._do_exposure(
+                exposure_sec=session.settings.exposure_ms / 1000.0
+            )
+            # ARCH-003: cancellation check #2 — after the exposure
+            # returns. ``_do_exposure`` is the longest blocking await
+            # in the loop (up to the full exposure duration), so a
+            # cancel arriving during the await must be honored BEFORE
+            # we commit the frame to disk and start the next exposure.
+            # We deliberately discard the in-flight bytes here: the
+            # safety-side cancellation is the priority signal and the
+            # frame would not have been part of a complete burst anyway.
+            if self._observe_cancel(session, cancel_token, "mid-exposure", frame_no):
+                return "cancelled"
+
+            if bytes_data is None:
+                session.failed_frame_count += 1
+                session.error = "capture_frame returned None"
+                logger.warning(
+                    f"Frame {frame_no} capture failed (None); continuing"
+                )
+                return "failed"
+
+            roi = self.get_roi()
+            width, height = roi[2], roi[3]
+            # Sibling filename pattern keeps start_capture's output_path
+            # stable. 6-digit pad supports >9999 frames at 5-15 ms
+            # exposures over a 60 s SER capture without string-sort
+            # mis-ordering.
+            frame_path = (
+                session.output_path.parent
+                / f"{session.output_path.stem}_frame_{frame_no:06d}.fits"
+            )
+            if not self._save_fits(bytes_data, frame_path, width, height):
+                session.failed_frame_count += 1
+                session.error = f"FITS save failed for frame {frame_no}"
+                logger.warning(
+                    f"Frame {frame_no} FITS save failed; continuing"
+                )
+                return "failed"
+        except Exception as e:  # pragma: no cover — broad guard for SDK churn
+            session.failed_frame_count += 1
+            session.error = str(e)
+            logger.warning(
+                f"Frame {frame_no} raised {type(e).__name__}: {e}; "
+                "continuing burst"
+            )
+            return "failed"
+        return "ok"
+
+    @staticmethod
+    def _finalize_session(session: CaptureSession, frame_count: int) -> None:
+        """Set session.complete + log the burst summary.
+
+        ARCH-003: ``complete=True`` only when the loop exited cleanly
+        via the duration-elapsed path. A cancelled session leaves
+        ``complete=False`` so downstream consumers can distinguish "ran
+        to completion" from "stopped early by safety".
+
+        Designed to run from the ``_capture_loop`` ``finally`` block —
+        idempotent and safe against the cancel / clean-exit shapes that
+        actually reach it. The behaviour is intentionally identical to
+        the pre-fix in-try version; the only change is *where* it
+        runs, so that ``session.error`` set by ``_observe_cancel`` is
+        preserved even if a post-cancel exception fires.
+
+        Note on per-frame failures: ``session.error`` is also set by
+        ``_capture_one_frame`` on a per-frame save/exposure failure
+        (the burst continues — failed_frame_count just goes up). Those
+        non-fatal errors should NOT downgrade the session to
+        ``complete=False``, so we key off ``session.cancelled``
+        exclusively, not off ``session.error``.
+        """
+        if not session.cancelled:
+            session.complete = True
+        session.frame_count = frame_count
+        if session.cancelled:
+            logger.info(
+                f"Capture cancelled: {session.session_id} "
+                f"({frame_count} frames before cancel)"
+            )
+        elif session.failed_frame_count:
+            logger.info(
+                f"Capture complete: {session.session_id} "
+                f"({frame_count} frames, {session.failed_frame_count} failures)"
+            )
+        else:
+            logger.info(
+                f"Capture complete: {session.session_id} ({frame_count} frames)"
+            )
+
+    async def _capture_loop(
+        self,
+        session: CaptureSession,
+        duration_sec: float,
+        cancel_token: Optional[CancelToken] = None,
+    ):
+        """
+        Background burst capture loop (HWS-001, ARCH-003).
 
         Drives :meth:`_do_exposure` repeatedly until ``duration_sec`` elapses
         or ``self._capturing`` is cleared (e.g. by ``stop_capture``). Each
@@ -677,76 +836,86 @@ class ASICamera:
         ``duration_sec`` is reached. ``session.error`` is set to the most
         recent error string but only when at least one frame failed; the
         per-frame log lines remain the canonical record.
+
+        ARCH-003 cancellation: if ``cancel_token`` is supplied, the loop
+        checks ``cancel_token.is_cancelled()`` at TWO points per
+        iteration:
+          1. At the top, before starting a new exposure — catches cancels
+             that arrived during the previous frame's ``_save_fits``.
+          2. Immediately after the ``_do_exposure`` await returns — the
+             exposure window is the longest blocking call in the loop
+             (5 ms to 30 s for deep-sky), so a cancel arriving during
+             the await must be honored before we commit to writing the
+             frame.
+        On cancel: ``session.cancelled = True``, ``session.error`` is
+        set to ``"cancelled: <reason>"``, ``session.complete`` stays
+        False, and the loop breaks. This is intentionally distinct from
+        ``stop_capture``/``abort_capture`` (which flip ``_capturing``):
+        cancellation is the SafetyMonitor-side signal that survives the
+        async-await boundary cleanly, while ``_capturing`` remains the
+        burst-lifetime flag owned by the loop itself.
         """
         start_time = datetime.now()
         frame_count = 0
         try:
             while self._capturing:
+                # ARCH-003: cancellation check #1 — before starting a new
+                # exposure. Catches cancels delivered during the previous
+                # frame's _save_fits or asyncio.sleep gap.
+                if self._observe_cancel(
+                    session, cancel_token, "before exposure", frame_count + 1
+                ):
+                    break
+
                 elapsed = (datetime.now() - start_time).total_seconds()
                 if elapsed >= duration_sec:
                     break
 
-                try:
-                    bytes_data = await self._do_exposure(
-                        exposure_sec=session.settings.exposure_ms / 1000.0
-                    )
-
-                    if bytes_data is None:
-                        session.failed_frame_count += 1
-                        session.error = "capture_frame returned None"
-                        logger.warning(
-                            f"Frame {frame_count + 1} capture failed (None); continuing"
-                        )
-                        continue
-
-                    # Determine width/height from the active ROI
-                    roi = self.get_roi()
-                    width, height = roi[2], roi[3]
-
-                    # Sibling filename pattern keeps start_capture's output_path stable.
-                    # 6-digit pad supports >9999 frames at 5-15 ms exposures over a
-                    # 60 s SER capture without string-sort mis-ordering.
-                    frame_path = (
-                        session.output_path.parent
-                        / f"{session.output_path.stem}_frame_{frame_count + 1:06d}.fits"
-                    )
-                    saved = self._save_fits(bytes_data, frame_path, width, height)
-                    if not saved:
-                        session.failed_frame_count += 1
-                        session.error = f"FITS save failed for frame {frame_count + 1}"
-                        logger.warning(
-                            f"Frame {frame_count + 1} FITS save failed; continuing"
-                        )
-                        continue
-
+                outcome = await self._capture_one_frame(
+                    session, cancel_token, frame_count + 1
+                )
+                if outcome == "cancelled":
+                    break
+                if outcome == "ok":
                     frame_count += 1
                     session.frame_count = frame_count
-
-                except Exception as e:  # pragma: no cover — broad guard for SDK churn
-                    session.failed_frame_count += 1
-                    session.error = str(e)
-                    logger.warning(
-                        f"Frame {frame_count + 1} raised {type(e).__name__}: {e}; "
-                        "continuing burst"
-                    )
-
-            session.complete = True
-            session.frame_count = frame_count
-            if session.failed_frame_count:
-                logger.info(
-                    f"Capture complete: {session.session_id} "
-                    f"({frame_count} frames, {session.failed_frame_count} failures)"
-                )
-            else:
-                logger.info(
-                    f"Capture complete: {session.session_id} ({frame_count} frames)"
-                )
+                # "failed" → loop continues; counters already updated
 
         except Exception as e:
-            session.error = str(e)
+            # If a CancelToken-triggered cancel already set
+            # session.error = "cancelled: <reason>" via _observe_cancel
+            # earlier in the loop, this branch normally does NOT fire
+            # (the cancel path breaks cleanly out of the while). But
+            # defensively: never overwrite a "cancelled:" reason — a
+            # stray exception during teardown should not mask the
+            # operator-actionable cancel reason that ToolExecutor and
+            # the voice formatter rely on.
+            if not session.cancelled:
+                session.error = str(e)
             logger.error(f"Capture error: {e}")
 
         finally:
+            # ARCH-003 (fix-pass): _finalize_session in finally rather
+            # than at the end of the try body. Why: if _finalize_session
+            # itself raised on the try-body path (paranoid case — a stale
+            # CaptureSession attribute, a logger handler going sideways),
+            # the broad except above would catch its exception and
+            # overwrite session.error with the post-cancel error string,
+            # masking the original cancel reason. Running it in finally
+            # bypasses the broad except entirely so the cancel reason
+            # set by _observe_cancel survives no matter what.
+            #
+            # Wrapped in its own try/except so a misbehaving finalize
+            # (or its loggers) can never block _capturing / _current_session
+            # cleanup — leaving those toggled True would deadlock the
+            # next start_capture call.
+            try:
+                self._finalize_session(session, frame_count)
+            except Exception:
+                logger.exception(
+                    "ARCH-003: _finalize_session raised; "
+                    "session.error preserved as-is"
+                )
             self._capturing = False
             self._current_session = None
 

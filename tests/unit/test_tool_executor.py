@@ -144,6 +144,98 @@ class TestToolExecutor:
         assert len(log) == 0
 
 
+class TestArch003Cancellation:
+    """Tests for ARCH-003 CommandContext threading + cancellation handling.
+
+    ToolExecutor.execute() takes an optional CommandContext. Handlers that
+    declare a ``context`` keyword parameter receive it; handlers that
+    don't (the 30-some short-running query handlers) ignore it and stay
+    backwards-compatible. A handler that raises CancellationError gets
+    its result mapped to ToolStatus.CANCELLED — distinct from ERROR so
+    voice/log layers can say "stopped, not broken".
+    """
+
+    @pytest.fixture
+    def executor(self):
+        return ToolExecutor(Orchestrator(NightwatchConfig()))
+
+    @pytest.mark.asyncio
+    async def test_execute_passes_context_to_context_aware_handler(self, executor):
+        """Handler with a ``context`` kwarg receives the CommandContext."""
+        from nightwatch.cancellation import CommandContext
+
+        seen: dict = {}
+
+        async def aware_handler(params, context=None):
+            seen["context"] = context
+            return ToolResult(tool_name="aware", status=ToolStatus.SUCCESS)
+
+        executor.register_handler("aware_tool", aware_handler, param_model=NoParams)
+        ctx = CommandContext.new()
+        result = await executor.execute("aware_tool", {}, context=ctx)
+        assert result.status == ToolStatus.SUCCESS
+        assert seen["context"] is ctx
+
+    @pytest.mark.asyncio
+    async def test_execute_does_not_pass_context_to_legacy_handler(self, executor):
+        """Existing one-arg handlers must not break when context is supplied."""
+        from nightwatch.cancellation import CommandContext
+
+        async def legacy_handler(params):
+            return ToolResult(tool_name="legacy", status=ToolStatus.SUCCESS)
+
+        executor.register_handler("legacy_tool", legacy_handler, param_model=NoParams)
+        ctx = CommandContext.new()
+        result = await executor.execute("legacy_tool", {}, context=ctx)
+        assert result.status == ToolStatus.SUCCESS
+
+    @pytest.mark.asyncio
+    async def test_execute_context_optional_default_works(self, executor):
+        """Existing callers (no context) keep working unchanged."""
+        async def aware_handler(params, context=None):
+            assert context is None
+            return ToolResult(tool_name="aware", status=ToolStatus.SUCCESS)
+
+        executor.register_handler("aware_tool", aware_handler, param_model=NoParams)
+        result = await executor.execute("aware_tool", {})
+        assert result.status == ToolStatus.SUCCESS
+
+    @pytest.mark.asyncio
+    async def test_execute_maps_cancellation_error_to_cancelled_status(self, executor):
+        """A handler that raises CancellationError → ToolStatus.CANCELLED.
+
+        The reason is preserved on result.error so voice/log layers can
+        surface "rain detected" rather than a generic "operation failed".
+        """
+        from nightwatch.cancellation import CancellationError
+
+        async def cancelling_handler(params, context=None):
+            raise CancellationError("safety:EMERGENCY_CLOSE")
+
+        executor.register_handler(
+            "cancelling_tool", cancelling_handler, param_model=NoParams
+        )
+        result = await executor.execute("cancelling_tool", {})
+        assert result.status == ToolStatus.CANCELLED
+        assert "safety:EMERGENCY_CLOSE" in (result.error or "")
+
+    @pytest.mark.asyncio
+    async def test_execute_cancellation_status_distinct_from_error(self, executor):
+        """Sanity: a CANCELLED ToolResult is .success=False but not ERROR."""
+        from nightwatch.cancellation import CancellationError
+
+        async def cancelling_handler(params, context=None):
+            raise CancellationError("user_abort")
+
+        executor.register_handler(
+            "cancelling_tool", cancelling_handler, param_model=NoParams
+        )
+        result = await executor.execute("cancelling_tool", {})
+        assert result.status == ToolStatus.CANCELLED
+        assert result.status != ToolStatus.ERROR
+        assert result.success is False
+
+
 class TestMountHandlers:
     """Tests for mount-related tool handlers."""
 
