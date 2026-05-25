@@ -56,10 +56,17 @@ import logging
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Any, Callable, Dict, List, Optional, Protocol, TypeVar
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Protocol, TypeVar
 
 from nightwatch.config import NightwatchConfig
 from nightwatch.exceptions import NightwatchError
+
+if TYPE_CHECKING:
+    # HWS-004 review Important #3: `from __future__ import annotations` is
+    # active above, so these names are PEP 563 lazy strings at runtime —
+    # importing under TYPE_CHECKING keeps the type hints accurate without
+    # creating an import cycle.
+    from services.astrometry.plate_solver import PlateSolveHint, SolveResult
 
 logger = logging.getLogger("NIGHTWATCH.Orchestrator")
 
@@ -858,6 +865,15 @@ class MountServiceProtocol(ServiceProtocol, Protocol):
         """Slew to RA/Dec coordinates."""
         ...
 
+    async def sync_to_coordinates(self, ra_deg: float, dec_deg: float) -> bool:
+        """Sync mount to RA/Dec (decimal degrees).
+
+        Added for HWS-004 (plate-solve → mount sync). Implementations are
+        responsible for any unit conversion (e.g. LX200 :Sr/:Sd strings).
+        Returns True only when the mount accepts the sync.
+        """
+        ...
+
     async def park(self) -> bool:
         """Park the mount."""
         ...
@@ -990,6 +1006,22 @@ class AstrometryServiceProtocol(ServiceProtocol, Protocol):
 
     async def solve(self, image_path: str) -> Optional[Dict[str, Any]]:
         """Solve an image."""
+        ...
+
+    async def solve_and_sync(
+        self,
+        image_path: str,
+        mount: MountServiceProtocol,
+        hint: Optional[PlateSolveHint] = None,
+    ) -> SolveResult:
+        """Solve an image and sync the mount to the solved RA/Dec (HWS-004).
+
+        ``mount`` is the same mount Protocol that ``register_mount`` accepted.
+        ``hint`` is an optional position hint. The concrete types live in the
+        astrometry service module and are imported under ``TYPE_CHECKING``
+        (the ``from __future__ import annotations`` at the top of this file
+        makes the runtime annotation lazy, so no import cycle is created).
+        """
         ...
 
 

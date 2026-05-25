@@ -418,7 +418,12 @@ class LX200Client:
         return slew_result == "0"
 
     def sync(self, ra: str, dec: str) -> bool:
-        """Sync mount to specified coordinates."""
+        """Sync mount to pre-formatted LX200 RA/Dec strings.
+
+        For decimal-degree inputs (typical for plate-solve callers), prefer
+        the async :meth:`sync_to_coordinates`. This string-based variant
+        remains for callers that already hold LX200-formatted strings.
+        """
         # Set target coordinates
         self._send_command(f"Sr{ra}")
         self._send_command(f"Sd{dec}")
@@ -426,6 +431,101 @@ class LX200Client:
         # Sync
         result = self._send_command("CM")
         return result is not None
+
+    @staticmethod
+    def _ra_deg_to_lx200(ra_deg: float) -> str:
+        """Convert RA decimal degrees → LX200 ``HH:MM:SS.SS`` string.
+
+        Used by :meth:`sync_to_coordinates` so plate-solver callers can stay
+        in decimal degrees (HWS-004). Normalizes ``ra_deg`` into ``[0, 360)``
+        first.
+        """
+        hours_total = (ra_deg % 360.0) / 15.0
+        hh = int(hours_total)
+        minutes_total = (hours_total - hh) * 60.0
+        mm = int(minutes_total)
+        ss = (minutes_total - mm) * 60.0
+        # HWS-004 review Critical #1: round to the format's two-decimal precision
+        # BEFORE the rollover check so the boolean guard sees the same value the
+        # f-string will emit. Without this, ss=59.999976 prints as "60.00" and
+        # we ship "05:59:60.00" — an invalid LX200 string the mount rejects.
+        ss = round(ss, 2)
+        if ss >= 60.0:
+            ss = 0.0
+            mm += 1
+            if mm >= 60:
+                mm = 0
+                hh = (hh + 1) % 24
+        return f"{hh:02d}:{mm:02d}:{ss:05.2f}"
+
+    @staticmethod
+    def _dec_deg_to_lx200(dec_deg: float) -> str:
+        """Convert Dec decimal degrees → LX200 ``sDD*MM:SS`` string.
+
+        HWS-004 review Critical #1 (parity note): seconds are rounded to
+        the integer precision the ``ss:02d`` formatter emits, so the
+        ``ss >= 60`` guard below sees the value that will actually be
+        printed. Mirrors the round-then-compare pattern used in
+        :meth:`_ra_deg_to_lx200`.
+        """
+        sign = "+" if dec_deg >= 0 else "-"
+        d_abs = abs(dec_deg)
+        dd = int(d_abs)
+        minutes_total = (d_abs - dd) * 60.0
+        mm = int(minutes_total)
+        ss = round((minutes_total - mm) * 60.0)
+        if ss >= 60:
+            ss = 0
+            mm += 1
+            if mm >= 60:
+                mm = 0
+                dd += 1
+        return f"{sign}{dd:02d}*{mm:02d}:{ss:02d}"
+
+    def _sync_blocking(self, ra_deg: float, dec_deg: float) -> bool:
+        """Synchronous :Sr → :Sd → :CM sequence (HWS-004 review Critical #2).
+
+        Holds the existing ``_send_command`` lock once per call for the full
+        three-command exchange. Each command has ``COMMAND_TIMEOUT = 5.0`` s,
+        so the worst-case wall time is 15 s — running this on the asyncio
+        event loop would stall the safety watchdog, weather monitor, and TTS
+        pipeline simultaneously. The async :meth:`sync_to_coordinates`
+        delegates here via ``asyncio.to_thread`` to keep the loop responsive.
+
+        Returns True only when every command's response is the LX200 'ok'
+        signal (``"1"`` for set, non-empty for ``CM``).
+        """
+        ra_str = self._ra_deg_to_lx200(ra_deg)
+        dec_str = self._dec_deg_to_lx200(dec_deg)
+
+        ra_resp = self._send_command(f"Sr{ra_str}")
+        if ra_resp != "1":
+            logger.warning("LX200 :Sr rejected (ra=%.4f° → %s)", ra_deg, ra_str)
+            return False
+
+        dec_resp = self._send_command(f"Sd{dec_str}")
+        if dec_resp != "1":
+            logger.warning("LX200 :Sd rejected (dec=%.4f° → %s)", dec_deg, dec_str)
+            return False
+
+        sync_resp = self._send_command("CM")
+        # CM returns the catalog name on success; empty/None on failure.
+        return bool(sync_resp)
+
+    async def sync_to_coordinates(self, ra_deg: float, dec_deg: float) -> bool:
+        """Sync mount to RA/Dec in decimal degrees.
+
+        HWS-004: canonical entry point for plate-solver → mount sync.
+        Converts decimal degrees to the LX200 string formats internally and
+        runs the blocking :Sr/:Sd/:CM exchange off the event loop via
+        :func:`asyncio.to_thread` so the safety watchdog, weather monitor,
+        and TTS pipeline keep ticking even if the mount stalls (worst case
+        15 s = 3 * ``COMMAND_TIMEOUT``).
+
+        The string-based :meth:`sync` is the synchronous variant for callers
+        that already hold LX200-formatted strings.
+        """
+        return await asyncio.to_thread(self._sync_blocking, ra_deg, dec_deg)
 
     def stop(self):
         """Stop all mount motion."""
