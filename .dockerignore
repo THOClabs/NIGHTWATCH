@@ -1,0 +1,89 @@
+# .dockerignore — applies to the build context for docker/Dockerfile (DEP-001).
+# The compose file (docker/docker-compose.prod.yml) sets `context: ..` so this
+# file lives at the repo root and trims the context that gets shipped to the
+# Docker daemon. Keep this list aligned with .gitignore where it makes sense,
+# but err on the side of MORE exclusions here — anything not strictly needed
+# at build time should be left out of the context.
+
+# --- VCS / tooling state ----------------------------------------------------
+.git
+.gitignore
+.gitattributes
+.github
+.claude
+.vscode
+.idea
+.editorconfig
+.pre-commit-config.yaml
+
+# --- Python build / cache artifacts -----------------------------------------
+__pycache__
+*.py[cod]
+*$py.class
+*.so
+*.egg
+*.egg-info
+.eggs
+build
+dist
+develop-eggs
+downloads
+eggs
+sdist
+wheels
+pip-wheel-metadata
+.installed.cfg
+MANIFEST
+
+# --- Virtual environments ---------------------------------------------------
+.venv
+venv
+env
+ENV
+.conda
+
+# --- Type / lint / test caches ----------------------------------------------
+.mypy_cache
+.dmypy.json
+dmypy.json
+.pytest_cache
+.ruff_cache
+.tox
+.nox
+.coverage
+.coverage.*
+htmlcov
+coverage.xml
+*.cover
+*.log
+
+# --- Tests + dev-only sources ----------------------------------------------
+tests
+docs
+pos
+examples
+firmware
+deploy
+
+# --- Voice deps live in a separate container; source still copied for ------
+# --- packaging, but model artifacts and downloaded weights are excluded. ----
+**/*.onnx
+**/*.bin
+**/*.pt
+**/*.pth
+**/*.gguf
+**/*.safetensors
+**/*.tflite
+
+# --- Container/runtime artifacts that should never be baked into the image --
+docker/data
+docker/logs
+docker/config
+**/.env
+**/.env.*
+*.local.yaml
+nightwatch.yaml          # local config — must be supplied via /config bind mount
+
+# --- OS noise ---------------------------------------------------------------
+.DS_Store
+Thumbs.db
