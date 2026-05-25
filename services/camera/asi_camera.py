@@ -389,6 +389,10 @@ class CaptureSession:
     duration_sec: float = 0.0
     complete: bool = False
     error: Optional[str] = None
+    # Per-frame failure count. ``error`` retains only the most recent failure
+    # message; this counter is the durable signal that the burst encountered
+    # transient SDK / save errors even after ``complete`` flipped True.
+    failed_frame_count: int = 0
 
 
 class ASICamera:
@@ -645,32 +649,37 @@ class ASICamera:
         """
         Background burst capture loop (HWS-001).
 
-        Drives ``capture_frame()`` repeatedly until ``duration_sec`` elapses
+        Drives :meth:`_do_exposure` repeatedly until ``duration_sec`` elapses
         or ``self._capturing`` is cleared (e.g. by ``stop_capture``). Each
         successfully captured frame is written as a FITS sibling of
         ``session.output_path``:
 
-            <session.output_path.parent>/<session.output_path.stem>_frame_NNNN.fits
+            <session.output_path.parent>/<session.output_path.stem>_frame_NNNNNN.fits
 
         The session's primary ``output_path`` (set in ``start_capture``) is
         retained as the logical session marker. Sibling-frame naming keeps
         the public ``start_capture`` API unchanged while allowing the burst
         loop to persist every exposure for downstream stacking.
 
+        ``_capturing`` is owned by this loop for the entire burst — it is
+        flipped True in ``start_capture``, observed True throughout the
+        burst (so ``stop_capture`` and ``abort_capture`` can correctly
+        intervene at any time), and cleared in the ``finally`` below.
+        We deliberately call :meth:`_do_exposure` (the unguarded primitive)
+        rather than :meth:`capture_frame` (the guarded wrapper) so we do
+        not have to toggle ``_capturing`` False around each frame, which
+        used to open a 1-15 ms race window per exposure during which a
+        SafetyMonitor stop request would be silently ignored.
+
         Per-frame failures are logged but do NOT abort the session: a
-        transient SDK timeout or save failure increments the failure counter
-        and the loop continues until ``duration_sec`` is reached. Only the
-        most recent error is retained on ``session.error``.
+        transient SDK timeout or save failure increments
+        ``session.failed_frame_count`` and the loop continues until
+        ``duration_sec`` is reached. ``session.error`` is set to the most
+        recent error string but only when at least one frame failed; the
+        per-frame log lines remain the canonical record.
         """
         start_time = datetime.now()
         frame_count = 0
-        failed_frames = 0
-        # We are the body of an asyncio.create_task spawned by start_capture, so
-        # self._capturing has just been flipped True there. Note that we must
-        # clear it in the finally block (existing semantics) so subsequent
-        # calls to start_capture / capture_frame work — but capture_frame
-        # itself also touches self._capturing, so we toggle it OFF for each
-        # frame call and back ON after, otherwise capture_frame would refuse.
         try:
             while self._capturing:
                 elapsed = (datetime.now() - start_time).total_seconds()
@@ -678,18 +687,12 @@ class ASICamera:
                     break
 
                 try:
-                    # capture_frame guards on self._capturing — temporarily
-                    # release the flag for the duration of the single frame
-                    # capture, then re-assert it so external stop_capture
-                    # still works between frames.
-                    self._capturing = False
-                    bytes_data = await self.capture_frame(
+                    bytes_data = await self._do_exposure(
                         exposure_sec=session.settings.exposure_ms / 1000.0
                     )
-                    self._capturing = True
 
                     if bytes_data is None:
-                        failed_frames += 1
+                        session.failed_frame_count += 1
                         session.error = "capture_frame returned None"
                         logger.warning(
                             f"Frame {frame_count + 1} capture failed (None); continuing"
@@ -700,14 +703,16 @@ class ASICamera:
                     roi = self.get_roi()
                     width, height = roi[2], roi[3]
 
-                    # Sibling filename pattern keeps start_capture's output_path stable
+                    # Sibling filename pattern keeps start_capture's output_path stable.
+                    # 6-digit pad supports >9999 frames at 5-15 ms exposures over a
+                    # 60 s SER capture without string-sort mis-ordering.
                     frame_path = (
                         session.output_path.parent
-                        / f"{session.output_path.stem}_frame_{frame_count + 1:04d}.fits"
+                        / f"{session.output_path.stem}_frame_{frame_count + 1:06d}.fits"
                     )
                     saved = self._save_fits(bytes_data, frame_path, width, height)
                     if not saved:
-                        failed_frames += 1
+                        session.failed_frame_count += 1
                         session.error = f"FITS save failed for frame {frame_count + 1}"
                         logger.warning(
                             f"Frame {frame_count + 1} FITS save failed; continuing"
@@ -718,21 +723,19 @@ class ASICamera:
                     session.frame_count = frame_count
 
                 except Exception as e:  # pragma: no cover — broad guard for SDK churn
-                    failed_frames += 1
+                    session.failed_frame_count += 1
                     session.error = str(e)
                     logger.warning(
                         f"Frame {frame_count + 1} raised {type(e).__name__}: {e}; "
                         "continuing burst"
                     )
-                    # Re-assert capturing flag for the next iteration
-                    self._capturing = True
 
             session.complete = True
             session.frame_count = frame_count
-            if failed_frames:
+            if session.failed_frame_count:
                 logger.info(
                     f"Capture complete: {session.session_id} "
-                    f"({frame_count} frames, {failed_frames} failures)"
+                    f"({frame_count} frames, {session.failed_frame_count} failures)"
                 )
             else:
                 logger.info(
@@ -839,6 +842,14 @@ class ASICamera:
         """
         Capture a single frame and return raw image data (Step 90).
 
+        Public wrapper that enforces the single-capture guard via
+        ``self._capturing``. The actual SDK driver lives in
+        :meth:`_do_exposure`, which is called WITHOUT the guard so that
+        ``_capture_loop`` (which manages ``_capturing`` for the whole burst)
+        can drive successive frames without toggling the flag off and back
+        on between every exposure — that toggle was the race window in which
+        a ``stop_capture`` / ``abort_capture`` call would silently no-op.
+
         Args:
             exposure_sec: Exposure time (uses current if None)
             gain: Gain value (uses current if None)
@@ -857,67 +868,96 @@ class ASICamera:
 
         try:
             self._capturing = True
-
-            # Apply settings if provided
-            if exposure_sec is not None:
-                self.set_exposure(exposure_sec * 1000)  # Convert to ms
-            if gain is not None:
-                self.set_gain(gain)
-
-            if callback:
-                callback("starting", 0.0)
-
-            # Start exposure
-            exposure_us = int(self._settings.exposure_ms * 1000)
-
-            if callback:
-                callback("exposing", 10.0)
-
-            # Capture the frame
-            # Note: Real implementation uses self._camera.capture()
-            # For SDK-less testing, simulate
-            if ASISDKWrapper.SDK_AVAILABLE and self._camera:
-                try:
-                    self._camera.start_exposure()
-
-                    # Wait for exposure (with timeout)
-                    timeout = self._settings.exposure_ms / 1000.0 + 10.0
-                    start = datetime.now()
-
-                    while (datetime.now() - start).total_seconds() < timeout:
-                        status = self._camera.get_exposure_status()
-                        if status == self._asi.ASI_EXP_SUCCESS:
-                            break
-                        elif status == self._asi.ASI_EXP_FAILED:
-                            raise RuntimeError("Exposure failed")
-                        await asyncio.sleep(0.01)
-
-                    if callback:
-                        callback("downloading", 70.0)
-
-                    # Download image data
-                    image_data = self._camera.get_data_after_exposure()
-
-                    if callback:
-                        callback("complete", 100.0)
-
-                    return bytes(image_data) if image_data else None
-
-                except Exception as e:
-                    logger.error(f"Frame capture failed: {e}")
-                    return None
-            else:
-                # Simulation mode
-                await asyncio.sleep(self._settings.exposure_ms / 1000.0)
-                if callback:
-                    callback("complete", 100.0)
-                # Return dummy data for testing
-                roi = self.get_roi()
-                size = roi[2] * roi[3] * 2  # 16-bit
-                return bytes([0] * min(size, 1024))
-
+            return await self._do_exposure(
+                exposure_sec=exposure_sec,
+                gain=gain,
+                callback=callback,
+            )
         finally:
             self._capturing = False
+
+    async def _do_exposure(
+        self,
+        exposure_sec: float | None = None,
+        gain: int | None = None,
+        callback: Callable[[str, float], None] | None = None
+    ) -> bytes | None:
+        """
+        Drive a single SDK exposure and return raw image bytes.
+
+        This is the *unguarded* exposure primitive — no ``_capturing`` check
+        and no toggling of the flag. It is intended for callers that have
+        already established the capture context (notably ``capture_frame``,
+        the public guard-wrapper, and ``_capture_loop``, which owns
+        ``_capturing`` for the whole burst).
+
+        Driving ``_capturing`` from a single owner (the loop, or the wrapper)
+        means ``stop_capture`` / ``abort_capture`` cannot observe a stale
+        False mid-burst — closing the race window where a SafetyMonitor
+        rain-stop would be silently ignored while an exposure was in flight.
+
+        Args:
+            exposure_sec: Exposure time (uses current if None)
+            gain: Gain value (uses current if None)
+            callback: Progress callback(status, percent)
+
+        Returns:
+            Raw image data as bytes, or None on SDK failure
+        """
+        # Apply settings if provided
+        if exposure_sec is not None:
+            self.set_exposure(exposure_sec * 1000)  # Convert to ms
+        if gain is not None:
+            self.set_gain(gain)
+
+        if callback:
+            callback("starting", 0.0)
+
+        if callback:
+            callback("exposing", 10.0)
+
+        # Capture the frame
+        # Note: Real implementation uses self._camera.capture()
+        # For SDK-less testing, simulate
+        if ASISDKWrapper.SDK_AVAILABLE and self._camera:
+            try:
+                self._camera.start_exposure()
+
+                # Wait for exposure (with timeout)
+                timeout = self._settings.exposure_ms / 1000.0 + 10.0
+                start = datetime.now()
+
+                while (datetime.now() - start).total_seconds() < timeout:
+                    status = self._camera.get_exposure_status()
+                    if status == self._asi.ASI_EXP_SUCCESS:
+                        break
+                    elif status == self._asi.ASI_EXP_FAILED:
+                        raise RuntimeError("Exposure failed")
+                    await asyncio.sleep(0.01)
+
+                if callback:
+                    callback("downloading", 70.0)
+
+                # Download image data
+                image_data = self._camera.get_data_after_exposure()
+
+                if callback:
+                    callback("complete", 100.0)
+
+                return bytes(image_data) if image_data else None
+
+            except Exception as e:
+                logger.error(f"Frame capture failed: {e}")
+                return None
+        else:
+            # Simulation mode
+            await asyncio.sleep(self._settings.exposure_ms / 1000.0)
+            if callback:
+                callback("complete", 100.0)
+            # Return dummy data for testing
+            roi = self.get_roi()
+            size = roi[2] * roi[3] * 2  # 16-bit
+            return bytes([0] * min(size, 1024))
 
     # =========================================================================
     # IMAGE FORMAT CONVERSION (Step 92)

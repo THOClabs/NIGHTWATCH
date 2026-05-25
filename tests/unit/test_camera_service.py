@@ -9,7 +9,7 @@ import asyncio
 import logging
 from datetime import datetime
 from pathlib import Path
-from unittest.mock import MagicMock, patch  # noqa: F401  retained for existing tests
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -720,6 +720,119 @@ class TestRealSDKCapture:
         assert session.complete is True
         assert session.frame_count >= 1, (
             "Expected at least one frame after recovering from a per-frame failure"
+        )
+
+    @pytest.mark.asyncio
+    async def test_stop_capture_during_burst_aborts_within_one_frame(
+        self, tmp_path, monkeypatch
+    ):
+        """
+        Regression test for the ``_capturing`` toggle race.
+
+        Pre-fix ``_capture_loop`` flipped ``_capturing = False`` around every
+        ``capture_frame`` call (to placate the wrapper's guard) and back to
+        True after. During that window — up to a full inter-frame period at
+        high frame rates — ``stop_capture`` observed False and silently
+        no-op'd, leaving the loop running. In production this meant a
+        SafetyMonitor rain-stop could be silently dropped while the roof
+        was closing on a live exposure.
+
+        After the fix, ``_capture_loop`` drives :meth:`_do_exposure`
+        directly without touching ``_capturing``, so ``stop_capture`` always
+        observes True for the lifetime of the burst.
+        """
+        monkeypatch.setattr(ASISDKWrapper, "SDK_AVAILABLE", True)
+        camera = _build_mocked_real_sdk_camera(tmp_path, width=16, height=16)
+
+        # Replace _do_exposure with a slow stub: each frame takes ~50 ms.
+        # Returns valid bytes so _save_fits succeeds (sized for the 16x16 ROI
+        # at 2 bytes/pixel = 512 bytes).
+        async def slow_do_exposure(
+            exposure_sec=None, gain=None, callback=None
+        ):
+            await asyncio.sleep(0.05)
+            return bytes([1] * (16 * 16 * 2))
+
+        monkeypatch.setattr(camera, "_do_exposure", slow_do_exposure)
+
+        # Start a "long" burst (5 s) so we know stop_capture interrupts it.
+        session = await camera.start_capture(
+            target="moon",
+            duration_sec=5.0,
+            settings=CameraSettings(exposure_ms=50.0, format=ImageFormat.FITS),
+        )
+
+        # Let ~1.5 frames go by, then issue the stop. _capturing must read
+        # True throughout — observable here as stop_capture returning the
+        # session (not None).
+        await asyncio.sleep(0.075)
+        stopped = await camera.stop_capture()
+
+        assert stopped is not None, (
+            "stop_capture returned None — _capturing was observed False "
+            "mid-burst (toggle race window)"
+        )
+        assert stopped is session
+
+        # Give the loop's finally block time to run.
+        await asyncio.sleep(0.2)
+
+        # The burst was interrupted long before 5 s elapsed — very few frames.
+        assert session.frame_count < 10, (
+            f"Expected stop_capture to abort burst within ~1 frame, "
+            f"got {session.frame_count} frames"
+        )
+
+        # The loop must have unwound; _capturing back to False, no zombie task.
+        assert camera._capturing is False
+        assert camera._current_session is None
+
+    @pytest.mark.asyncio
+    async def test_capture_loop_records_failed_frame_count(
+        self, tmp_path, monkeypatch
+    ):
+        """
+        Verify ``CaptureSession.failed_frame_count`` accumulates per-frame
+        failures even after ``complete`` flips True. Pre-fix the count was
+        a local variable in ``_capture_loop`` and only ``session.error``
+        (most-recent message) survived — making the 7-failures-in-1000
+        case indistinguishable from a clean run on the session object.
+        """
+        monkeypatch.setattr(ASISDKWrapper, "SDK_AVAILABLE", True)
+        camera = _build_mocked_real_sdk_camera(tmp_path, width=16, height=16)
+
+        # 2 failures, then 3 successes, then SUCCESS forever (timer ends loop).
+        call_results = [
+            camera._asi.ASI_EXP_FAILED,
+            camera._asi.ASI_EXP_FAILED,
+            camera._asi.ASI_EXP_SUCCESS,
+            camera._asi.ASI_EXP_SUCCESS,
+            camera._asi.ASI_EXP_SUCCESS,
+        ]
+
+        def status_side_effect(*args, **kwargs):
+            if call_results:
+                return call_results.pop(0)
+            return camera._asi.ASI_EXP_SUCCESS
+
+        camera._camera.get_exposure_status.side_effect = status_side_effect
+
+        session = await camera.start_capture(
+            target="moon",
+            duration_sec=0.05,  # short window — just enough for ~5 frames at 5 ms
+            settings=CameraSettings(exposure_ms=5.0, format=ImageFormat.FITS),
+        )
+
+        await asyncio.sleep(0.25)
+
+        assert session.complete is True
+        # 2 failures from the FAILED status codes were observed
+        assert session.failed_frame_count == 2, (
+            f"Expected failed_frame_count == 2, got {session.failed_frame_count}"
+        )
+        # At least the 3 forced-SUCCESS frames landed (more if duration allowed)
+        assert session.frame_count >= 3, (
+            f"Expected at least 3 successful frames, got {session.frame_count}"
         )
 
 
