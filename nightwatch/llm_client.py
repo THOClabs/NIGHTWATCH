@@ -773,7 +773,7 @@ class LLMClient:
         for tc in tool_calls:
             model_cls = TOOL_PARAM_MODELS.get(tc.name)
             if model_cls is None:
-                msg = f"Unknown tool: {tc.name}"
+                msg = f"Unknown tool: {tc.name!r}"
                 logger.warning("VOX-003 dropped tool_call: %s", msg)
                 errors.append(msg)
                 continue

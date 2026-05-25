@@ -859,3 +859,67 @@ class TestVox003ToolCallValidation:
         assert len(response.tool_calls) == 1
         assert response.tool_calls[0].name == "goto_object"
         assert "VOX-003" not in response.content
+
+    @pytest.mark.asyncio
+    async def test_chat_does_not_annotate_content_when_partial_pass(self):
+        """If at least one tool_call survives validation, response.content
+        must NOT be annotated with the VOX-003 rejection marker.
+        Pins the 'and not validated_tool_calls' guard at llm_client.py:948."""
+        client = LLMClient(backend=LLMBackend.MOCK)
+
+        partial_response = LLMResponse(
+            content="Sure, slewing now.",
+            tool_calls=[
+                ToolCall(
+                    id="t1",
+                    name="goto_object",
+                    arguments={"object_name": "M31"},
+                ),
+                ToolCall(
+                    id="t2",
+                    name="goto_object",
+                    arguments={"speed": "fast"},  # invalid — missing required
+                ),
+            ],
+            finish_reason="tool_calls",
+            latency_ms=10.0,
+        )
+
+        mock_backend = client._get_client(LLMBackend.MOCK)
+        with (
+            patch.object(mock_backend, "chat", AsyncMock(return_value=partial_response)),
+            patch.object(mock_backend, "health_check", AsyncMock(return_value=True)),
+        ):
+            response = await client.chat("slew to M31", tools=[])
+
+        # One valid tool_call survives.
+        assert len(response.tool_calls) == 1
+        assert response.tool_calls[0].id == "t1"
+        # Content NOT annotated — silent partial pass.
+        assert "VOX-003" not in response.content
+        assert response.content == "Sure, slewing now."
+
+    def test_bool_ra_rejected_via_arch001_field_validator(self):
+        """ARCH-001 lesson: bool→float coercion would silently slew to RA=1h
+        (True) or RA=0h (False). VOX-003 must surface that rejection at the
+        LLM client layer before the call reaches ToolExecutor."""
+        client = LLMClient(backend=LLMBackend.MOCK)
+        tool_calls = [
+            ToolCall(
+                id="t1",
+                name="goto_coordinates",
+                arguments={"ra": True, "dec": 0.0},
+            )
+        ]
+        validated, errors = client._validate_tool_calls(tool_calls)
+        assert len(validated) == 0
+        assert "bool" in errors[0].lower()
+        assert "goto_coordinates" in errors[0]
+
+    def test_empty_tool_name_clean_error(self):
+        """Empty tool name renders as '' not trailing space — cleaner logs."""
+        client = LLMClient(backend=LLMBackend.MOCK)
+        tool_calls = [ToolCall(id="t1", name="", arguments={})]
+        validated, errors = client._validate_tool_calls(tool_calls)
+        assert len(validated) == 0
+        assert errors[0] == "Unknown tool: ''"
