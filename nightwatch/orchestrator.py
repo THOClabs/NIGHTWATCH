@@ -1737,13 +1737,16 @@ class Orchestrator:
         will only cancel the newer (cheap) context — the old in-flight
         op runs uncancelled while the enclosure is closing.
 
-        TODO(SAFE-001): decide whether to raise on overwrite instead of
-        silently displacing the older context. Raising is the
-        correct-by-construction answer but needs a concurrent-command
+        TODO(concurrent-commands): decide whether to raise on overwrite
+        instead of silently displacing the older context. Raising is
+        the correct-by-construction answer but needs a concurrent-command
         story first (queueing? rejection? interrupt-and-cancel-older?).
         Until that design lands, ERROR-level logging keeps the
         displacement operator-visible without changing call-site
-        behavior.
+        behavior. (Originally tagged TODO(SAFE-001); retagged because
+        SAFE-001 addressed the cancel-before-close ordering problem and
+        intentionally left concurrent-command policy out of scope —
+        single-active-context is still the voice pipeline's design.)
         """
         if self._active_context is not None and self._active_context is not context:
             logger.error(

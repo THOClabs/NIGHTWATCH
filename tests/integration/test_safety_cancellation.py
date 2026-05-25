@@ -54,6 +54,7 @@ from services.safety_monitor.monitor import (
     SafetyAction,
     SafetyMonitor,
     SafetyStatus,
+    SafetyThresholds,
 )
 
 # The HWS-001 mocked-SDK camera builder is exposed as the
@@ -392,4 +393,253 @@ class TestProductionWiringThroughToolExecutor:
         # newer command's marker).
         assert orchestrator._active_context is None, (
             "ToolExecutor.execute must call clear_active_context in finally"
+        )
+
+
+# =============================================================================
+# SAFE-001: cancel-BEFORE-close ordering through the production run() loop
+# =============================================================================
+#
+# ARCH-003 proved the cancel signal flows end-to-end when callbacks fire.
+# SAFE-001 closes the ordering loophole that ARCH-003 explicitly deferred:
+# in ``SafetyMonitor.run()`` the action (``execute_action``) was previously
+# dispatched BEFORE the callbacks (``_notify_callbacks``) fired, which on
+# the EMERGENCY_CLOSE path meant the enclosure started closing while the
+# in-flight exposure was still draining frames — the Risk #2 water-damage
+# scenario.
+#
+# These tests exercise the PRODUCTION code path (the ``run()`` loop body)
+# rather than calling ``_notify_callbacks`` directly. Per LEARNINGS
+# 2026-05-25 ARCH-003, "infrastructure ship needs a production caller";
+# the ordering fix only matters if the production caller honors it.
+
+
+class _RecordingMount:
+    """Mount stub that timestamps its stop/park calls for ordering checks."""
+
+    def __init__(self, events: list[tuple[str, float]]):
+        self._events = events
+        self.parked = False
+
+    def stop(self) -> None:
+        self._events.append(("mount_stop", time.monotonic()))
+
+    def park(self) -> None:
+        self._events.append(("mount_park", time.monotonic()))
+        self.parked = True
+
+
+class _RecordingEnclosure:
+    """Enclosure stub that timestamps its close calls.
+
+    The signature is sync because ``execute_action`` calls
+    ``self.enclosure.close()`` without awaiting — matches the existing
+    LOW_BATTERY_SHUTDOWN call site at monitor.py:1470.
+    """
+
+    def __init__(self, events: list[tuple[str, float]]):
+        self._events = events
+        self.closed = False
+
+    def close(self) -> None:
+        self._events.append(("enclosure_close", time.monotonic()))
+        self.closed = True
+
+
+class TestSafe001OrderingThroughRunLoop:
+    """SAFE-001 verify-line: cancel fires BEFORE close in production run() loop.
+
+    The ordering bug ARCH-003's docstring deferred to SAFE-001:
+    ``SafetyMonitor.run()`` used to invoke ``execute_action(status.action)``
+    (which drives the enclosure) BEFORE ``_notify_callbacks(status)``
+    (which fires the orchestrator's cancel-on-unsafe hook). This class
+    exercises the ``run()`` loop body via a short-poll-interval task and
+    asserts the inverted ordering: cancel event MUST be recorded before
+    any enclosure-close event.
+
+    Why not call ``_notify_callbacks`` directly? Because that's the test
+    shape that LET the ordering bug ship under ARCH-003. The whole point
+    of SAFE-001 is to verify the fix is in the production caller.
+    """
+
+    @pytest.mark.asyncio
+    async def test_run_loop_fires_cancel_before_enclosure_close(self):
+        """In ``run()``, EMERGENCY_CLOSE delivers cancel BEFORE enclosure.close.
+
+        Setup:
+          * SafetyMonitor with fake mount + fake enclosure that timestamp
+            their write calls into a shared event list.
+          * Orchestrator with an active CommandContext; the callback
+            registered by ``register_safety`` will cancel that context
+            on an unsafe transition. The cancel itself is timestamped
+            via a thin wrapper around the orchestrator's hook.
+          * ``evaluate()`` is monkeypatched to return EMERGENCY_CLOSE so
+            we don't have to build a full sensor environment.
+          * ``_unsafe_since`` is pre-set past ``unsafe_duration_to_park``
+            so the run-loop fires the action on the first iteration.
+
+        Assert:
+          * ``cancel`` event timestamp < ``enclosure_close`` event timestamp.
+          * Context is cancelled.
+          * Enclosure was eventually closed (the irreversible safety
+            action still runs — cancel-before-close, not cancel-INSTEAD-OF-close).
+        """
+        events: list[tuple[str, float]] = []
+        mount = _RecordingMount(events)
+        enclosure = _RecordingEnclosure(events)
+
+        # Tight thresholds: the run loop should act on the first
+        # iteration. cancel_settle_timeout_s small so the test stays fast.
+        thresholds = SafetyThresholds(
+            unsafe_duration_to_park=0.0,
+            cancel_settle_timeout_s=0.05,
+        )
+        monitor = SafetyMonitor(
+            thresholds=thresholds,
+            mount_controller=mount,
+            enclosure_controller=enclosure,
+        )
+
+        config = NightwatchConfig()
+        orchestrator = Orchestrator(config)
+        orchestrator.register_safety(monitor, required=False)
+
+        ctx = CommandContext.new()
+        orchestrator.set_active_context(ctx)
+
+        # Timestamp the cancel by wrapping the token's cancel method.
+        original_cancel = ctx.token.cancel
+
+        def timestamped_cancel(reason: str) -> None:
+            events.append(("cancel", time.monotonic()))
+            original_cancel(reason)
+
+        ctx.token.cancel = timestamped_cancel  # type: ignore[method-assign]
+
+        # Pin evaluate() to EMERGENCY_CLOSE so the loop fires the
+        # action+callbacks deterministically.
+        unsafe_status = SafetyStatus(
+            timestamp=datetime.now(),
+            action=SafetyAction.EMERGENCY_CLOSE,
+            is_safe=False,
+            reasons=["rain detected by Hydreon"],
+            alert_level=AlertLevel.EMERGENCY,
+        )
+        monitor.evaluate = lambda: unsafe_status  # type: ignore[method-assign]
+
+        # Pre-set the unsafe-since so the duration check fires the
+        # action on iteration #1 (otherwise the loop would wait until
+        # unsafe_duration_to_park has elapsed).
+        from datetime import timedelta
+        monitor._unsafe_since = datetime.now() - timedelta(seconds=10)
+
+        # Drive the production run() loop briefly. poll_interval tiny so
+        # the first iteration runs immediately; we cancel after enough
+        # wall-time for the cancel_settle wait + enclosure call to land.
+        run_task = asyncio.create_task(monitor.run(poll_interval=0.01))
+        # Wait long enough for one full iteration including the settle wait.
+        await asyncio.sleep(0.5)
+        monitor.stop()
+        try:
+            await asyncio.wait_for(run_task, timeout=2.0)
+        except TimeoutError:
+            run_task.cancel()
+            raise
+
+        # ORDERING ASSERTION (the whole point of this test):
+        event_names = [name for name, _ts in events]
+        assert "cancel" in event_names, (
+            f"cancel callback was never fired; events={event_names}"
+        )
+        assert "enclosure_close" in event_names, (
+            "SAFE-001 makes EMERGENCY_CLOSE actually close the enclosure; "
+            f"events={event_names}"
+        )
+
+        cancel_ts = next(ts for name, ts in events if name == "cancel")
+        close_ts = next(
+            ts for name, ts in events if name == "enclosure_close"
+        )
+        assert cancel_ts < close_ts, (
+            f"SAFE-001 ordering violation: cancel@{cancel_ts:.4f} must "
+            f"fire BEFORE enclosure_close@{close_ts:.4f}. "
+            f"events={events}"
+        )
+
+        # Context cancellation must have actually landed.
+        assert ctx.is_cancelled() is True
+        assert ctx.token.reason is not None
+        assert "EMERGENCY_CLOSE" in ctx.token.reason
+        assert "rain detected by Hydreon" in ctx.token.reason
+
+        # And the irreversible safety action still ran (cancel-BEFORE-close,
+        # not cancel-INSTEAD-OF-close).
+        assert enclosure.closed is True
+
+    @pytest.mark.asyncio
+    async def test_cancel_settle_wait_only_fires_for_emergency_close(self):
+        """The settle wait is gated on EMERGENCY_CLOSE — not every transition.
+
+        Lower-severity actions (SAFE_TO_OBSERVE re-enable, DEW_WARNING,
+        etc.) don't drive the enclosure and don't need the settle wait.
+        Adding it unconditionally would penalize every state transition
+        with the timeout. This test confirms the gate: a non-EMERGENCY
+        action transition runs the loop without invoking the helper.
+        """
+        events: list[tuple[str, float]] = []
+        mount = _RecordingMount(events)
+        enclosure = _RecordingEnclosure(events)
+
+        thresholds = SafetyThresholds(
+            unsafe_duration_to_park=0.0,
+            cancel_settle_timeout_s=5.0,  # Big enough we'd notice if it fired.
+        )
+        monitor = SafetyMonitor(
+            thresholds=thresholds,
+            mount_controller=mount,
+            enclosure_controller=enclosure,
+        )
+
+        # A non-EMERGENCY warning action — no enclosure close, no settle wait.
+        warning_status = SafetyStatus(
+            timestamp=datetime.now(),
+            action=SafetyAction.DEW_WARNING,
+            is_safe=False,
+            reasons=["dew point margin low"],
+            alert_level=AlertLevel.WARNING,
+        )
+        monitor.evaluate = lambda: warning_status  # type: ignore[method-assign]
+
+        from datetime import timedelta
+        monitor._unsafe_since = datetime.now() - timedelta(seconds=10)
+
+        # Wrap the settle helper so we can detect if it was called.
+        settle_called: dict = {"count": 0}
+        original_settle = monitor._wait_for_cancellations_to_drain
+
+        async def counting_settle(timeout_s: float = 2.0) -> None:
+            settle_called["count"] += 1
+            await original_settle(timeout_s)
+
+        monitor._wait_for_cancellations_to_drain = counting_settle  # type: ignore[method-assign]
+
+        start = time.monotonic()
+        run_task = asyncio.create_task(monitor.run(poll_interval=0.01))
+        await asyncio.sleep(0.2)
+        monitor.stop()
+        try:
+            await asyncio.wait_for(run_task, timeout=2.0)
+        except TimeoutError:
+            run_task.cancel()
+            raise
+        elapsed = time.monotonic() - start
+
+        assert settle_called["count"] == 0, (
+            f"settle helper must NOT fire for non-EMERGENCY actions "
+            f"(action=DEW_WARNING), got {settle_called['count']} calls"
+        )
+        # And the loop didn't block on the 5s settle wait.
+        assert elapsed < 1.5, (
+            f"non-EMERGENCY transition shouldn't trigger settle wait; "
+            f"loop took {elapsed:.2f}s"
         )

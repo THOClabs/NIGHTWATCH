@@ -26,11 +26,16 @@ The primitive is deliberately tiny: a one-shot boolean + an
 correlation id (which intentionally overlaps with the ARCH-004
 correlation-id work) and an optional ``timeout_s``.
 
-SAFE-001 (next vertical task) wires ``CancelToken.cancel`` into the
-safety transition path BEFORE ``enclosure.close()``, so the capture
-loop exits cleanly before the roof starts moving. ARCH-003 ships the
-infrastructure plus the Orchestrator-level callback registration that
-SAFE-001 will reorder.
+SAFE-001 closes the loop: ``SafetyMonitor.run()`` was reordered so
+``_notify_callbacks`` (which fires the orchestrator's cancel-on-unsafe
+hook) runs BEFORE ``execute_action`` (which drives the roof on
+EMERGENCY_CLOSE). The cancel signal therefore reaches in-flight
+captures/slews before the irreversible enclosure-close, plus a
+bounded ``_wait_for_cancellations_to_drain`` settle window gives
+cooperative loops a chance to honor their token. See
+``services/safety_monitor/monitor.py:run`` for the production caller
+and ``tests/integration/test_safety_cancellation.py``
+(``TestSafe001OrderingThroughRunLoop``) for the verify-line tests.
 """
 
 from __future__ import annotations

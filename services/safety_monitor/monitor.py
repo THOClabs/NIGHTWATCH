@@ -193,6 +193,22 @@ class SafetyThresholds:
     unsafe_duration_to_park: float = 60.0  # seconds before parking
     safe_duration_to_resume: float = 300.0 # seconds (5 min) to confirm safe
 
+    # SAFE-001 (Risk #2): bounded window the run() loop spends between
+    # firing the cancel callbacks (which signal in-flight captures/slews
+    # to abort) and dispatching execute_action() for EMERGENCY_CLOSE
+    # (which is irreversible — drives the roof closed).
+    #
+    # The cancel token is cooperative (nightwatch.cancellation.CancelToken):
+    # in-flight loops check it at known cadences — camera at frame
+    # boundaries, mount at poll-tick boundaries, focus per-step. This
+    # timeout is the worst-case "give cooperative cancellation a window
+    # to land" budget. 2s is generous for typical configs.
+    #
+    # NOT a hard guarantee: if a handler ignores its token, we still
+    # close the roof on schedule. Safety-first: a missed observing
+    # window is recoverable; water on the primary is not.
+    cancel_settle_timeout_s: float = 2.0
+
     # POS: Sensor health timeouts (treat stale data as unsafe)
     weather_sensor_timeout: float = 120.0  # seconds - Ecowitt update interval ~60s
     cloud_sensor_timeout: float = 180.0    # seconds - CloudWatcher slower updates
@@ -1431,6 +1447,15 @@ class SafetyMonitor:
                 self._state = ObservatoryState.EMERGENCY
                 self.mount.stop()
                 self.mount.park()
+                # SAFE-001 (Risk #2): the action's name promises a
+                # roof close — make it real. Prior code only stopped
+                # and parked the mount, leaving the enclosure open
+                # while rain landed on the primary. The run() loop
+                # gates this dispatch behind
+                # _wait_for_cancellations_to_drain so any in-flight
+                # capture/slew has a bounded window to honor its
+                # cancel token BEFORE this irreversible step.
+                self._close_enclosure_safely("EMERGENCY_CLOSE")
 
             elif action == SafetyAction.PARK_AND_WAIT:
                 logger.warning("Unsafe conditions - Parking telescope")
@@ -1464,12 +1489,11 @@ class SafetyMonitor:
                 self._state = ObservatoryState.EMERGENCY
                 self.mount.stop()
                 self.mount.park()
-                # Close enclosure if available
-                if self.enclosure:
-                    try:
-                        self.enclosure.close()
-                    except Exception as e:
-                        logger.error(f"Failed to close enclosure: {e}")
+                # SAFE-001: shared helper (was inline try/except). Both
+                # this and EMERGENCY_CLOSE close the enclosure on the
+                # destructive path; consolidating the call site makes
+                # the cancel-before-close audit easier.
+                self._close_enclosure_safely("LOW_BATTERY_SHUTDOWN")
 
             # Step 489: Network failure action
             elif action == SafetyAction.NETWORK_FAILURE:
@@ -1488,6 +1512,30 @@ class SafetyMonitor:
         except Exception as e:
             logger.error(f"Failed to execute safety action: {e}")
 
+    def _close_enclosure_safely(self, calling_action: str) -> None:
+        """SAFE-001: log-and-swallow enclosure close used by destructive actions.
+
+        Extracted from inline try/except in EMERGENCY_CLOSE and
+        LOW_BATTERY_SHUTDOWN. Both paths are the "irreversible roof
+        close" branch of execute_action(); having a single helper makes
+        the cancel-before-close audit trivially greppable and keeps
+        execute_action's per-branch statement count under ruff's
+        PLR0915 threshold.
+
+        ``calling_action`` is purely for the error log so an operator
+        reading "EMERGENCY_CLOSE: enclosure.close failed" knows which
+        upstream decision triggered the close. Swallows the exception
+        (vs. re-raising) because the run() loop must keep running even
+        if the enclosure driver throws — the watchdog (SAFE-004) is
+        the defense-in-depth for hardware that has stopped responding.
+        """
+        if self.enclosure is None:
+            return
+        try:
+            self.enclosure.close()
+        except Exception as e:
+            logger.error(f"{calling_action}: enclosure.close failed: {e}")
+
     async def _notify_callbacks(self, status: SafetyStatus):
         """Notify registered callbacks of status change."""
         for callback in self._callbacks:
@@ -1498,6 +1546,36 @@ class SafetyMonitor:
                     callback(status)
             except Exception as e:
                 logger.error(f"Callback error: {e}")
+
+    async def _wait_for_cancellations_to_drain(
+        self, timeout_s: float = 2.0
+    ) -> None:
+        """SAFE-001: bounded settling wait for in-flight ops to honor cancellation.
+
+        Called from ``run()`` between ``_notify_callbacks()`` (which
+        fires the orchestrator's cancel-on-unsafe hook) and
+        ``execute_action()`` for EMERGENCY_CLOSE (which closes the
+        enclosure). The cancel is advisory — ARCH-003's CancelToken is
+        cooperative. Capture/slew/focus loops check the token at known
+        cadences (camera per-frame, mount per-poll-tick).
+
+        Worst-case latency = max(camera_frame_interval,
+        mount_poll_interval). 2s is a generous bound for typical configs
+        and can be overridden via
+        ``SafetyThresholds.cancel_settle_timeout_s``.
+
+        NOT a hard guarantee — if a handler ignores its cancel token,
+        we still close the roof on schedule. Safety-first: a missed
+        observing window is recoverable; water damage is not.
+
+        A more sophisticated implementation could poll a "is anything
+        in-flight" predicate on the orchestrator. For SAFE-001 the
+        simple bounded sleep is sufficient: its job is to give
+        cooperative cancellation a window, not to verify every handler
+        actually quiesced. The watchdog (SAFE-004) is the
+        defense-in-depth for the case where this window is exceeded.
+        """
+        await asyncio.sleep(timeout_s)
 
     async def run(self, poll_interval: float = 10.0):
         """
@@ -1526,12 +1604,53 @@ class SafetyMonitor:
                         self._safe_since = datetime.now()
                     self._unsafe_since = None
 
+                # SAFE-001 (Risk #2): notify callbacks FIRST so the
+                # orchestrator's cancel-on-unsafe hook fires BEFORE any
+                # irreversible execute_action() call (most notably the
+                # EMERGENCY_CLOSE enclosure-close path). The previous
+                # ordering inverted this and let the roof close while a
+                # capture was still draining frames onto disk — the
+                # Phase 1 audit's Risk #2 water-damage scenario.
+                #
+                # Cancellation is advisory (cooperative tokens). For
+                # EMERGENCY_CLOSE we additionally wait a bounded window
+                # below so in-flight ops have time to honor their token
+                # before the roof is driven. Other actions (warnings,
+                # park-and-wait, safe-resume) don't need the wait —
+                # they either don't touch the enclosure or are
+                # recoverable.
+                #
+                # NOTE: ``last_action`` is updated at end-of-iteration
+                # (not here) because the SAFE_TO_OBSERVE branch below
+                # still needs to compare against the PRIOR action to
+                # detect the unsafe→safe transition.
+                action_changed = status.action != last_action
+                if action_changed:
+                    await self._notify_callbacks(status)
+
                 # Execute action if conditions warrant
                 if status.action != SafetyAction.SAFE_TO_OBSERVE:
                     # Check if unsafe long enough to act
                     if self._unsafe_since:
                         unsafe_duration = (datetime.now() - self._unsafe_since).total_seconds()
                         if unsafe_duration > self.thresholds.unsafe_duration_to_park:
+                            # SAFE-001: for EMERGENCY_CLOSE specifically,
+                            # give in-flight ops a bounded window to
+                            # honor the cancel we just fired before
+                            # driving the enclosure. The settle wait
+                            # only runs on the destructive path — see
+                            # _wait_for_cancellations_to_drain docstring
+                            # for the "advisory, not guaranteed" caveat.
+                            # Only wait on the action-changed iteration
+                            # (avoid stacking settle delays each poll
+                            # while the unsafe condition persists).
+                            if (
+                                status.action == SafetyAction.EMERGENCY_CLOSE
+                                and action_changed
+                            ):
+                                await self._wait_for_cancellations_to_drain(
+                                    timeout_s=self.thresholds.cancel_settle_timeout_s,
+                                )
                             await self.execute_action(status.action)
 
                 elif status.action == SafetyAction.SAFE_TO_OBSERVE and last_action != SafetyAction.SAFE_TO_OBSERVE:
@@ -1541,9 +1660,9 @@ class SafetyMonitor:
                         if safe_duration > self.thresholds.safe_duration_to_resume:
                             await self.execute_action(status.action)
 
-                # Notify callbacks if action changed
-                if status.action != last_action:
-                    await self._notify_callbacks(status)
+                # Update last_action ONLY after all branches that
+                # depended on the prior value have run.
+                if action_changed:
                     last_action = status.action
 
                 # Log status periodically
