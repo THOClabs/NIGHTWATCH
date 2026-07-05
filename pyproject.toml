@@ -83,10 +83,10 @@ all = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/THOC-Labs/NIGHTWATCH"
-Documentation = "https://github.com/THOC-Labs/NIGHTWATCH/tree/main/docs"
-Repository = "https://github.com/THOC-Labs/NIGHTWATCH"
-Issues = "https://github.com/THOC-Labs/NIGHTWATCH/issues"
+Homepage = "https://github.com/THOClabs/NIGHTWATCH"
+Documentation = "https://github.com/THOClabs/NIGHTWATCH/tree/main/docs"
+Repository = "https://github.com/THOClabs/NIGHTWATCH"
+Issues = "https://github.com/THOClabs/NIGHTWATCH/issues"
 
 [project.scripts]
 nightwatch = "nightwatch.main:main"
