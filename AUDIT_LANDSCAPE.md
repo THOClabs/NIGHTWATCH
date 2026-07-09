@@ -15,7 +15,7 @@ NIGHTWATCH is an ambitious, **~64,000-LOC** voice-controlled autonomous telescop
 
 The single most important finding, which an adversarial refuter tried and failed to overturn:
 
-- **The system does not run end-to-end. `[confirmed]`** Production `nightwatch/main.py:247` starts the orchestrator with an **empty service registry** — nothing constructs the real hardware services from config outside tests and docstrings. The voice pipeline imports a **module that does not exist** (`nightwatch/voice_pipeline.py:2086`) and silently falls back to a 3-command stub. The 5,662-line real tool layer (`voice/tools/telescope_tools.py`) is wired only in tests. So the headline capability — *speak a command, telescope acts, safety vetoes* — has all its pieces present and none of them connected.
+- **The system does not run — it crashes on startup. `[confirmed by execution]`** Running the entry point revealed it aborts *immediately*: `python -m nightwatch.main` (every mode but `--version`) dies with `TypeError: setup_logging() got an unexpected keyword argument 'level'` (`nightwatch/main.py:308` — the parameter is `log_level`), before it ever reaches the orchestrator. And even past that two-line bug, production `nightwatch/main.py:247` would start the orchestrator with an **empty service registry** — nothing constructs the real hardware services from config outside tests and docstrings. The voice pipeline imports a **module that does not exist** (`nightwatch/voice_pipeline.py:2086`, confirmed at runtime) and silently falls back to a 3-command stub; the 5,662-line real tool layer (`voice/tools/telescope_tools.py`) is wired only in tests. So the headline capability — *speak a command, telescope acts, safety vetoes* — has all its pieces present, none connected, behind a front door that won't open. (Full runtime evidence: §4.5.)
 
 The rest follows from that:
 
@@ -119,7 +119,7 @@ Consequence: a clean `uv sync` cannot run the *default* (local-LLM) path or the 
 
 ### 2.2 Version conflicts and lock gaps `[confirmed]`
 
-- The `~=` caps in `voice/requirements.txt` are **violated** by `uv.lock`'s resolved versions — most starkly `numpy` (pinned `~=1.26`, i.e. `<2.0`; resolved `2.x` — a full major jump), plus `faster-whisper`, `piper-tts`, `pymicro-vad` (`pyproject.toml:67`, `voice/requirements.txt:13`).
+- The `~=` caps in `voice/requirements.txt` are **violated** by `uv.lock`'s resolved versions — most starkly `numpy` (pinned `~=1.26`, i.e. `<2.0`; resolved `2.x` — a full major jump), plus `faster-whisper`, `piper-tts`, `pymicro-vad` (`pyproject.toml:67`, `voice/requirements.txt:13`). **Observed consequence `[confirmed by execution, §4.5]`:** `uv sync` installs numpy 2.4.6, which breaks the astropy import chain and fails `tests/unit/test_plate_solver.py` at collection — the lock resolves an environment the pins were written to forbid.
 - `pyindi-client`, `alpyca`, and `webrtcvad` are declared in the requirements files but present in **neither** `pyproject.toml` **nor** `uv.lock` (`services/requirements.txt:15`, `voice/requirements.txt:19`) — the documented `pip install -r` path installs packages the lockfile never pins.
 - `webrtcvad~=2.0.10` is **abandoned upstream** (last release 2.0.10, 2017) and kept as the VAD fallback (`voice/requirements.txt:19`). `[inferred]` on the abandonment date.
 
@@ -141,6 +141,7 @@ Every finding below carries a **reachability** tag, because the assembly gap (§
 
 An adversarial agent was tasked to *disprove* "nothing assembles this system" and **could not**:
 
+- **Startup crash (found by running it).** Before the registry even matters, `main()` crashes at `nightwatch/main.py:308` — `setup_logging(level=…)` against a function whose parameter is `log_level` (`nightwatch/logging_config.py:185`) → `TypeError` on every mode but `--version`. `[confirmed by execution, §4.5]`
 - **Empty registry.** `nightwatch/main.py:247` `orchestrator = Orchestrator(config)`; `Orchestrator.start()` (`nightwatch/orchestrator.py:1912`) iterates `self.registry.list_services()` and warns "No required services registered" (`:1928`). The only `register_*` call sites repo-wide are the method definitions, `tool_executor.py`, and `tests/**`. No factory, DI, plugin loader, or entry-point group builds services from config. *(Search: `register_mount|register_camera|register_weather|register_safety|register_enclosure|register_*`, scope = repo excluding tests.)*
 - **Phantom import.** `nightwatch/voice_pipeline.py:2086` `from nightwatch.telescope_tools import get_tool_definitions` — that module does not exist (`ls nightwatch/` has no `telescope_tools.py`; no such symbol anywhere). The `ImportError` is caught (`:2088`) and `_get_tools()` returns `None`, so the LLM is always called with `tools=None`.
 - **Stub fallback.** `nightwatch/voice_pipeline.py:2015` — the `_execute_tool` fallback handles only `goto_object`, `park_telescope`, `get_weather`; everything else returns "Unknown tool."
@@ -296,6 +297,22 @@ Two pytest configs coexist and `pytest.ini` wins, so the entire `pyproject.toml 
 ### 4.4 How much to trust a diff without a human reading it
 
 **Low — and narrower than pass 1 first credited.** With CI unable to fail on test results, whole-file weak/mock-theater tiers (all of `tests/e2e/`, two of three safety-integration suites), and the *only* base-`SafetyMonitor` evaluation test dead on checkout, an agent could make a broad change, see green, and ship a regression. The genuine protection is narrower than "the safety subsystem": it is the safety-critical **unit** tests (watchdog fail-safe, rain-voting, cancellation ordering, interlock) *when run locally with a real, non-`-x`, non-swallowed invocation*. Distrust the integration/e2e tiers entirely (they assert on mocks), and distrust base safety-evaluation coverage until `tests/unit/test_safety_monitor.py`'s import is fixed. Everywhere else, distrust until §7's assembly + real integration test exists.
+
+### 4.5 Runtime verification (observed behavior) `[confirmed by execution]`
+
+Everything above §4.5 is static analysis. To test the load-bearing claims empirically, the repo was built in a throwaway `uv sync` virtualenv (Python 3.11.15) and run. This produced one finding static analysis had missed, and turned several "read" claims into "observed."
+
+- **NEW — the application entry point crashes on startup, every time.** `[confirmed by execution]` `python -m nightwatch.main` (and the `nightwatch` console script) aborts with `TypeError: setup_logging() got an unexpected keyword argument 'level'` before doing anything. `main()` calls `setup_logging(level=…)` at `nightwatch/main.py:308` and `:325`, but the function's parameter is `log_level` (`nightwatch/logging_config.py:185`). **Every invocation except `--version` dies here** — `--dry-run`, `--check-health`, `--simulator`, and normal start all hit it, so the process never even reaches the (empty) service registry of §3.1. Severity **high**, `reachable-in-running-system`. mypy flags the same call (`nightwatch/main.py:325`) — but CI swallows it (below). *This means the system is more broken than pass 1 concluded: it isn't "starts empty," it's "doesn't start."*
+- **The phantom import fails at runtime, as predicted.** `import nightwatch.telescope_tools` → `ModuleNotFoundError: No module named 'nightwatch.telescope_tools'` (§3.1, §3.2 confirmed by execution).
+- **A default `uv sync --frozen` installs only 7 packages** (pydantic, pyyaml + the package). The service code can't import on it — `aiohttp`, `serial`, `skyfield` all `ModuleNotFound` (the deps are optional extras). Confirms the §2 install story.
+- **The four undeclared deps are genuinely absent.** After `uv sync --extra services --extra dev`, `llama_cpp`, `anthropic`, `openai`, and `RPi` all still raise `ModuleNotFoundError` — they are declared in no manifest (§2.1 confirmed by execution).
+- **The numpy conflict is real and breaks a dependency.** `uv.lock` resolves **numpy 2.4.6** (vs the `~=1.26`/`<2.0` pin at `voice/requirements.txt:13`); numpy 2.x breaks the astropy import chain, so `tests/unit/test_plate_solver.py` fails at collection (§2.2 confirmed by execution).
+- **The dead safety test is dead, observed.** `tests/unit/test_safety_monitor.py` fails collection with `ModuleNotFoundError: No module named 'monitor'` (the `/workspaces` path) — the only base-`SafetyMonitor` coverage does not run (§4.1 confirmed by execution).
+- **The safety *unit* tests really do pass.** `test_safe_004_watchdog_failsafe.py` + `test_safety_cancellation.py` → **23 passed**. The "behavioral safety unit tests" credit (§4.1) holds up under execution.
+- **The e2e tier runs but is not even all-green:** **73 passed, 1 failed** (`test_session_flow.py::test_session_with_weather_interruption`) — self-contained mock logic that imports no production code (§4.1).
+- **CI-decorative, proven by numbers.** `ruff check` reports **2,675 errors** under the CI's own `--ignore=E501,F401,F841` filter (3,866 raw); `mypy nightwatch/` reports **160 errors** (including the startup-crash call). CI runs both as `… || true` / `… || echo "::warning::"` with `continue-on-error`, so all 2,835+ real findings are swallowed and the badge stays green (§4.2 confirmed by execution).
+
+**Net:** running the code strengthened the audit rather than contradicting it, and surfaced the single most consequential defect in the repository — the entry point does not start. It is a two-line fix (`level=` → `log_level=`), but nothing that depends on the process running (the whole system) can work until it lands.
 
 ---
 
