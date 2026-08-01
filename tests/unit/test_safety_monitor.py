@@ -548,3 +548,40 @@ class TestHysteresis:
         await monitor.update_weather(mock_weather)
         status = monitor.evaluate()
         assert monitor._wind_triggered is False
+
+
+class TestPowerFailureActionCallback:
+    """SAFE (1-05): power-failure response and the optional action callback.
+
+    ``_action_callback`` defaults to None (previously undefined, which
+    raised AttributeError the moment the power-failure path referenced
+    it). The response must run cleanly with no callback, and must invoke
+    a registered callback exactly once.
+    """
+
+    @pytest.fixture
+    def monitor(self):
+        return SafetyMonitor()
+
+    def test_action_callback_defaults_to_none(self, monitor):
+        """Callback slot exists and is None until wired in."""
+        assert monitor._action_callback is None
+
+    @pytest.mark.asyncio
+    async def test_power_failure_response_no_callback_does_not_raise(self, monitor):
+        """Power-failure response completes when no callback is registered."""
+        # Must not raise AttributeError or anything else.
+        await monitor.handle_power_failure_response()
+
+    @pytest.mark.asyncio
+    async def test_power_failure_response_invokes_callback_once(self, monitor):
+        """A registered async callback is awaited exactly once."""
+        callback = AsyncMock()
+        monitor.set_action_callback(callback)
+
+        await monitor.handle_power_failure_response()
+
+        callback.assert_awaited_once()
+        # First positional arg is the POWER_FAILURE action.
+        args, _ = callback.call_args
+        assert args[0] == SafetyAction.POWER_FAILURE
