@@ -291,9 +291,8 @@ class AlpacaTelescope(AlpacaDeviceBase):
         try:
             from alpaca.telescope import Telescope
             self._telescope = Telescope(
-                self.address,
-                self.device_number,
-                self.port
+                f"{self.address}:{self.port}",
+                self.device_number
             )
             self._telescope.Connected = True
             self._connected = self._telescope.Connected
@@ -329,11 +328,9 @@ class AlpacaTelescope(AlpacaDeviceBase):
         """
         if not self._telescope:
             return 0.0
-        try:
-            return self._telescope.RightAscension
-        except Exception as e:
-            logger.error(f"Failed to read RA: {e}")
-            return 0.0
+        # Do not swallow read failures: returning a fabricated 0.0 would look
+        # like a valid pointing. Let the underlying read error propagate.
+        return self._telescope.RightAscension
 
     @property
     def dec(self) -> float:
@@ -345,11 +342,9 @@ class AlpacaTelescope(AlpacaDeviceBase):
         """
         if not self._telescope:
             return 0.0
-        try:
-            return self._telescope.Declination
-        except Exception as e:
-            logger.error(f"Failed to read Dec: {e}")
-            return 0.0
+        # Do not swallow read failures: returning a fabricated 0.0 would look
+        # like a valid pointing. Let the underlying read error propagate.
+        return self._telescope.Declination
 
     @property
     def altitude(self) -> float:
@@ -378,30 +373,24 @@ class AlpacaTelescope(AlpacaDeviceBase):
         """Check if telescope is tracking."""
         if not self._telescope:
             return False
-        try:
-            return self._telescope.Tracking
-        except Exception:
-            return False
+        # Let read failures propagate rather than fabricating "not tracking".
+        return self._telescope.Tracking
 
     @property
     def is_slewing(self) -> bool:
         """Check if telescope is slewing."""
         if not self._telescope:
             return False
-        try:
-            return self._telescope.Slewing
-        except Exception:
-            return False
+        # Let read failures propagate rather than fabricating "not slewing".
+        return self._telescope.Slewing
 
     @property
     def is_parked(self) -> bool:
         """Check if telescope is at park position."""
         if not self._telescope:
             return False
-        try:
-            return self._telescope.AtPark
-        except Exception:
-            return False
+        # Let read failures propagate rather than fabricating "not parked".
+        return self._telescope.AtPark
 
     @property
     def pier_side(self) -> str:
@@ -631,9 +620,8 @@ class AlpacaCamera(AlpacaDeviceBase):
         try:
             from alpaca.camera import Camera
             self._camera = Camera(
-                self.address,
-                self.device_number,
-                self.port
+                f"{self.address}:{self.port}",
+                self.device_number
             )
             self._camera.Connected = True
             self._connected = self._camera.Connected
@@ -961,9 +949,8 @@ class AlpacaFocuser(AlpacaDeviceBase):
         try:
             from alpaca.focuser import Focuser
             self._focuser = Focuser(
-                self.address,
-                self.device_number,
-                self.port
+                f"{self.address}:{self.port}",
+                self.device_number
             )
             self._focuser.Connected = True
             self._connected = self._focuser.Connected
@@ -994,10 +981,9 @@ class AlpacaFocuser(AlpacaDeviceBase):
         """Get current focuser position in steps."""
         if not self._focuser:
             return 0
-        try:
-            return self._focuser.Position
-        except Exception:
-            return 0
+        # Let read failures propagate rather than fabricating position 0,
+        # which would make move_relative issue a bogus absolute move.
+        return self._focuser.Position
 
     @property
     def max_position(self) -> int:
@@ -1154,9 +1140,8 @@ class AlpacaFilterWheel(AlpacaDeviceBase):
         try:
             from alpaca.filterwheel import FilterWheel
             self._wheel = FilterWheel(
-                self.address,
-                self.device_number,
-                self.port
+                f"{self.address}:{self.port}",
+                self.device_number
             )
             self._wheel.Connected = True
             self._connected = self._wheel.Connected
