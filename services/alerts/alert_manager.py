@@ -19,6 +19,7 @@ from datetime import datetime, timedelta
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from enum import Enum
+from html import escape
 from pathlib import Path
 from typing import Optional, List, Dict, Callable, Any
 import json
@@ -639,6 +640,9 @@ class AlertManager:
 
         # Build email content
         subject = f"[NIGHTWATCH {alert.level.name}] {alert.source}: {alert.message[:50]}"
+        # Header-injection defense: strip CR/LF so attacker-controlled fields
+        # (e.g. alert.source/message) cannot inject extra headers like Bcc.
+        subject = subject.replace("\r", " ").replace("\n", " ")
 
         # Plain text version
         text_body = self._format_email_plain(alert)
@@ -699,7 +703,7 @@ class AlertManager:
         data_rows = ""
         if alert.data:
             for key, value in alert.data.items():
-                data_rows += f"<tr><td style='padding:4px 8px;'><strong>{key}</strong></td><td style='padding:4px 8px;'>{value}</td></tr>"
+                data_rows += f"<tr><td style='padding:4px 8px;'><strong>{escape(str(key))}</strong></td><td style='padding:4px 8px;'>{escape(str(value))}</td></tr>"
 
         html = f"""
 <!DOCTYPE html>
@@ -709,10 +713,10 @@ class AlertManager:
   <div style="max-width: 600px; margin: 0 auto; background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
     <div style="background: {level_color}; color: white; padding: 20px;">
       <h1 style="margin: 0; font-size: 24px;">NIGHTWATCH Alert</h1>
-      <p style="margin: 10px 0 0 0; opacity: 0.9;">{alert.level.name} - {alert.source}</p>
+      <p style="margin: 10px 0 0 0; opacity: 0.9;">{escape(str(alert.level.name))} - {escape(str(alert.source))}</p>
     </div>
     <div style="padding: 20px;">
-      <p style="font-size: 18px; margin: 0 0 20px 0;">{alert.message}</p>
+      <p style="font-size: 18px; margin: 0 0 20px 0;">{escape(str(alert.message))}</p>
       <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">
         <tr><td style="padding:4px 8px;"><strong>Time</strong></td><td style="padding:4px 8px;">{alert.timestamp.strftime('%Y-%m-%d %H:%M:%S')}</td></tr>
         <tr><td style="padding:4px 8px;"><strong>Alert ID</strong></td><td style="padding:4px 8px;">{alert.id}</td></tr>

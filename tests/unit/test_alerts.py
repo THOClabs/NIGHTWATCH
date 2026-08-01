@@ -669,3 +669,67 @@ class TestAlertManagerWithDB:
         assert stats["total"] == 3
         assert stats["by_level"]["INFO"] == 2
         assert stats["by_level"]["WARNING"] == 1
+
+
+class TestEmailInjectionHardening:
+    """SEC3-5: email formatting must escape HTML and strip header injection."""
+
+    def _make_alert(self, source="camera", message="ok", data=None):
+        return Alert(
+            level=AlertLevel.WARNING,
+            source=source,
+            message=message,
+            data=data or {},
+        )
+
+    def test_html_body_escapes_message(self):
+        """A <script> payload must not appear raw in the HTML body."""
+        manager = AlertManager()
+        alert = self._make_alert(message="<script>alert(1)</script>")
+
+        html = manager._format_email_html(alert)
+
+        assert "<script>alert(1)</script>" not in html
+        assert "&lt;script&gt;alert(1)&lt;/script&gt;" in html
+
+    def test_html_body_escapes_source_and_data(self):
+        """Source and data fields must be escaped too."""
+        manager = AlertManager()
+        alert = self._make_alert(
+            source="<b>evil</b>",
+            data={"<k>": "<v>"},
+        )
+
+        html = manager._format_email_html(alert)
+
+        assert "<b>evil</b>" not in html
+        assert "&lt;b&gt;evil&lt;/b&gt;" in html
+        assert "&lt;k&gt;" in html
+        assert "&lt;v&gt;" in html
+
+    @pytest.mark.asyncio
+    async def test_subject_strips_crlf(self):
+        """A source with CRLF + Bcc must not inject headers via the subject."""
+        config = AlertConfig(
+            email_enabled=True,
+            email_recipients=["ops@example.com"],
+            email_smtp_host="smtp.example.com",
+        )
+        manager = AlertManager(config)
+
+        alert = self._make_alert(
+            source="cam\r\nBcc: attacker@evil.com",
+            message="rain detected",
+        )
+
+        captured = {}
+
+        async def fake_send(recipient, subject, text_body, html_body):
+            captured["subject"] = subject
+
+        with patch.object(manager, "_send_smtp_email", side_effect=fake_send):
+            await manager._send_email(alert)
+
+        assert "subject" in captured
+        assert "\r" not in captured["subject"]
+        assert "\n" not in captured["subject"]
