@@ -99,9 +99,11 @@ def _load_module_under_test():
 
     g = globals()
     try:
+        import pathlib
+        _repo_root = pathlib.Path(__file__).resolve().parents[2]
         spec = importlib.util.spec_from_file_location(
             "piper_service",
-            "/home/user/NIGHTWATCH/voice/tts/piper_service.py",
+            str(_repo_root / "voice" / "tts" / "piper_service.py"),
         )
         mod = importlib.util.module_from_spec(spec)
 
