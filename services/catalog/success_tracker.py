@@ -27,6 +27,7 @@ from __future__ import annotations
 import json
 import logging
 import math
+import os
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from enum import Enum
@@ -663,8 +664,17 @@ class SuccessTracker:
                 "records": [r.to_dict() for r in self._records],
             }
 
-            with open(self._history_path, "w") as f:
+            # Write atomically: dump to a temp file in the same directory,
+            # fsync, then os.replace() so a crash mid-write cannot corrupt or
+            # truncate the existing history file.
+            tmp_path = self._history_path.with_suffix(
+                self._history_path.suffix + ".tmp"
+            )
+            with open(tmp_path, "w") as f:
                 json.dump(data, f, indent=2)
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(tmp_path, self._history_path)
 
         except Exception as e:
             logger.warning(f"Failed to save history: {e}")
