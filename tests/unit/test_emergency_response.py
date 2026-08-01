@@ -50,7 +50,7 @@ def mock_roof():
     """Create a mock roof controller."""
     roof = MagicMock()
     roof.close = AsyncMock(return_value=True)
-    roof.get_state = MagicMock(return_value=MagicMock(value="closed"))
+    roof.state = MagicMock(value="closed")
     return roof
 
 

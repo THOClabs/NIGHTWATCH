@@ -258,7 +258,7 @@ class EmergencyResponse:
                     close_start = datetime.now()
                     while (datetime.now() - close_start).total_seconds() < self.config.close_timeout:
                         await asyncio.sleep(1.0)
-                        state = self._roof.get_state()
+                        state = self._roof.state
                         state_str = state.value if hasattr(state, 'value') else str(state)
                         if state_str == "closed":
                             logger.info("Emergency close completed successfully")
