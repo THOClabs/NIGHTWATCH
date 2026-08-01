@@ -29,7 +29,7 @@ pip install -r services/requirements.txt
 pytest tests/unit/ -v
 
 # Start with simulators (no hardware required)
-python -m nightwatch.cli --simulate
+python -m nightwatch.main --simulator
 ```
 
 **Voice Commands** (examples):

@@ -37,7 +37,7 @@ Environment=CUDA_VISIBLE_DEVICES=0
 Environment=PYTHONUNBUFFERED=1
 
 # Start Wyoming services (STT and TTS)
-ExecStart=/opt/nightwatch/venv/bin/python -m voice.wyoming_server \
+ExecStart=/opt/nightwatch/venv/bin/python -m voice.wyoming \
     --stt-port 10300 \
     --tts-port 10200 \
     --whisper-model base.en \
