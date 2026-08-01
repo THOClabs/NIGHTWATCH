@@ -2083,8 +2083,8 @@ class VoicePipeline:
     def _get_tools(self) -> Optional[List[Dict[str, Any]]]:
         """Get tool definitions for LLM."""
         try:
-            from nightwatch.telescope_tools import get_tool_definitions
-            return get_tool_definitions()
+            from voice.tools.telescope_tools import ToolRegistry
+            return ToolRegistry().to_anthropic_format()
         except ImportError:
             logger.warning("telescope_tools not available")
             return None

@@ -58,7 +58,7 @@ python -c "from nightwatch.services import mount, weather, safety; print('OK')"
 Start NIGHTWATCH with simulated devices for testing:
 
 ```bash
-python -m nightwatch.cli --simulate
+python -m nightwatch.main --simulator
 ```
 
 This mode simulates:
@@ -84,7 +84,7 @@ weather:
 2. **Start the system**:
 
 ```bash
-python -m nightwatch.cli
+python -m nightwatch.main
 ```
 
 ## Voice Commands

@@ -293,7 +293,7 @@ async def async_main(args: argparse.Namespace, config: NightwatchConfig) -> int:
         return 1
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
     """Main entry point for the NIGHTWATCH application.
 
     Returns:
@@ -301,11 +301,11 @@ def main() -> int:
     """
     # Parse arguments
     parser = create_parser()
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     # Setup logging (basic setup before config is loaded)
     log_level = args.log_level or "INFO"
-    setup_logging(level=log_level)
+    setup_logging(log_level=log_level)
 
     logger.info(f"NIGHTWATCH v{__version__} starting...")
 
@@ -322,7 +322,7 @@ def main() -> int:
 
     # Apply log level from config if not overridden
     if args.log_level is None:
-        setup_logging(level=config.log_level)
+        setup_logging(log_level=config.log_level)
 
     # Apply simulator mode
     if args.simulator:
