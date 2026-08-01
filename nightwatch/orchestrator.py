@@ -64,6 +64,19 @@ from nightwatch.exceptions import NightwatchError
 from nightwatch.watchdog import ServiceType as WatchdogServiceType
 from nightwatch.watchdog import WatchdogManager
 
+# Map orchestrator registry service names -> watchdog ServiceType so the
+# health loop can heartbeat the watchdog for the services it tracks. Note
+# the module imports the enum only as ``WatchdogServiceType``; a bare
+# ``ServiceType`` reference here would be a NameError.
+_WATCHDOG_TYPES = {
+    "mount": WatchdogServiceType.MOUNT,
+    "weather": WatchdogServiceType.WEATHER,
+    "camera": WatchdogServiceType.CAMERA,
+    "enclosure": WatchdogServiceType.ENCLOSURE,
+    "power": WatchdogServiceType.POWER,
+    "safety": WatchdogServiceType.SAFETY_MONITOR,
+}
+
 if TYPE_CHECKING:
     # HWS-004 review Important #3: `from __future__ import annotations` is
     # active above, so these names are PEP 563 lazy strings at runtime —
@@ -1957,6 +1970,9 @@ class Orchestrator:
         # Start health monitoring
         self._health_task = asyncio.create_task(self._health_loop())
 
+        # Start the watchdog so stale heartbeats trigger the fail-safe path.
+        await self.watchdog.start()
+
         self._running = True
         self.session = SessionState()
         logger.info("Orchestrator started")
@@ -1988,6 +2004,9 @@ class Orchestrator:
                 await self._health_task
             except asyncio.CancelledError:
                 pass
+
+        # Stop the watchdog once heartbeats are no longer being emitted.
+        await self.watchdog.stop()
 
         # Safe shutdown steps (Steps 252-254)
         if safe:
@@ -2105,6 +2124,10 @@ class Orchestrator:
                         try:
                             if service.is_running:
                                 self.registry.set_status(name, ServiceStatus.RUNNING)
+                                # Heartbeat the watchdog for services it tracks.
+                                st = _WATCHDOG_TYPES.get(name)
+                                if st is not None:
+                                    self.watchdog.heartbeat(st)
                                 # Reset restart count if service has been stable
                                 info = self.registry._services.get(name)
                                 if info and info.restart_count > 0 and info.last_successful_start:
