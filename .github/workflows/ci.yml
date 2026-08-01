@@ -344,8 +344,9 @@ jobs:
     services:
       # Mock weather service for testing
       mock-weather:
-        image: python:3.11-slim
-        options: --entrypoint "python -m http.server 8080"
+        image: nginx:alpine
+        ports:
+          - 8080:80
 
     steps:
       - name: Checkout code
