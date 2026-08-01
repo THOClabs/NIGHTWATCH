@@ -2963,7 +2963,7 @@ def create_default_handlers(
                 return "Cannot open roof - telescope must be parked first"
 
         # Check current state
-        state = roof_controller.get_state()
+        state = roof_controller.state
         if hasattr(state, 'value'):
             state_str = state.value
         else:
@@ -2993,7 +2993,7 @@ def create_default_handlers(
         # Step 429: Force option for emergency - bypass safety checks
         if not emergency:
             # Normal close - check if safe to close
-            state = roof_controller.get_state()
+            state = roof_controller.state
             if hasattr(state, 'value'):
                 state_str = state.value
             else:
@@ -3024,7 +3024,7 @@ def create_default_handlers(
         parts = []
 
         # Get state
-        state = roof_controller.get_state()
+        state = roof_controller.state
         if hasattr(state, 'value'):
             state_str = state.value
         else:

@@ -532,3 +532,33 @@ class TestRoofControllerLimits:
         controller._position = 0
         result = await controller._check_closed_limit()
         assert result is True
+
+
+class TestEmergencyCloseReal:
+    """Emergency close using the REAL motor/limit path (no patching).
+
+    Guards fixes 1-01 (self._gpio initialized to None) and 1-04
+    (emergency=True bypasses the mid-open motor-running guard). Nothing
+    on the close path is mocked: _run_motor, _gpio, _stop_motor and the
+    limit-switch reads all execute for real.
+    """
+
+    @pytest.mark.asyncio
+    async def test_emergency_close_from_open_completes(self):
+        # Small timeout keeps the real simulated motor loop quick.
+        config = RoofConfig(motor_timeout_sec=30.0)
+        roof = RoofController(config=config)
+
+        await roof.connect()
+
+        # Simulate a roof caught open (position > 0).
+        roof._state = RoofState.OPEN
+        roof._position = 10
+
+        result = await roof.close(emergency=True)
+
+        assert result is True
+        assert roof.state == RoofState.CLOSED
+        assert roof._position == 0
+
+        await roof.disconnect()

@@ -831,7 +831,7 @@ class SafeStateHandler:
                     # Wait for close with timeout
                     for _ in range(45):  # 45 seconds timeout
                         await asyncio.sleep(1.0)
-                        state = self._roof.get_state()
+                        state = self._roof.state
                         state_str = state.value if hasattr(state, 'value') else str(state)
                         if state_str == "closed":
                             logger.info("Safe state: Enclosure closed")

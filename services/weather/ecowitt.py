@@ -163,19 +163,42 @@ class EcowittClient:
         rain = data.get("rain", {})
         wind = data.get("wh80batt", {}) or data.get("wind", {})
 
-        # Helper to find value in common list
-        def get_common(key: str, default=0.0):
+        # Helper to find value in common list.
+        # ``required`` fields fail CLOSED: a missing entry or a
+        # missing/None/garbled value raises ValueError so fetch_data
+        # turns the reading into None (treated as stale/unsafe) rather
+        # than silently substituting a benign default that could keep
+        # the roof open in bad weather.
+        def get_common(key: str, default=0.0, *, required: bool = False):
             for item in common:
                 if item.get("id") == key:
-                    return float(item.get("val", default))
+                    val = item.get("val")
+                    if val is None:
+                        if required:
+                            raise ValueError(
+                                f"Ecowitt field {key} present but value is missing"
+                            )
+                        return default
+                    try:
+                        return float(val)
+                    except (TypeError, ValueError):
+                        if required:
+                            raise ValueError(
+                                f"Ecowitt field {key} value is garbled: {val!r}"
+                            )
+                        return default
+            if required:
+                raise ValueError(
+                    f"Ecowitt required field {key} missing from common_list"
+                )
             return default
 
-        # Parse temperature
-        temp_f = get_common("0x02", 70.0)
+        # Parse temperature (required - fail closed if absent/garbled)
+        temp_f = get_common("0x02", required=True)
         temp_c = (temp_f - 32) * 5 / 9
 
-        # Parse humidity
-        humidity = get_common("0x07", 50.0)
+        # Parse humidity (required - fail closed if absent/garbled)
+        humidity = get_common("0x07", required=True)
 
         # Calculate dew point
         dew_point_f = self._calculate_dew_point(temp_f, humidity)
@@ -187,14 +210,24 @@ class EcowittClient:
             humidity
         )
 
-        # Parse wind
-        wind_speed = get_common("0x0B", 0.0)
+        # Parse wind (speed required - fail closed if absent/garbled)
+        wind_speed = get_common("0x0B", required=True)
         wind_gust = get_common("0x0C", 0.0)
         wind_dir = int(get_common("0x0A", 0))
         wind_dir_str = self._wind_direction_to_string(wind_dir)
 
-        # Parse rain
-        rain_rate = float(rain.get("rain_rate", {}).get("val", 0))
+        # Parse rain (required - fail closed if the block or the
+        # rain_rate value is absent/garbled). Rain is the single most
+        # safety-critical weather input for the roof.
+        if not rain:
+            raise ValueError("Ecowitt response missing rain block")
+        rain_rate_val = rain.get("rain_rate", {}).get("val")
+        if rain_rate_val is None:
+            raise ValueError("Ecowitt rain_rate value is missing")
+        try:
+            rain_rate = float(rain_rate_val)
+        except (TypeError, ValueError):
+            raise ValueError(f"Ecowitt rain_rate value is garbled: {rain_rate_val!r}")
         rain_daily = float(rain.get("daily", {}).get("val", 0))
         rain_event = float(rain.get("event", {}).get("val", 0))
         is_raining = rain_rate > 0

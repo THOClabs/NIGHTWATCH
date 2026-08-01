@@ -15,6 +15,7 @@ Safety Priority Order:
 """
 
 import asyncio
+import inspect
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from enum import Enum
@@ -315,6 +316,9 @@ class SafetyMonitor:
         self._safe_since: Optional[datetime] = None
         self._callbacks: List[Callable] = []
         self._running = False
+        # Optional async action callback invoked on power-failure response;
+        # stays None until set_action_callback wires one in.
+        self._action_callback = None
 
         # Sensor data cache
         self._weather_data: Optional[SensorInput] = None
@@ -390,6 +394,10 @@ class SafetyMonitor:
             monitor.register_callback(on_safety_change)
         """
         self._callbacks.append(callback)
+
+    def set_action_callback(self, callback):
+        """Register the action callback invoked during power-failure response."""
+        self._action_callback = callback
 
     async def update_weather(self, data):
         """Update weather sensor data."""
@@ -1138,7 +1146,7 @@ class SafetyMonitor:
             response_steps.append("Alert sent")
 
             # Step 2: If we have orchestrator callback, notify it
-            if self._action_callback:
+            if self._action_callback is not None:
                 await self._action_callback(
                     SafetyAction.POWER_FAILURE,
                     {"reason": "UPS power failure detected"}
@@ -1455,7 +1463,7 @@ class SafetyMonitor:
                 # _wait_for_cancellations_to_drain so any in-flight
                 # capture/slew has a bounded window to honor its
                 # cancel token BEFORE this irreversible step.
-                self._close_enclosure_safely("EMERGENCY_CLOSE")
+                await self._close_enclosure_safely("EMERGENCY_CLOSE")
 
             elif action == SafetyAction.PARK_AND_WAIT:
                 logger.warning("Unsafe conditions - Parking telescope")
@@ -1493,7 +1501,7 @@ class SafetyMonitor:
                 # this and EMERGENCY_CLOSE close the enclosure on the
                 # destructive path; consolidating the call site makes
                 # the cancel-before-close audit easier.
-                self._close_enclosure_safely("LOW_BATTERY_SHUTDOWN")
+                await self._close_enclosure_safely("LOW_BATTERY_SHUTDOWN")
 
             # Step 489: Network failure action
             elif action == SafetyAction.NETWORK_FAILURE:
@@ -1512,7 +1520,7 @@ class SafetyMonitor:
         except Exception as e:
             logger.error(f"Failed to execute safety action: {e}")
 
-    def _close_enclosure_safely(self, calling_action: str) -> None:
+    async def _close_enclosure_safely(self, calling_action: str) -> None:
         """SAFE-001: log-and-swallow enclosure close used by destructive actions.
 
         Extracted from inline try/except in EMERGENCY_CLOSE and
@@ -1532,7 +1540,10 @@ class SafetyMonitor:
         if self.enclosure is None:
             return
         try:
-            self.enclosure.close()
+            result = self.enclosure.close()
+            # Support both sync stubs and async enclosure drivers.
+            if inspect.isawaitable(result):
+                await result
         except Exception as e:
             logger.error(f"{calling_action}: enclosure.close failed: {e}")
 

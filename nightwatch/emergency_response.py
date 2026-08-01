@@ -251,14 +251,14 @@ class EmergencyResponse:
         for attempt in range(self.config.max_close_retries):
             try:
                 # Execute close command (force mode - bypass checks)
-                success = await self._roof.close()
+                success = await self._roof.close(emergency=True)
 
                 if success:
                     # Wait for close to complete
                     close_start = datetime.now()
                     while (datetime.now() - close_start).total_seconds() < self.config.close_timeout:
                         await asyncio.sleep(1.0)
-                        state = self._roof.get_state()
+                        state = self._roof.state
                         state_str = state.value if hasattr(state, 'value') else str(state)
                         if state_str == "closed":
                             logger.info("Emergency close completed successfully")

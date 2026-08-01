@@ -815,3 +815,100 @@ class TestPressureHistory:
         """Test _get_pressure_trend_for_data returns steady when no history."""
         trend = weather_client._get_pressure_trend_for_data(29.92)
         assert trend == "steady"
+
+
+class TestParseResponseFailClosed:
+    """SAFE (1-07): _parse_response must fail CLOSED on missing safety inputs.
+
+    A full payload parses normally. A truncated payload (empty
+    common_list / empty rain block) raises ValueError, and because
+    fetch_data wraps parsing in try/except returning None, the reading
+    is treated as stale/unsafe rather than a benign default that could
+    keep the roof open in bad weather.
+    """
+
+    @pytest.fixture
+    def weather_client(self):
+        return EcowittClient(gateway_ip="192.168.1.50", gateway_port=80)
+
+    @staticmethod
+    def _full_payload():
+        return {
+            "common_list": [
+                {"id": "0x02", "val": "68.0"},   # temperature F
+                {"id": "0x07", "val": "55"},     # humidity %
+                {"id": "0x0B", "val": "3.5"},    # wind speed
+                {"id": "0x0C", "val": "6.0"},    # wind gust
+                {"id": "0x0A", "val": "180"},    # wind dir
+                {"id": "0x15", "val": "120.0"},  # solar
+                {"id": "0x17", "val": "1.0"},    # uv
+                {"id": "0x03", "val": "29.95"},  # pressure
+            ],
+            "rain": {
+                "rain_rate": {"val": "0.0"},
+                "daily": {"val": "0.0"},
+                "event": {"val": "0.0"},
+            },
+        }
+
+    def test_full_payload_parses(self, weather_client):
+        """A complete payload parses into WeatherData."""
+        weather = weather_client._parse_response(self._full_payload())
+        assert isinstance(weather, WeatherData)
+        assert weather.temperature_f == 68.0
+        assert weather.humidity_percent == 55.0
+        assert weather.wind_speed_mph == 3.5
+        assert weather.rain_rate_in_hr == 0.0
+
+    def test_truncated_payload_raises(self, weather_client):
+        """Empty common_list and rain block -> fail closed with ValueError."""
+        with pytest.raises(ValueError):
+            weather_client._parse_response({"common_list": [], "rain": {}})
+
+    def test_missing_rain_block_raises(self, weather_client):
+        """Missing rain block alone fails closed."""
+        payload = self._full_payload()
+        payload["rain"] = {}
+        with pytest.raises(ValueError):
+            weather_client._parse_response(payload)
+
+    def test_garbled_temperature_raises(self, weather_client):
+        """A non-numeric required value fails closed."""
+        payload = self._full_payload()
+        payload["common_list"][0]["val"] = "n/a"
+        with pytest.raises(ValueError):
+            weather_client._parse_response(payload)
+
+    @pytest.mark.asyncio
+    async def test_fetch_path_yields_none_on_truncated(self, weather_client):
+        """fetch_data converts the ValueError into a None reading (stale/unsafe)."""
+        truncated = {"common_list": [], "rain": {}}
+
+        class _Resp:
+            status = 200
+
+            async def json(self):
+                return truncated
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *a):
+                return False
+
+        class _Session:
+            def get(self, *a, **k):
+                return _Resp()
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *a):
+                return False
+
+        with patch(
+            "services.weather.ecowitt.aiohttp.ClientSession",
+            return_value=_Session(),
+        ):
+            result = await weather_client.fetch_data()
+        assert result is None

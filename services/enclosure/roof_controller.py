@@ -504,6 +504,9 @@ class RoofController:
         self._last_rain_time: Optional[datetime] = None
         self._status_task: Optional[asyncio.Task] = None
         self._callbacks: List[Callable] = []
+        # GPIO backend handle; None in simulation so _run_motor's current
+        # monitoring is skipped instead of raising AttributeError.
+        self._gpio = None
 
         # Safety tracking
         self._safety: Dict[SafetyCondition, bool] = {
