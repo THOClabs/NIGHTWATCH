@@ -10,6 +10,7 @@ Reference: LX200 Command Set (Meade Telescope Serial Command Protocol)
 
 import asyncio
 import logging
+import math
 import socket
 import serial
 import threading
@@ -211,7 +212,11 @@ class LX200Client:
         # Parse DEC (sDD*MM:SS or sDD*MM'SS)
         dec_match = re.match(r"([+-]?\d{2})[*°](\d{2})[:'′](\d{2})", dec)
         if dec_match:
-            dec_d = float(dec_match.group(1))
+            # Take the sign from the raw string, not the float magnitude:
+            # a Dec of "-00" would otherwise lose its sign (-0.0 < 0 is False).
+            dec_deg_str = dec_match.group(1)
+            dec_sign = -1.0 if dec_deg_str.lstrip().startswith("-") else 1.0
+            dec_d = math.copysign(abs(float(dec_deg_str)), dec_sign)
             dec_m = float(dec_match.group(2))
             dec_s = float(dec_match.group(3))
         else:
@@ -341,7 +346,7 @@ class LX200Client:
 
     def _mount_dec_to_degrees(self, status: MountStatus) -> float:
         """Convert MountStatus Dec to degrees."""
-        sign = -1 if status.dec_degrees < 0 else 1
+        sign = math.copysign(1.0, status.dec_degrees)
         return sign * (abs(status.dec_degrees) + status.dec_minutes / 60 + status.dec_seconds / 3600)
 
     def _degrees_to_ra_components(self, degrees: float) -> Tuple[float, float, float]:
@@ -673,11 +678,14 @@ def dec_to_degrees(dec_str: str) -> float:
     """Convert DEC string (sDD*MM:SS) to decimal degrees."""
     match = re.match(r"([+-]?\d{2})[*°](\d{2})[:'′](\d{2}(?:\.\d+)?)", dec_str)
     if match:
-        d = float(match.group(1))
+        # Derive the sign from the leading [+-] in the string so that a
+        # zero-degree southern Dec (e.g. "-00*30:00") keeps its sign.
+        deg_str = match.group(1)
+        sign = -1.0 if deg_str.lstrip().startswith("-") else 1.0
+        d = abs(float(deg_str))
         m = float(match.group(2))
         s = float(match.group(3))
-        sign = -1 if d < 0 else 1
-        return sign * (abs(d) + m/60 + s/3600)
+        return sign * (d + m/60 + s/3600)
     return 0.0
 
 
