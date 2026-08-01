@@ -172,6 +172,18 @@ class TestVoiceConfig:
         assert config.device == "auto"
         assert config.compute_type == "int8_float16"
 
+    def test_wyoming_host_defaults_to_loopback(self) -> None:
+        """SEC3-1: STT Wyoming server must bind loopback by default."""
+        assert VoiceConfig().wyoming_host == "127.0.0.1"
+
+
+class TestTTSConfigSecurity:
+    """SEC3-1: security-relevant TTS config defaults."""
+
+    def test_wyoming_host_defaults_to_loopback(self) -> None:
+        """SEC3-1: TTS Wyoming server must bind loopback by default."""
+        assert TTSConfig().wyoming_host == "127.0.0.1"
+
 
 class TestNightwatchConfig:
     """Tests for master NightwatchConfig class."""

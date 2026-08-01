@@ -344,7 +344,7 @@ class VoiceConfig(BaseModel):
         description="Enable Wyoming protocol STT server",
     )
     wyoming_host: str = Field(
-        default="0.0.0.0",
+        default="127.0.0.1",
         description="Wyoming STT server bind address",
     )
     wyoming_port: int = Field(
@@ -409,7 +409,7 @@ class TTSConfig(BaseModel):
         description="Enable Wyoming protocol TTS server",
     )
     wyoming_host: str = Field(
-        default="0.0.0.0",
+        default="127.0.0.1",
         description="Wyoming TTS server bind address",
     )
     wyoming_port: int = Field(

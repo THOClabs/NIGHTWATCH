@@ -161,7 +161,7 @@ class WyomingTTSServer:
     def __init__(
         self,
         tts: Optional["PiperTTS"] = None,
-        host: str = "0.0.0.0",
+        host: str = "127.0.0.1",
         port: int = DEFAULT_PORT,
         stream_audio: bool = True,
     ):

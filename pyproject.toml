@@ -54,7 +54,7 @@ dependencies = [
 # Full installation with all services
 services = [
     "skyfield>=1.48",
-    "aiohttp>=3.9",
+    "aiohttp>=3.14.1",
     "pyserial>=3.5",
     # HWS-004: FITS / WCS parsing for the plate solver. astropy.io.fits and
     # astropy.wcs are the canonical readers for solve-field/ASTAP sidecars.

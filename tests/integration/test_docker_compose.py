@@ -144,6 +144,22 @@ class TestDockerComposeValidation:
                 "Production nightwatch service should have restart policy"
             )
 
+            main = services["nightwatch"]
+
+            # Least-privilege: must NOT run privileged
+            assert main.get("privileged") is not True, (
+                "Production nightwatch service must not run privileged"
+            )
+
+            # Must NOT bind the entire host /dev tree
+            volumes = main.get("volumes", []) or []
+            for vol in volumes:
+                if isinstance(vol, str):
+                    source = vol.split(":", 1)[0].strip()
+                    assert source != "/dev", (
+                        "Production nightwatch service must not bind host /dev"
+                    )
+
 
 class TestDockerComposePortConflicts:
     """Tests for port conflict detection."""

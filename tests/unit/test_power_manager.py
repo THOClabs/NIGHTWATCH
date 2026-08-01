@@ -19,7 +19,52 @@ from services.power.power_manager import (
     UPSStatus,
     PowerEvent,
     ShutdownReason,
+    PDUConfig,
 )
+
+
+class TestPDUCredentialHardening:
+    """SEC3-2: PDU must not ship or run with default/blank credentials."""
+
+    def test_pdu_config_defaults_are_blank(self):
+        """Vendor-default credentials must not be baked into PDUConfig."""
+        cfg = PDUConfig()
+        assert cfg.http_username == ""
+        assert cfg.http_password == ""
+        assert cfg.snmp_community == ""
+
+    def test_power_config_pdu_defaults_are_blank(self):
+        """Mirror defaults on PowerConfig must also be blank."""
+        cfg = PowerConfig()
+        assert cfg.pdu_username == ""
+        assert cfg.pdu_password == ""
+        assert cfg.pdu_snmp_community == ""
+
+    @pytest.mark.asyncio
+    async def test_start_http_blank_password_raises(self):
+        """start() must refuse HTTP PDU with a blank password."""
+        config = PowerConfig()
+        config.pdu_enabled = True
+        config.pdu_protocol = "http"
+        config.pdu_password = ""
+        pm = PowerManager(config=config)
+        pm._use_simulation = True  # skip NUT connection
+
+        with pytest.raises(ValueError):
+            await pm.start()
+
+    @pytest.mark.asyncio
+    async def test_start_snmp_blank_community_raises(self):
+        """start() must refuse SNMP PDU with a blank community string."""
+        config = PowerConfig()
+        config.pdu_enabled = True
+        config.pdu_protocol = "snmp"
+        config.pdu_snmp_community = ""
+        pm = PowerManager(config=config)
+        pm._use_simulation = True
+
+        with pytest.raises(ValueError):
+            await pm.start()
 
 
 class TestNUTClient:
