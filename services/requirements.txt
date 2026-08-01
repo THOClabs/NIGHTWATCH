@@ -12,7 +12,7 @@ pyserial~=3.5
 
 # Device Communication (see docs/INTEGRATION_PLAN.md Phase 3)
 # INDI client for Linux device control
-pyindi-client~=2.0.8
+pyindi-client~=2.1.3
 
 # ASCOM Alpaca client for network device control
 alpyca~=3.0.0
