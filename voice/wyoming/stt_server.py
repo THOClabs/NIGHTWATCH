@@ -39,6 +39,10 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
+# Security: cap per-session accumulated audio to bound memory usage.
+# 16 kHz * 2 bytes/sample (16-bit PCM) * 300 seconds = ~9.6 MB max per stream.
+MAX_AUDIO_BUFFER_BYTES = 16000 * 2 * 300
+
 
 # Step 319: Multi-language support preparation for STT
 # Whisper supports these languages out of the box
@@ -89,11 +93,13 @@ class ClientSession:
         self.audio_buffer = []
         self.audio_format = None
         self.is_streaming = False
+        self.buffered_bytes = 0
 
     def reset(self):
         """Reset session state for new audio stream."""
         self.audio_buffer = []
         self.is_streaming = False
+        self.buffered_bytes = 0
 
 
 class WyomingSTTServer:
@@ -113,7 +119,7 @@ class WyomingSTTServer:
     def __init__(
         self,
         stt: Optional["WhisperSTT"] = None,
-        host: str = "0.0.0.0",
+        host: str = "127.0.0.1",
         port: int = DEFAULT_PORT,
         confidence_threshold: float = DEFAULT_CONFIDENCE_THRESHOLD,
     ):
@@ -232,9 +238,20 @@ class WyomingSTTServer:
             return None
 
         elif message.type == MessageType.AUDIO_CHUNK:
-            # Accumulate audio data
+            # Accumulate audio data (bounded to prevent unbounded memory growth)
             if session.is_streaming and isinstance(message.data, AudioChunk):
-                session.audio_buffer.append(message.data.audio)
+                chunk = message.data.audio
+                if session.buffered_bytes + len(chunk) > MAX_AUDIO_BUFFER_BYTES:
+                    logger.warning(
+                        "Audio buffer cap exceeded (%d + %d > %d); resetting stream",
+                        session.buffered_bytes,
+                        len(chunk),
+                        MAX_AUDIO_BUFFER_BYTES,
+                    )
+                    session.reset()
+                else:
+                    session.audio_buffer.append(chunk)
+                    session.buffered_bytes += len(chunk)
             return None
 
         elif message.type == MessageType.AUDIO_STOP:

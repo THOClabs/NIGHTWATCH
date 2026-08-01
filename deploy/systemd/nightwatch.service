@@ -62,8 +62,10 @@ MemoryMax=4G
 CPUQuota=80%
 
 # Capabilities for hardware access
-AmbientCapabilities=CAP_SYS_RAWIO
-CapabilityBoundingSet=CAP_SYS_RAWIO
+# Least-privilege: drop CAP_SYS_RAWIO. Hardware access is granted via device
+# group membership (below), not raw I/O capabilities.
+AmbientCapabilities=
+CapabilityBoundingSet=
 
 # Allow access to serial ports and GPIO
 SupplementaryGroups=dialout gpio audio

@@ -61,9 +61,13 @@ sys.modules['voice.tools.telescope_tools'] = mock_tools
 # Import the actual module we're testing (after mocking dependencies)
 # We need to import directly from the file to avoid the voice/__init__.py imports
 import importlib.util
+import os as _os
+_REPO_ROOT = _os.path.abspath(
+    _os.path.join(_os.path.dirname(__file__), "..", "..")
+)
 spec = importlib.util.spec_from_file_location(
     "piper_service",
-    "/home/user/NIGHTWATCH/voice/tts/piper_service.py"
+    _os.path.join(_REPO_ROOT, "voice", "tts", "piper_service.py"),
 )
 piper_service = importlib.util.module_from_spec(spec)
 
@@ -614,6 +618,40 @@ class TestSystemTTS:
             with patch('asyncio.create_subprocess_exec', side_effect=FileNotFoundError):
                 # Should not raise
                 await tts.speak("Hello")
+
+    @pytest.mark.asyncio
+    async def test_speak_windows_no_command_injection(self):
+        """SEC3-6: spoken text must NOT be interpolated into the PowerShell command.
+
+        An injection payload must land only in the NIGHTWATCH_TTS_TEXT env var,
+        never in argv / the -Command argument.
+        """
+        payload = '"); Start-Process calc; ("'
+        with patch('platform.system', return_value="Windows"):
+            tts = SystemTTS()
+
+            mock_process = AsyncMock()
+            mock_process.wait = AsyncMock()
+
+            with patch('asyncio.create_subprocess_exec', return_value=mock_process) as mock_exec:
+                await tts.speak(payload)
+
+                mock_exec.assert_called_once()
+                call_args = mock_exec.call_args[0]
+                call_kwargs = mock_exec.call_args[1]
+
+                # Payload must be passed out-of-band via the environment.
+                assert call_kwargs.get("env") is not None
+                assert call_kwargs["env"]["NIGHTWATCH_TTS_TEXT"] == payload
+
+                # Payload must NOT appear anywhere in the command / -Command arg.
+                for arg in call_args:
+                    assert payload not in str(arg)
+                    assert "Start-Process" not in str(arg)
+
+                # The -Command script reads the env var, not the literal text.
+                assert "powershell" in call_args
+                assert "$env:NIGHTWATCH_TTS_TEXT" in " ".join(str(a) for a in call_args)
 
 
 # =============================================================================

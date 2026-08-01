@@ -12,6 +12,7 @@ Supports:
 """
 
 import asyncio
+import os
 import subprocess
 import tempfile
 from dataclasses import dataclass
@@ -435,24 +436,41 @@ class SystemTTS:
 
     async def speak(self, text: str):
         """Speak using system TTS."""
+        ps_env = None
         if self._platform == "Darwin":
             # macOS
             rate = int(200 * self.config.rate)
             cmd = ["say", "-r", str(rate), text]
         elif self._platform == "Windows":
-            # Windows PowerShell SAPI
-            ps_script = f'Add-Type -AssemblyName System.Speech; $speak = New-Object System.Speech.Synthesis.SpeechSynthesizer; $speak.Speak("{text}")'
-            cmd = ["powershell", "-Command", ps_script]
+            # Windows PowerShell SAPI.
+            # Command-injection defense: never interpolate spoken text into the
+            # PowerShell command. Pass it out-of-band via an environment variable
+            # that the static script reads.
+            ps_script = (
+                "Add-Type -AssemblyName System.Speech; "
+                "$speak = New-Object System.Speech.Synthesis.SpeechSynthesizer; "
+                "$speak.Speak($env:NIGHTWATCH_TTS_TEXT)"
+            )
+            cmd = ["powershell", "-NoProfile", "-Command", ps_script]
+            ps_env = {**os.environ, "NIGHTWATCH_TTS_TEXT": text}
         else:
             # Linux - fall back to espeak
             cmd = ["espeak", text]
 
         try:
-            process = await asyncio.create_subprocess_exec(
-                *cmd,
-                stdout=asyncio.subprocess.DEVNULL,
-                stderr=asyncio.subprocess.DEVNULL
-            )
+            if ps_env is not None:
+                process = await asyncio.create_subprocess_exec(
+                    *cmd,
+                    stdout=asyncio.subprocess.DEVNULL,
+                    stderr=asyncio.subprocess.DEVNULL,
+                    env=ps_env,
+                )
+            else:
+                process = await asyncio.create_subprocess_exec(
+                    *cmd,
+                    stdout=asyncio.subprocess.DEVNULL,
+                    stderr=asyncio.subprocess.DEVNULL
+                )
             await process.wait()
         except FileNotFoundError:
             print(f"TTS command not found. Would speak: {text}")

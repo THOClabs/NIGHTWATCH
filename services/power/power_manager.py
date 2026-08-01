@@ -47,12 +47,12 @@ class PDUConfig:
     port: int = 80  # HTTP port, or 161 for SNMP
 
     # HTTP settings
-    http_username: str = "admin"
-    http_password: str = "admin"
+    http_username: str = ""
+    http_password: str = ""
     http_timeout_sec: float = 10.0
 
     # SNMP settings
-    snmp_community: str = "private"  # Read-write community
+    snmp_community: str = ""  # Read-write community
     snmp_version: int = 2  # SNMPv1, v2c, or v3
 
     # Port mapping (PDU outlet -> device name)
@@ -803,9 +803,9 @@ class PowerConfig:
     pdu_protocol: str = "simulation"        # "http", "snmp", or "simulation"
     pdu_host: str = "192.168.1.100"         # PDU IP address
     pdu_port: int = 80                      # PDU port (80 for HTTP, 161 for SNMP)
-    pdu_username: str = "admin"             # PDU HTTP username
-    pdu_password: str = "admin"             # PDU HTTP password
-    pdu_snmp_community: str = "private"     # SNMP write community
+    pdu_username: str = ""                   # PDU HTTP username
+    pdu_password: str = ""                   # PDU HTTP password
+    pdu_snmp_community: str = ""             # SNMP write community
     pdu_num_outlets: int = 8                # Number of PDU outlets
 
 
@@ -948,6 +948,19 @@ class PowerManager:
 
         # Initialize Smart PDU client (Step 152)
         if self.config.pdu_enabled:
+            # Security: require the credential relevant to the selected protocol.
+            # Blank defaults must not silently fall back to vendor defaults.
+            if self.config.pdu_protocol != "simulation":
+                if self.config.pdu_protocol == "http" and not self.config.pdu_password:
+                    raise ValueError(
+                        "PDU HTTP protocol requires a non-empty pdu_password; "
+                        "refusing to start with blank/default credentials"
+                    )
+                elif self.config.pdu_protocol in ("snmp", "snmp_v1", "snmp_v2c") and not self.config.pdu_snmp_community:
+                    raise ValueError(
+                        "PDU SNMP protocol requires a non-empty pdu_snmp_community; "
+                        "refusing to start with blank/default credentials"
+                    )
             pdu_config = PDUConfig(
                 protocol=PDUProtocol(self.config.pdu_protocol),
                 host=self.config.pdu_host,

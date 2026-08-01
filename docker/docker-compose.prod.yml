@@ -26,7 +26,15 @@ services:
       dockerfile: docker/Dockerfile
     container_name: nightwatch-main
     restart: unless-stopped
-    privileged: true  # Required for GPIO access
+    # Least-privilege hardware access: no privileged mode, no bulk /dev bind.
+    # Operators MUST set the real per-host device paths below.
+    group_add:
+      - dialout  # serial (USB) device group
+      - gpio     # GPIO device group
+    devices:
+      - /dev/gpiochip0:/dev/gpiochip0  # GPIO controller (adjust per host)
+      - /dev/ttyUSB0:/dev/ttyUSB0      # USB serial adapter (adjust per host)
+      - /dev/ttyACM0:/dev/ttyACM0      # USB ACM serial device (adjust per host)
     environment:
       - NIGHTWATCH_CONFIG=/config/nightwatch.yaml
       - NIGHTWATCH_LOG_LEVEL=INFO
@@ -35,7 +43,6 @@ services:
       - ./config:/config:ro
       - ./data:/data
       - ./logs:/logs
-      - /dev:/dev  # Hardware access
     ports:
       - "8080:8080"  # Web UI
       - "9999:9999"  # Mount API (if forwarding)
