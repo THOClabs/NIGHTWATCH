@@ -52,7 +52,7 @@ jobs:
             --cov-report=term-missing \
             --cov-report=xml:coverage.xml \
             --cov-report=html:coverage_html \
-            -x --tb=short 2>/dev/null || echo "Tests completed"
+            -x --tb=short
 
       - name: Check coverage threshold (Step 583)
         run: |
@@ -187,6 +187,7 @@ jobs:
       - name: Run ruff linter
         run: |
           echo "Running ruff linter..."
+          # TODO(stage-0): make blocking once nightwatch/ is lint/type clean
           ruff check services/ voice/ nightwatch/ --ignore=E501,F401,F841 --output-format=github || true
 
       - name: Run ruff formatter check
@@ -221,6 +222,7 @@ jobs:
       - name: Run mypy on core modules
         run: |
           echo "Running mypy type checker..."
+          # TODO(stage-0): make blocking once nightwatch/ is lint/type clean
           mypy nightwatch/ \
             --ignore-missing-imports \
             --no-error-summary \

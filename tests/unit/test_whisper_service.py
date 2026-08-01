@@ -22,65 +22,105 @@ from pathlib import Path
 import sys
 import queue
 
-# Mock all optional dependencies before importing the module
-mock_numpy = MagicMock()
-mock_numpy.zeros = MagicMock(return_value=MagicMock(dtype='float32'))
-mock_numpy.sqrt = MagicMock(return_value=0.05)
-mock_numpy.mean = MagicMock(return_value=0.0025)
-mock_numpy.concatenate = MagicMock(return_value=MagicMock())
-mock_numpy.float32 = 'float32'
-mock_numpy.int16 = 'int16'
-mock_numpy.ndarray = MagicMock
+# The module-under-test mocks several optional dependencies via sys.modules.
+# Doing that at import time leaked the mocks (notably a MagicMock ``numpy``) into
+# the rest of the unit suite, producing dozens of phantom failures. The
+# module-scoped autouse fixture below confines the sys.modules mutation to this
+# file and restores the previous state in ``finally``.
 
-sys.modules['numpy'] = mock_numpy
+# Symbols exposed onto this module by ``_load_module_under_test``; declared here
+# so references resolve at import time. They are populated before any test runs.
+whisper_service = None
+WhisperModelSize = None
+TranscriptionResult = None
+AudioConfig = None
+VoiceActivityDetector = None
+EnhancedVAD = None
+WhisperSTT = None
+PushToTalkRecorder = None
 
-# Mock sounddevice
-mock_sd = MagicMock()
-mock_sd.InputStream = MagicMock()
-mock_sd.rec = MagicMock(return_value=MagicMock(flatten=MagicMock(return_value=MagicMock())))
-mock_sd.wait = MagicMock()
-sys.modules['sounddevice'] = mock_sd
-
-# Mock pymicro_vad
-mock_microvad = MagicMock()
-mock_microvad.MicroVAD = MagicMock
-sys.modules['pymicro_vad'] = mock_microvad
-
-# Mock faster_whisper
-mock_faster_whisper = MagicMock()
-mock_whisper_model = MagicMock()
-mock_faster_whisper.WhisperModel = mock_whisper_model
-sys.modules['faster_whisper'] = mock_faster_whisper
-
-# Mock openai whisper as fallback
-mock_whisper = MagicMock()
-sys.modules['whisper'] = mock_whisper
-
-# Import the actual module using importlib to bypass package init
-import importlib.util
-spec = importlib.util.spec_from_file_location(
-    "whisper_service",
-    "/home/user/NIGHTWATCH/voice/stt/whisper_service.py"
+# Names re-exposed onto this test module from the loaded module.
+_EXPOSED_SYMBOLS = (
+    "WhisperModelSize",
+    "TranscriptionResult",
+    "AudioConfig",
+    "VoiceActivityDetector",
+    "EnhancedVAD",
+    "WhisperSTT",
+    "PushToTalkRecorder",
 )
-whisper_service = importlib.util.module_from_spec(spec)
 
-# Override availability flags for testing
-whisper_service.SOUNDDEVICE_AVAILABLE = True
-whisper_service.NEURAL_VAD_AVAILABLE = True
-whisper_service.WHISPER_AVAILABLE = True
-whisper_service.WHISPER_BACKEND = "faster-whisper"
 
-# Execute the module
-spec.loader.exec_module(whisper_service)
+@pytest.fixture(scope="module", autouse=True)
+def _load_module_under_test():
+    """Load whisper_service with mocked optional deps, restoring sys.modules after."""
+    import importlib.util
 
-# Extract classes and constants for testing
-WhisperModelSize = whisper_service.WhisperModelSize
-TranscriptionResult = whisper_service.TranscriptionResult
-AudioConfig = whisper_service.AudioConfig
-VoiceActivityDetector = whisper_service.VoiceActivityDetector
-EnhancedVAD = whisper_service.EnhancedVAD
-WhisperSTT = whisper_service.WhisperSTT
-PushToTalkRecorder = whisper_service.PushToTalkRecorder
+    # Build the mocked optional dependencies (exact shapes the tests rely on).
+    mock_numpy = MagicMock()
+    mock_numpy.zeros = MagicMock(return_value=MagicMock(dtype='float32'))
+    mock_numpy.sqrt = MagicMock(return_value=0.05)
+    mock_numpy.mean = MagicMock(return_value=0.0025)
+    mock_numpy.concatenate = MagicMock(return_value=MagicMock())
+    mock_numpy.float32 = 'float32'
+    mock_numpy.int16 = 'int16'
+    mock_numpy.ndarray = MagicMock
+
+    mock_sd = MagicMock()
+    mock_sd.InputStream = MagicMock()
+    mock_sd.rec = MagicMock(return_value=MagicMock(flatten=MagicMock(return_value=MagicMock())))
+    mock_sd.wait = MagicMock()
+
+    mock_microvad = MagicMock()
+    mock_microvad.MicroVAD = MagicMock
+
+    mock_faster_whisper = MagicMock()
+    mock_faster_whisper.WhisperModel = MagicMock()
+
+    mock_whisper = MagicMock()
+
+    mocked = {
+        'numpy': mock_numpy,
+        'sounddevice': mock_sd,
+        'pymicro_vad': mock_microvad,
+        'faster_whisper': mock_faster_whisper,
+        'whisper': mock_whisper,
+    }
+
+    saved = {k: sys.modules.get(k) for k in mocked}
+    for k, v in mocked.items():
+        sys.modules[k] = v
+
+    g = globals()
+    try:
+        spec = importlib.util.spec_from_file_location(
+            "whisper_service",
+            "/home/user/NIGHTWATCH/voice/stt/whisper_service.py",
+        )
+        mod = importlib.util.module_from_spec(spec)
+
+        # Override availability flags for testing (mirrors prior behaviour).
+        mod.SOUNDDEVICE_AVAILABLE = True
+        mod.NEURAL_VAD_AVAILABLE = True
+        mod.WHISPER_AVAILABLE = True
+        mod.WHISPER_BACKEND = "faster-whisper"
+
+        spec.loader.exec_module(mod)
+
+        g["whisper_service"] = mod
+        for n in _EXPOSED_SYMBOLS:
+            g[n] = getattr(mod, n)
+
+        yield
+    finally:
+        g["whisper_service"] = None
+        for n in _EXPOSED_SYMBOLS:
+            g[n] = None
+        for k, v in saved.items():
+            if v is None:
+                sys.modules.pop(k, None)
+            else:
+                sys.modules[k] = v
 
 
 # =============================================================================
