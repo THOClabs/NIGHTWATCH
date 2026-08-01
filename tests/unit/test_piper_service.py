@@ -17,77 +17,116 @@ from dataclasses import dataclass
 from pathlib import Path
 import sys
 
-# Mock all optional dependencies before importing the module
-# This must be done before any imports that would trigger loading these modules
-mock_numpy = MagicMock()
-mock_numpy.frombuffer = MagicMock(return_value=MagicMock(astype=MagicMock(return_value=MagicMock(__truediv__=MagicMock()))))
-mock_numpy.float32 = 'float32'
-mock_numpy.int16 = 'int16'
+# The module-under-test mocks several optional dependencies (and sibling voice
+# packages) via sys.modules. Doing that at import time leaked the mocks into the
+# rest of the unit suite, producing dozens of phantom failures. The module-scoped
+# autouse fixture below confines the sys.modules mutation to this file and
+# restores the previous state in ``finally``.
 
-sys.modules['numpy'] = mock_numpy
-sys.modules['piper'] = MagicMock()
-sys.modules['sounddevice'] = MagicMock()
+# Symbols exposed onto this module by ``_load_module_under_test``; declared here
+# so references resolve at import time. They are populated before any test runs.
+piper_service = None
+TTSBackend = None
+VoiceStyle = None
+TTSConfig = None
+SpeechOutput = None
+PiperTTS = None
+EspeakTTS = None
+SystemTTS = None
+TTSService = None
+ResponseLibrary = None
 
-# Now we need to handle the voice package imports
-# Create mock modules for the voice package to avoid cascading imports
-mock_whisper_service = MagicMock()
-mock_whisper_service.WhisperSTT = MagicMock
-mock_whisper_service.TranscriptionResult = MagicMock
-mock_whisper_service.WhisperModelSize = MagicMock
-mock_whisper_service.VoiceActivityDetector = MagicMock
-mock_whisper_service.EnhancedVAD = MagicMock
-mock_whisper_service.AudioConfig = MagicMock
-mock_whisper_service.PushToTalkRecorder = MagicMock
-mock_whisper_service.WHISPER_AVAILABLE = True
-mock_whisper_service.WHISPER_BACKEND = "faster-whisper"
-mock_whisper_service.SOUNDDEVICE_AVAILABLE = True
-mock_whisper_service.NEURAL_VAD_AVAILABLE = True
-
-sys.modules['voice.stt.whisper_service'] = mock_whisper_service
-
-# Mock the voice.stt module init
-mock_stt_init = MagicMock()
-mock_stt_init.WhisperSTT = MagicMock
-mock_stt_init.TranscriptionResult = MagicMock
-sys.modules['voice.stt'] = mock_stt_init
-
-# Mock the voice.tools module
-mock_tools = MagicMock()
-mock_tools.ToolRegistry = MagicMock
-mock_tools.TELESCOPE_SYSTEM_PROMPT = "mock prompt"
-sys.modules['voice.tools'] = mock_tools
-sys.modules['voice.tools.telescope_tools'] = mock_tools
-
-# Import the actual module we're testing (after mocking dependencies)
-# We need to import directly from the file to avoid the voice/__init__.py imports
-import importlib.util
-import os as _os
-_REPO_ROOT = _os.path.abspath(
-    _os.path.join(_os.path.dirname(__file__), "..", "..")
+# Names re-exposed onto this test module from the loaded module.
+_EXPOSED_SYMBOLS = (
+    "TTSBackend",
+    "VoiceStyle",
+    "TTSConfig",
+    "SpeechOutput",
+    "PiperTTS",
+    "EspeakTTS",
+    "SystemTTS",
+    "TTSService",
+    "ResponseLibrary",
 )
-spec = importlib.util.spec_from_file_location(
-    "piper_service",
-    _os.path.join(_REPO_ROOT, "voice", "tts", "piper_service.py"),
-)
-piper_service = importlib.util.module_from_spec(spec)
 
-# Set up the module's globals for imports it needs
-piper_service.PIPER_AVAILABLE = False  # Will be overridden in tests
-piper_service.SOUNDDEVICE_AVAILABLE = True
 
-# Execute the module
-spec.loader.exec_module(piper_service)
+@pytest.fixture(scope="module", autouse=True)
+def _load_module_under_test():
+    """Load piper_service with mocked optional deps, restoring sys.modules after."""
+    import importlib.util
 
-# Now extract the classes we need for testing
-TTSBackend = piper_service.TTSBackend
-VoiceStyle = piper_service.VoiceStyle
-TTSConfig = piper_service.TTSConfig
-SpeechOutput = piper_service.SpeechOutput
-PiperTTS = piper_service.PiperTTS
-EspeakTTS = piper_service.EspeakTTS
-SystemTTS = piper_service.SystemTTS
-TTSService = piper_service.TTSService
-ResponseLibrary = piper_service.ResponseLibrary
+    # Build the mocked optional dependencies (exact shapes the tests rely on).
+    mock_numpy = MagicMock()
+    mock_numpy.frombuffer = MagicMock(return_value=MagicMock(astype=MagicMock(return_value=MagicMock(__truediv__=MagicMock()))))
+    mock_numpy.float32 = 'float32'
+    mock_numpy.int16 = 'int16'
+
+    # Mock the sibling voice package imports to avoid cascading imports.
+    mock_whisper_service = MagicMock()
+    mock_whisper_service.WhisperSTT = MagicMock
+    mock_whisper_service.TranscriptionResult = MagicMock
+    mock_whisper_service.WhisperModelSize = MagicMock
+    mock_whisper_service.VoiceActivityDetector = MagicMock
+    mock_whisper_service.EnhancedVAD = MagicMock
+    mock_whisper_service.AudioConfig = MagicMock
+    mock_whisper_service.PushToTalkRecorder = MagicMock
+    mock_whisper_service.WHISPER_AVAILABLE = True
+    mock_whisper_service.WHISPER_BACKEND = "faster-whisper"
+    mock_whisper_service.SOUNDDEVICE_AVAILABLE = True
+    mock_whisper_service.NEURAL_VAD_AVAILABLE = True
+
+    mock_stt_init = MagicMock()
+    mock_stt_init.WhisperSTT = MagicMock
+    mock_stt_init.TranscriptionResult = MagicMock
+
+    mock_tools = MagicMock()
+    mock_tools.ToolRegistry = MagicMock
+    mock_tools.TELESCOPE_SYSTEM_PROMPT = "mock prompt"
+
+    mocked = {
+        'numpy': mock_numpy,
+        'piper': MagicMock(),
+        'sounddevice': MagicMock(),
+        'voice.stt.whisper_service': mock_whisper_service,
+        'voice.stt': mock_stt_init,
+        'voice.tools': mock_tools,
+        'voice.tools.telescope_tools': mock_tools,
+    }
+
+    saved = {k: sys.modules.get(k) for k in mocked}
+    for k, v in mocked.items():
+        sys.modules[k] = v
+
+    g = globals()
+    try:
+        import pathlib
+        _repo_root = pathlib.Path(__file__).resolve().parents[2]
+        spec = importlib.util.spec_from_file_location(
+            "piper_service",
+            str(_repo_root / "voice" / "tts" / "piper_service.py"),
+        )
+        mod = importlib.util.module_from_spec(spec)
+
+        # Set up the module's globals for imports it needs.
+        mod.PIPER_AVAILABLE = False  # Will be overridden in tests
+        mod.SOUNDDEVICE_AVAILABLE = True
+
+        spec.loader.exec_module(mod)
+
+        g["piper_service"] = mod
+        for n in _EXPOSED_SYMBOLS:
+            g[n] = getattr(mod, n)
+
+        yield
+    finally:
+        g["piper_service"] = None
+        for n in _EXPOSED_SYMBOLS:
+            g[n] = None
+        for k, v in saved.items():
+            if v is None:
+                sys.modules.pop(k, None)
+            else:
+                sys.modules[k] = v
 
 
 # =============================================================================
