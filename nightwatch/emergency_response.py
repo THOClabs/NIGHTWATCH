@@ -251,7 +251,7 @@ class EmergencyResponse:
         for attempt in range(self.config.max_close_retries):
             try:
                 # Execute close command (force mode - bypass checks)
-                success = await self._roof.close()
+                success = await self._roof.close(emergency=True)
 
                 if success:
                     # Wait for close to complete
