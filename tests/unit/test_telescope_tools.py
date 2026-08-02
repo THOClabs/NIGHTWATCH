@@ -302,17 +302,20 @@ class TestToolRegistry:
         assert len(registry.get_all_tools()) == initial_count + 1
         assert registry.get_tool("test_custom_tool") is not None
 
-    def test_registry_set_handler(self):
-        """Verify setting handler for a tool."""
+    def test_registry_is_schema_catalog_only(self):
+        """S4-2: ToolRegistry is a schema catalog with no execution surface.
+
+        The unvalidated ``execute()`` / ``set_handler()`` / ``_handlers`` raw
+        ``handler(**arguments)`` splat was removed; command dispatch now flows
+        solely through the Pydantic-validated ``ToolExecutor``. Handler
+        registration is covered on that validated path by
+        ``test_tool_executor.py::test_register_handler``.
+        """
         registry = ToolRegistry()
 
-        async def custom_handler():
-            return "test result"
-
-        registry.set_handler("goto_object", custom_handler)
-
-        # Verify handler is set (accessing internal state for test)
-        assert "goto_object" in registry._handlers
+        assert not hasattr(registry, "execute")
+        assert not hasattr(registry, "set_handler")
+        assert not hasattr(registry, "_handlers")
 
 
 # ============================================================================
