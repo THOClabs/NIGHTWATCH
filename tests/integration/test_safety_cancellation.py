@@ -421,10 +421,10 @@ class _RecordingMount:
         self._events = events
         self.parked = False
 
-    def stop(self) -> None:
+    async def stop(self) -> None:
         self._events.append(("mount_stop", time.monotonic()))
 
-    def park(self) -> None:
+    async def park(self) -> None:
         self._events.append(("mount_park", time.monotonic()))
         self.parked = True
 
