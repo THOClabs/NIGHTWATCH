@@ -917,6 +917,11 @@ class PowerManager:
         self._power_restored_time: Optional[datetime] = None
         self._park_initiated = False
         self._shutdown_initiated = False
+        # True while we are within the post-restore wait window and have not
+        # yet resumed. The wait is honoured non-blockingly by the monitor loop
+        # (see _check_resume_ready) instead of an inline sleep, so the monitor
+        # stays responsive to a fresh power loss during the wait.
+        self._resume_pending = False
 
     @property
     def status(self) -> UPSStatus:
@@ -1024,6 +1029,11 @@ class PowerManager:
 
                 # Process state changes
                 await self._process_status()
+
+                # Honour the post-restore wait non-blockingly. Doing the wait
+                # here (rather than sleeping inline in _on_power_restored) keeps
+                # the monitor responsive to a new power loss during the delay.
+                await self._check_resume_ready()
 
                 await asyncio.sleep(self.config.poll_interval_sec)
 
@@ -1139,6 +1149,8 @@ class PowerManager:
         """Handle mains power loss."""
         self._power_lost_time = datetime.now()
         self._status.state = PowerState.ON_BATTERY
+        # A new power loss cancels any pending post-restore resume.
+        self._resume_pending = False
 
         self._log_event("POWER_LOST", "Mains power lost - running on battery")
         logger.warning("POWER LOST - Running on UPS battery")
@@ -1177,13 +1189,38 @@ class PowerManager:
 
         await self._notify_callbacks("power_restored")
 
-        # Wait before allowing resume
+        # Arm the post-restore wait. The actual wait (power_restore_delay_sec)
+        # and the resume transition are handled non-blockingly by the monitor
+        # loop in _check_resume_ready(). Sleeping inline here would block the
+        # monitor loop for the whole delay (default 5 minutes), leaving the
+        # power monitor deaf to a fresh power loss during that window.
         logger.info(f"Waiting {self.config.power_restore_delay_sec}s before resume")
-        await asyncio.sleep(self.config.power_restore_delay_sec)
+        self._resume_pending = True
 
-        # Check battery level before resume
+    async def _check_resume_ready(self):
+        """
+        Non-blocking post-restore resume check, run each monitor poll.
+
+        Once power has been restored, we wait ``power_restore_delay_sec`` before
+        declaring the system ready to resume. This is evaluated as an elapsed
+        time check on each poll instead of an inline sleep, so the monitor loop
+        remains responsive to a new power loss while the delay counts down.
+
+        Resume additionally requires the battery to have recharged to at least
+        ``resume_threshold_pct``; otherwise we keep waiting.
+        """
+        if not self._resume_pending or self._power_restored_time is None:
+            return
+
+        elapsed = (datetime.now() - self._power_restored_time).total_seconds()
+        if elapsed < self.config.power_restore_delay_sec:
+            return
+
+        # Delay has elapsed - resume only if the battery is charged enough.
         if self._status.battery_percent >= self.config.resume_threshold_pct:
+            self._resume_pending = False
             self._status.state = PowerState.ONLINE
+            logger.info("Power restore delay elapsed - ready to resume")
             await self._notify_callbacks("ready_to_resume")
         else:
             logger.info(f"Battery at {self._status.battery_percent}%, "

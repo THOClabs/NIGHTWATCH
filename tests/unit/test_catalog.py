@@ -487,8 +487,10 @@ class TestCatalogEdgeCases:
         """Test magnitude search with inverted range (min > max)."""
         # When min > max, should return empty or handle gracefully
         # Note: In astronomy, lower magnitude = brighter, so this tests edge case
-        results = service.objects_by_type("galaxy", min_magnitude=10.0, max_magnitude=5.0)
+        results = service.db.search_by_magnitude(min_magnitude=10.0, max_magnitude=5.0)
         assert isinstance(results, list)
+        # magnitude >= 10 AND magnitude <= 5 is unsatisfiable -> empty result
+        assert len(results) == 0
 
     def test_coordinate_wraparound(self, service):
         """Test coordinate handling near RA=0/24 boundary."""
@@ -514,6 +516,11 @@ class TestCatalogObjectFormatting:
             object_type=ObjectType.STAR,
             ra_hours=5.5,  # 5h 30m
             dec_degrees=22.0,
+            magnitude=None,
+            size_arcmin=None,
+            constellation=None,
+            description=None,
+            aliases=[],
         )
         ra_str = obj.ra_hms
         assert "5" in ra_str
@@ -527,6 +534,11 @@ class TestCatalogObjectFormatting:
             object_type=ObjectType.STAR,
             ra_hours=5.5,
             dec_degrees=-22.5,  # Negative declination
+            magnitude=None,
+            size_arcmin=None,
+            constellation=None,
+            description=None,
+            aliases=[],
         )
         dec_str = obj.dec_dms
         assert "-" in dec_str
@@ -540,6 +552,11 @@ class TestCatalogObjectFormatting:
             object_type=ObjectType.STAR,
             ra_hours=5.5,
             dec_degrees=45.25,
+            magnitude=None,
+            size_arcmin=None,
+            constellation=None,
+            description=None,
+            aliases=[],
         )
         dec_str = obj.dec_dms
         assert "+" in dec_str
