@@ -1605,7 +1605,7 @@ def create_default_handlers(
         if status and status.is_tracking and not confirmed:
             return "Telescope is currently tracking. Say 'confirm park' to park and end tracking."
 
-        success = mount_client.park()
+        success = await mount_client.park()
         if success:
             return "Parking telescope. Please wait for park to complete."
         return "Failed to park telescope"
@@ -1629,7 +1629,7 @@ def create_default_handlers(
         if mount_status and not mount_status.is_parked:
             return "Telescope is already unparked"
 
-        success = mount_client.unpark()
+        success = await mount_client.unpark()
         if success:
             return "Telescope unparked and ready for observation"
         return "Failed to unpark telescope"
@@ -1642,7 +1642,7 @@ def create_default_handlers(
             return "Mount not available"
 
         # Step 342: Immediate execution - stop is always high priority
-        mount_client.stop()
+        await mount_client.stop()
         return "STOP - All telescope motion halted"
 
     handlers["stop_telescope"] = stop_telescope
@@ -1789,7 +1789,7 @@ def create_default_handlers(
             return "Telescope is already at home position"
 
         # Stop any current motion first
-        mount_client.stop()
+        await mount_client.stop()
 
         # Send home command
         if hasattr(mount_client, 'find_home'):
@@ -1798,7 +1798,7 @@ def create_default_handlers(
             success = mount_client.home()
         else:
             # Fall back to park if no home command
-            success = mount_client.park()
+            success = await mount_client.park()
             if success:
                 return "Home command not available - parked telescope instead"
             return "Mount does not support home operation"
@@ -2783,7 +2783,7 @@ def create_default_handlers(
         """Abort slew and stop all motion."""
         if not mount_client:
             return "Mount not available"
-        mount_client.stop()
+        await mount_client.stop()
         return "Slew aborted. Telescope stopped."
 
     handlers["abort_slew"] = abort_slew
@@ -3228,7 +3228,7 @@ def create_default_handlers(
                 if hasattr(mount_client, 'emergency_park'):
                     mount_client.emergency_park()
                 elif hasattr(mount_client, 'park'):
-                    mount_client.park()
+                    await mount_client.park()
                 results.append("Mount parking")
         except Exception as e:
             errors.append(f"Mount park error: {e}")
@@ -4858,12 +4858,12 @@ def create_default_handlers(
                 # Apply correction
                 if hasattr(mount_client, 'sync_to_coordinates'):
                     # Sync mount to solved position, then slew to target
-                    mount_client.sync_to_coordinates(solved_ra_hours, solve_result.dec_degrees)
+                    await mount_client.sync_to_coordinates(solved_ra_hours, solve_result.dec_degrees)
                     results.append("  Synced mount to solved position")
 
                 # Small slew to target
                 if hasattr(mount_client, 'slew_to_coordinates'):
-                    mount_client.slew_to_coordinates(target_ra, target_dec)
+                    await mount_client.slew_to_coordinates(target_ra, target_dec)
                     results.append("  Slewing to target...")
 
                     # Wait for slew to complete

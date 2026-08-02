@@ -229,9 +229,9 @@ class LX200Client:
             dec_degrees=dec_d,
             dec_minutes=dec_m,
             dec_seconds=dec_s,
-            is_tracking=self.is_tracking(),
+            is_tracking=self.is_tracking,
             is_slewing=self.is_slewing(),
-            is_parked=self.is_parked(),
+            is_parked=self.is_parked,
             pier_side=self.get_pier_side()
         )
 
@@ -532,9 +532,44 @@ class LX200Client:
         """
         return await asyncio.to_thread(self._sync_blocking, ra_deg, dec_deg)
 
-    def stop(self):
-        """Stop all mount motion."""
+    def _slew_blocking(self, ra_deg: float, dec_deg: float) -> bool:
+        """Synchronous :Sr → :Sd → :MS slew for decimal-degree targets (S4-3).
+
+        Converts decimal degrees to the LX200 string formats and delegates to
+        :meth:`goto_ra_dec`. Runs off the event loop via
+        :func:`asyncio.to_thread` (see :meth:`slew_to_coordinates`) so the
+        worst-case 3 * ``COMMAND_TIMEOUT`` blocking exchange never stalls the
+        safety watchdog, weather monitor, or TTS pipeline.
+        """
+        ra_str = self._ra_deg_to_lx200(ra_deg)
+        dec_str = self._dec_deg_to_lx200(dec_deg)
+        return self.goto_ra_dec(ra_str, dec_str)
+
+    async def slew_to_coordinates(self, ra: float, dec: float) -> bool:
+        """Slew mount to RA/Dec in decimal degrees (S4-3).
+
+        Canonical async entry point matching
+        :class:`nightwatch.orchestrator.MountServiceProtocol`. ``ra`` and
+        ``dec`` are decimal degrees; conversion to LX200 :Sr/:Sd strings and
+        the :MS slew are performed in :meth:`_slew_blocking`, run off the
+        event loop via :func:`asyncio.to_thread` (mirrors the established
+        :meth:`sync_to_coordinates` idiom). Returns True if the slew is
+        accepted by the controller.
+        """
+        return await asyncio.to_thread(self._slew_blocking, ra, dec)
+
+    def _stop_blocking(self) -> None:
+        """Synchronous :Q (stop all motion). See :meth:`stop`."""
         self._send_command("Q")
+
+    async def stop(self):
+        """Stop all mount motion (S4-3: async per ServiceProtocol).
+
+        Delegates the blocking :Q exchange to a worker thread via
+        :func:`asyncio.to_thread` so an emergency stop never blocks the
+        asyncio event loop that also runs the safety watchdog.
+        """
+        await asyncio.to_thread(self._stop_blocking)
 
     def stop_axis(self, axis: str):
         """
@@ -564,8 +599,14 @@ class LX200Client:
         result = self._send_command(rate.value)
         return result is not None
 
+    @property
     def is_tracking(self) -> bool:
-        """Check if mount is currently tracking."""
+        """Whether the mount is currently tracking (S4-3: property).
+
+        Exposed as a property to match ``MountServiceProtocol`` so callers do
+        ``mount.is_tracking`` (a truthy bool) rather than a bound method that
+        is always truthy.
+        """
         result = self._send_command("GW")
         if result and len(result) >= 1:
             return result[0] == "T"
@@ -582,18 +623,41 @@ class LX200Client:
     # PARK CONTROL
     # =========================================================================
 
-    def park(self) -> bool:
-        """Park the mount at home position."""
+    def _park_blocking(self) -> bool:
+        """Synchronous :hP park command. See :meth:`park`."""
         result = self._send_command("hP")
         return result == "1"
 
-    def unpark(self) -> bool:
-        """Unpark the mount."""
+    async def park(self) -> bool:
+        """Park the mount at home position (S4-3: async per Protocol).
+
+        Runs the blocking :hP exchange off the event loop via
+        :func:`asyncio.to_thread`. SAFETY: callers MUST ``await`` this -- an
+        un-awaited coroutine silently does nothing and the mount never parks.
+        """
+        return await asyncio.to_thread(self._park_blocking)
+
+    def _unpark_blocking(self) -> bool:
+        """Synchronous :hR unpark command. See :meth:`unpark`."""
         result = self._send_command("hR")
         return result == "1"
 
+    async def unpark(self) -> bool:
+        """Unpark the mount (S4-3: async per Protocol).
+
+        Runs the blocking :hR exchange off the event loop via
+        :func:`asyncio.to_thread`.
+        """
+        return await asyncio.to_thread(self._unpark_blocking)
+
+    @property
     def is_parked(self) -> bool:
-        """Check if mount is parked."""
+        """Whether the mount is parked (S4-3: property).
+
+        Exposed as a property to match ``MountServiceProtocol``. This fixes a
+        latent safety bug: ``not mount.is_parked`` on a bound method was always
+        False, so safe-shutdown silently skipped parking.
+        """
         result = self._send_command("GU")
         if result:
             return "P" in result

@@ -1486,7 +1486,7 @@ class PowerManager:
         # Check mount is parked before proceeding (safety)
         if safe_shutdown and self._mount:
             try:
-                is_parked = await self._mount.is_parked()
+                is_parked = self._mount.is_parked
                 if not is_parked:
                     logger.warning("Mount not parked - attempting to park before power-off")
                     await self._mount.park()

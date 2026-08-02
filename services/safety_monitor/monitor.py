@@ -1453,8 +1453,8 @@ class SafetyMonitor:
             if action == SafetyAction.EMERGENCY_CLOSE:
                 logger.critical("EMERGENCY CLOSE - Parking immediately!")
                 self._state = ObservatoryState.EMERGENCY
-                self.mount.stop()
-                self.mount.park()
+                await self.mount.stop()
+                await self.mount.park()
                 # SAFE-001 (Risk #2): the action's name promises a
                 # roof close — make it real. Prior code only stopped
                 # and parked the mount, leaving the enclosure open
@@ -1468,13 +1468,13 @@ class SafetyMonitor:
             elif action == SafetyAction.PARK_AND_WAIT:
                 logger.warning("Unsafe conditions - Parking telescope")
                 self._state = ObservatoryState.PARKING
-                self.mount.stop()
-                self.mount.park()
+                await self.mount.stop()
+                await self.mount.park()
 
             elif action == SafetyAction.PARK_FOR_DAYLIGHT:
                 logger.info("Daylight approaching - Parking for day")
                 self._state = ObservatoryState.PARKING
-                self.mount.park()
+                await self.mount.park()
 
             elif action == SafetyAction.SAFE_TO_OBSERVE:
                 if self._state in [ObservatoryState.PARKED, ObservatoryState.CLOSED]:
@@ -1489,14 +1489,14 @@ class SafetyMonitor:
             elif action == SafetyAction.LOW_BATTERY_PARK:
                 logger.warning("Low battery - parking telescope")
                 self._state = ObservatoryState.PARKING
-                self.mount.stop()
-                self.mount.park()
+                await self.mount.stop()
+                await self.mount.park()
 
             elif action == SafetyAction.LOW_BATTERY_SHUTDOWN:
                 logger.critical("CRITICAL: Battery depleted - emergency shutdown!")
                 self._state = ObservatoryState.EMERGENCY
-                self.mount.stop()
-                self.mount.park()
+                await self.mount.stop()
+                await self.mount.park()
                 # SAFE-001: shared helper (was inline try/except). Both
                 # this and EMERGENCY_CLOSE close the enclosure on the
                 # destructive path; consolidating the call site makes
@@ -1507,8 +1507,8 @@ class SafetyMonitor:
             elif action == SafetyAction.NETWORK_FAILURE:
                 logger.warning("Network failure - parking telescope for safety")
                 self._state = ObservatoryState.PARKING
-                self.mount.stop()
-                self.mount.park()
+                await self.mount.stop()
+                await self.mount.park()
 
             # Step 485: Power failure action
             elif action == SafetyAction.POWER_FAILURE:

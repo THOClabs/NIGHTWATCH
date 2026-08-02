@@ -801,9 +801,9 @@ class SafeStateHandler:
         if self._mount:
             try:
                 logger.info("Safe state: Parking telescope")
-                self._mount.stop()
+                await self._mount.stop()
                 await asyncio.sleep(0.5)
-                park_result = self._mount.park()
+                park_result = await self._mount.park()
                 if park_result:
                     # Wait for park with timeout
                     for _ in range(30):  # 30 seconds timeout
