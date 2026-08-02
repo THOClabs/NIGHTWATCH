@@ -170,6 +170,17 @@ class PHD2Client:
         return self._state
 
     @property
+    def is_guiding(self) -> bool:
+        """S4-1b Protocol adapter: whether PHD2 is actively guiding.
+
+        Conforms to ``GuidingServiceProtocol.is_guiding`` (a sync property).
+        Derived from the existing :attr:`state` (:class:`GuideState`) — ``True``
+        only when the state is ``GUIDING`` (actively closed-loop guiding), not
+        during ``SELECTED``/``CALIBRATING``/``LOOPING``/``PAUSED``/``LOST_LOCK``.
+        """
+        return self._state == GuideState.GUIDING
+
+    @property
     def last_stats(self) -> Optional[GuideStats]:
         """Most recent guiding statistics."""
         return self._last_stats

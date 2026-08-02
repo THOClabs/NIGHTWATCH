@@ -738,10 +738,44 @@ class UnifiedWeatherService:
     # Convenience Methods
     # =========================================================================
 
-    async def is_safe(self) -> bool:
-        """Quick check if conditions are safe for observing."""
+    async def check_safe(self) -> bool:
+        """Quick check if conditions are safe for observing.
+
+        S4-1b: renamed from the former ``async def is_safe`` to resolve a
+        name collision. ``WeatherServiceProtocol.is_safe`` pins a *synchronous
+        property*, so ``is_safe`` is now that property (see below) returning the
+        last cached verdict. This async variant is preserved verbatim for
+        callers that want a fresh sensor poll + verdict in one await. It fetches
+        conditions (updating the cache) and returns the freshly-computed
+        ``safe_to_observe``.
+        """
         conditions = await self.get_conditions()
         return conditions.safe_to_observe
+
+    @property
+    def is_safe(self) -> bool:
+        """S4-1b Protocol adapter: synchronous cached safety verdict (fail-safe).
+
+        Conforms to ``WeatherServiceProtocol.is_safe`` (a sync property). Returns
+        the ``safe_to_observe`` verdict from the most recent ``get_conditions()``
+        evaluation. FAIL-SAFE: defaults to ``False`` (UNSAFE) when no evaluation
+        has happened yet, so a never-polled weather service never reads "safe".
+        For a fresh poll-and-evaluate, ``await check_safe()`` instead.
+        """
+        if self._latest is None:
+            return False
+        return self._latest.safe_to_observe
+
+    @property
+    def current_conditions(self) -> Optional[UnifiedConditions]:
+        """S4-1b Protocol adapter: latest cached unified conditions.
+
+        Conforms to ``WeatherServiceProtocol.current_conditions`` (a property).
+        Returns the last :class:`UnifiedConditions` produced by
+        ``get_conditions()``, or ``None`` before the first poll. Mirrors the
+        existing :attr:`latest` property under the Protocol-declared name.
+        """
+        return self._latest
 
     async def get_safety_summary(self) -> str:
         """Get human-readable safety summary."""

@@ -380,6 +380,34 @@ class SafetyMonitor:
         return self._last_status
 
     @property
+    def is_safe(self) -> bool:
+        """S4-1b Protocol adapter: overall safety verdict (FAIL-SAFE).
+
+        Conforms to ``SafetyServiceProtocol.is_safe`` (a sync property). Returns
+        the ``is_safe`` field of the most recent :meth:`evaluate` result
+        (``self._last_status``). FAIL-SAFE: defaults to ``False`` (UNSAFE) when
+        no evaluation has run yet, so an un-evaluated monitor never reads "safe".
+        Read-only — it does NOT trigger an evaluation; :meth:`evaluate` /
+        :meth:`run` remain the sole producers of the verdict.
+        """
+        if self._last_status is None:
+            return False
+        return self._last_status.is_safe
+
+    def get_unsafe_reasons(self) -> List[str]:
+        """S4-1b Protocol adapter: reasons the last evaluation was unsafe.
+
+        Conforms to ``SafetyServiceProtocol.get_unsafe_reasons``. Returns the
+        reason strings from the most recent :meth:`evaluate` result when it was
+        unsafe; an empty list when the last status was safe or when no
+        evaluation has run yet. Read-only — does not trigger an evaluation.
+        """
+        status = self._last_status
+        if status is None or status.is_safe:
+            return []
+        return list(status.reasons)
+
+    @property
     def is_running(self) -> bool:
         """Whether the monitoring loop is active (S4-1a: ServiceProtocol).
 

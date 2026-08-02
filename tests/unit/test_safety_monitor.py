@@ -606,3 +606,63 @@ class TestPowerFailureActionCallback:
         # First positional arg is the POWER_FAILURE action.
         args, _ = callback.call_args
         assert args[0] == SafetyAction.POWER_FAILURE
+
+
+class TestS41bSafetyAdapters:
+    """S4-1b: SafetyServiceProtocol adapter members on SafetyMonitor.
+
+    These assert the FAIL-SAFE contract for the ``is_safe`` property and the
+    ``get_unsafe_reasons`` method that the Orchestrator's SafetyServiceProtocol
+    consumes. Both are read-only over ``_last_status`` and must never
+    self-trigger an evaluation.
+    """
+
+    def test_is_safe_defaults_false_before_any_evaluation(self):
+        """FAIL-SAFE: is_safe is False when no evaluation has run yet."""
+        monitor = SafetyMonitor()
+        assert monitor._last_status is None
+        assert monitor.is_safe is False
+
+    def test_get_unsafe_reasons_empty_before_any_evaluation(self):
+        """No status yet -> no reasons (empty list, not None)."""
+        monitor = SafetyMonitor()
+        assert monitor.get_unsafe_reasons() == []
+
+    def test_is_safe_reads_last_evaluation_verdict(self):
+        """is_safe mirrors the last evaluate() verdict without re-evaluating."""
+        monitor = SafetyMonitor()
+        monitor._last_status = SafetyStatus(
+            timestamp=datetime.now(),
+            action=SafetyAction.SAFE_TO_OBSERVE,
+            is_safe=True,
+            reasons=["All systems nominal"],
+            alert_level=AlertLevel.INFO,
+        )
+        assert monitor.is_safe is True
+        # Safe verdict surfaces no unsafe reasons.
+        assert monitor.get_unsafe_reasons() == []
+
+    def test_get_unsafe_reasons_returns_reasons_when_unsafe(self):
+        """When the last status is unsafe, its reasons are surfaced."""
+        monitor = SafetyMonitor()
+        monitor._last_status = SafetyStatus(
+            timestamp=datetime.now(),
+            action=SafetyAction.EMERGENCY_CLOSE,
+            is_safe=False,
+            reasons=["rain detected (1 of 2 sensors): Ecowitt", "Wind gust too high"],
+            alert_level=AlertLevel.EMERGENCY,
+        )
+        assert monitor.is_safe is False
+        reasons = monitor.get_unsafe_reasons()
+        assert reasons == [
+            "rain detected (1 of 2 sensors): Ecowitt",
+            "Wind gust too high",
+        ]
+        # Returns a copy, not the internal list.
+        reasons.append("mutation")
+        assert "mutation" not in monitor._last_status.reasons
+
+    def test_is_safe_is_a_property_not_a_method(self):
+        """SafetyServiceProtocol pins is_safe as a property (sync attribute)."""
+        import inspect
+        assert isinstance(inspect.getattr_static(SafetyMonitor, "is_safe"), property)

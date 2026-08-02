@@ -934,6 +934,27 @@ class PowerManager:
         return self._event_log.copy()
 
     @property
+    def on_battery(self) -> bool:
+        """S4-1b Protocol adapter: whether the UPS is running on battery.
+
+        Conforms to ``PowerServiceProtocol.on_battery`` (a sync property).
+        Derived from the current :attr:`status`: ``True`` when the UPS has lost
+        mains (``not status.on_mains``). ``UPSStatus`` defaults to ``on_mains=True``
+        so an un-polled manager reads ``False`` (not on battery).
+        """
+        return not self._status.on_mains
+
+    @property
+    def battery_percent(self) -> int:
+        """S4-1b Protocol adapter: current UPS battery charge percentage.
+
+        Conforms to ``PowerServiceProtocol.battery_percent`` (a sync property).
+        Returns the ``battery_percent`` field of the current :attr:`status`
+        (0-100). Defaults to 100 until the first UPS poll updates it.
+        """
+        return self._status.battery_percent
+
+    @property
     def is_running(self) -> bool:
         """Whether the service lifecycle is active (S4-1a: ServiceProtocol).
 
