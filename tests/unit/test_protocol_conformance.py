@@ -84,19 +84,9 @@ BINDINGS: Tuple[Tuple[str, str, str], ...] = (
 # ---------------------------------------------------------------------------
 KNOWN_GAPS: Dict[Tuple[str, str], str] = {
     # --- MountServiceProtocol <- LX200Client -------------------------------
-    ("LX200Client", "slew_to_coordinates"): (
-        "S4-3: LX200Client exposes sync goto_ra_dec(str, str); no async "
-        "slew_to_coordinates(ra: float, dec: float) yet."
-    ),
-    ("LX200Client", "park"): "S4-3: LX200Client.park is sync def; Protocol pins async.",
-    ("LX200Client", "unpark"): "S4-3: LX200Client.unpark is sync def; Protocol pins async.",
-    ("LX200Client", "is_parked"): (
-        "S4-3: LX200Client.is_parked is a plain method; Protocol pins a property."
-    ),
-    ("LX200Client", "is_tracking"): (
-        "S4-3: LX200Client.is_tracking is a plain method; Protocol pins a property."
-    ),
-    ("LX200Client", "stop"): "S4-3: LX200Client.stop is sync def; ServiceProtocol pins async.",
+    # S4-3 FIXED (removed from backlog): slew_to_coordinates, park, unpark,
+    # is_parked, is_tracking, stop now conform (async coroutines + properties).
+    # Those parametrized cases must PASS now, not xfail.
     ("LX200Client", "start"): "S4-1: LX200Client has no ServiceProtocol.start lifecycle method.",
     ("LX200Client", "is_running"): "S4-1: LX200Client has no ServiceProtocol.is_running property.",
 

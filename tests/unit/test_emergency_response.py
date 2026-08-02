@@ -39,8 +39,10 @@ def config():
 def mock_mount():
     """Create a mock mount client."""
     mount = MagicMock()
-    mount.stop = MagicMock()
-    mount.park = MagicMock(return_value=True)
+    # S4-3: LX200Client.stop/park are now async coroutines -> AsyncMock so the
+    # awaited calls in emergency_park/move_to_safety_position resolve.
+    mount.stop = AsyncMock()
+    mount.park = AsyncMock(return_value=True)
     mount.get_status = MagicMock(return_value=MagicMock(is_parked=True))
     return mount
 

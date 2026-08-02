@@ -193,11 +193,11 @@ class EmergencyResponse:
         for attempt in range(self.config.max_park_retries):
             try:
                 # Stop any current motion first
-                self._mount.stop()
+                await self._mount.stop()
                 await asyncio.sleep(0.5)
 
                 # Execute park command
-                success = self._mount.park()
+                success = await self._mount.park()
 
                 if success:
                     # Wait for park to complete
@@ -304,7 +304,7 @@ class EmergencyResponse:
 
         try:
             # Stop any current motion
-            self._mount.stop()
+            await self._mount.stop()
             await asyncio.sleep(0.5)
 
             # Check if already parked (parked = safe)

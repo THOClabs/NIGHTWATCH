@@ -8,7 +8,7 @@ Co-authored-by: Claude <noreply@anthropic.com>
 """
 
 import pytest
-from unittest.mock import MagicMock, patch, AsyncMock
+from unittest.mock import MagicMock, patch, AsyncMock, PropertyMock
 import socket
 import serial
 
@@ -389,9 +389,9 @@ class TestLX200ClientGetStatus:
 
     @patch.object(LX200Client, "get_ra")
     @patch.object(LX200Client, "get_dec")
-    @patch.object(LX200Client, "is_tracking")
+    @patch.object(LX200Client, "is_tracking", new_callable=PropertyMock)
     @patch.object(LX200Client, "is_slewing")
-    @patch.object(LX200Client, "is_parked")
+    @patch.object(LX200Client, "is_parked", new_callable=PropertyMock)
     @patch.object(LX200Client, "get_pier_side")
     def test_get_status_success(
         self,
@@ -471,9 +471,9 @@ class TestLX200ClientGetStatus:
 
     @patch.object(LX200Client, "get_ra")
     @patch.object(LX200Client, "get_dec")
-    @patch.object(LX200Client, "is_tracking")
+    @patch.object(LX200Client, "is_tracking", new_callable=PropertyMock)
     @patch.object(LX200Client, "is_slewing")
-    @patch.object(LX200Client, "is_parked")
+    @patch.object(LX200Client, "is_parked", new_callable=PropertyMock)
     @patch.object(LX200Client, "get_pier_side")
     def test_get_status_negative_dec(
         self,
@@ -569,14 +569,14 @@ class TestLX200ClientMotionControl:
         assert result is True
 
     @patch("socket.socket")
-    def test_stop(self, mock_socket_class):
+    async def test_stop(self, mock_socket_class):
         mock_socket = MagicMock()
         mock_socket.recv.return_value = b"#"
         mock_socket_class.return_value = mock_socket
 
         client = LX200Client(connection_type=ConnectionType.TCP)
         client.connect()
-        client.stop()
+        await client.stop()
 
         mock_socket.sendall.assert_called_with(b":Q#")
 
@@ -656,7 +656,7 @@ class TestLX200ClientTrackingControl:
 
         client = LX200Client(connection_type=ConnectionType.TCP)
         client.connect()
-        result = client.is_tracking()
+        result = client.is_tracking
 
         assert result is True
 
@@ -668,7 +668,7 @@ class TestLX200ClientTrackingControl:
 
         client = LX200Client(connection_type=ConnectionType.TCP)
         client.connect()
-        result = client.is_tracking()
+        result = client.is_tracking
 
         assert result is False
 
@@ -701,39 +701,39 @@ class TestLX200ClientParkControl:
     """Test park control commands."""
 
     @patch("socket.socket")
-    def test_park_success(self, mock_socket_class):
+    async def test_park_success(self, mock_socket_class):
         mock_socket = MagicMock()
         mock_socket.recv.return_value = b"1#"
         mock_socket_class.return_value = mock_socket
 
         client = LX200Client(connection_type=ConnectionType.TCP)
         client.connect()
-        result = client.park()
+        result = await client.park()
 
         assert result is True
         mock_socket.sendall.assert_called_with(b":hP#")
 
     @patch("socket.socket")
-    def test_park_failure(self, mock_socket_class):
+    async def test_park_failure(self, mock_socket_class):
         mock_socket = MagicMock()
         mock_socket.recv.return_value = b"0#"
         mock_socket_class.return_value = mock_socket
 
         client = LX200Client(connection_type=ConnectionType.TCP)
         client.connect()
-        result = client.park()
+        result = await client.park()
 
         assert result is False
 
     @patch("socket.socket")
-    def test_unpark_success(self, mock_socket_class):
+    async def test_unpark_success(self, mock_socket_class):
         mock_socket = MagicMock()
         mock_socket.recv.return_value = b"1#"
         mock_socket_class.return_value = mock_socket
 
         client = LX200Client(connection_type=ConnectionType.TCP)
         client.connect()
-        result = client.unpark()
+        result = await client.unpark()
 
         assert result is True
         mock_socket.sendall.assert_called_with(b":hR#")
@@ -746,7 +746,7 @@ class TestLX200ClientParkControl:
 
         client = LX200Client(connection_type=ConnectionType.TCP)
         client.connect()
-        result = client.is_parked()
+        result = client.is_parked
 
         assert result is True
 
@@ -758,7 +758,7 @@ class TestLX200ClientParkControl:
 
         client = LX200Client(connection_type=ConnectionType.TCP)
         client.connect()
-        result = client.is_parked()
+        result = client.is_parked
 
         assert result is False
 
