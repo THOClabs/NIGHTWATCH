@@ -1297,32 +1297,30 @@ TELESCOPE_TOOLS: List[Tool] = [
 
 class ToolRegistry:
     """
-    Registry of available tools for the LLM.
+    Schema catalog of available tools for the LLM.
 
-    Manages tool definitions and dispatches function calls.
+    Holds the ``Tool`` definitions and exposes them as OpenAI/Anthropic
+    function-calling schemas (``to_openai_format`` / ``to_anthropic_format``),
+    plus metadata helpers (categories, confirmation flags).
+
+    S4-2: this registry is intentionally schema-only. It no longer carries an
+    execution path. The previous ``execute()`` / ``set_handler()`` / ``_handlers``
+    surface performed a raw, unvalidated ``handler(**arguments)`` splat that
+    duplicated (and bypassed the Pydantic validation of)
+    ``nightwatch.tool_executor.ToolExecutor``. Command dispatch now flows
+    through that single validated boundary; ToolRegistry is the catalog only.
     """
 
     def __init__(self):
         self._tools: Dict[str, Tool] = {}
-        self._handlers: Dict[str, Callable] = {}
 
         # Register default tools
         for tool in TELESCOPE_TOOLS:
             self.register(tool)
 
-    def register(self, tool: Tool, handler: Optional[Callable] = None):
-        """Register a tool."""
+    def register(self, tool: Tool):
+        """Register a tool definition in the schema catalog."""
         self._tools[tool.name] = tool
-        if handler:
-            self._handlers[tool.name] = handler
-        elif tool.handler:
-            self._handlers[tool.name] = tool.handler
-
-    def set_handler(self, tool_name: str, handler: Callable):
-        """Set handler function for a tool."""
-        if tool_name not in self._tools:
-            raise ValueError(f"Unknown tool: {tool_name}")
-        self._handlers[tool_name] = handler
 
     def get_tool(self, name: str) -> Optional[Tool]:
         """Get tool by name."""
@@ -1352,50 +1350,6 @@ class ToolRegistry:
     def get_critical_tools(self) -> List[Tool]:
         """Get all tools that require confirmation (Step 266)."""
         return [t for t in self._tools.values() if t.requires_confirmation]
-
-    async def execute(self, tool_name: str, arguments: Dict[str, Any], confirmed: bool = False) -> str:
-        """
-        Execute a tool with given arguments.
-
-        Args:
-            tool_name: Name of tool to execute
-            arguments: Tool arguments as dictionary
-            confirmed: Whether user has confirmed critical operation (Step 266)
-
-        Returns:
-            Result string for LLM response
-        """
-        if tool_name not in self._tools:
-            return f"Error: Unknown tool '{tool_name}'"
-
-        tool = self._tools[tool_name]
-
-        # Step 266: Check confirmation for critical tools
-        if tool.requires_confirmation and not confirmed:
-            return json.dumps({
-                "status": "confirmation_required",
-                "tool": tool_name,
-                "message": f"'{tool_name}' is a critical operation that requires confirmation. "
-                          f"Please confirm you want to proceed with this action.",
-                "description": tool.description
-            }, indent=2)
-
-        handler = self._handlers.get(tool_name)
-        if not handler:
-            return f"Error: No handler registered for '{tool_name}'"
-
-        try:
-            if asyncio.iscoroutinefunction(handler):
-                result = await handler(**arguments)
-            else:
-                result = handler(**arguments)
-
-            if isinstance(result, dict):
-                return json.dumps(result, indent=2)
-            return str(result)
-
-        except Exception as e:
-            return f"Error executing {tool_name}: {str(e)}"
 
 
 # =============================================================================
