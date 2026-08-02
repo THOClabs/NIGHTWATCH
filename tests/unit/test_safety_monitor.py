@@ -13,7 +13,10 @@ import pytest
 
 # Import safety monitor components
 import sys
-sys.path.insert(0, "/workspaces/NIGHTWATCH/services/safety_monitor")
+import pathlib
+sys.path.insert(
+    0, str(pathlib.Path(__file__).resolve().parents[2] / "services" / "safety_monitor")
+)
 from monitor import (
     SafetyMonitor,
     SafetyStatus,
@@ -23,6 +26,19 @@ from monitor import (
     ObservatoryState,
     SensorInput,
 )
+# SAFE-002 (Risk #9): dual-redundant rain voting. A fully "safe" evaluation
+# now also requires a fresh, dry secondary rain reading, so the happy-path
+# tests below must populate the secondary sensor slot.
+from services.weather.secondary_rain import SecondaryRainReading
+
+
+def _fresh_dry_secondary() -> SecondaryRainReading:
+    """Fresh secondary rain reading reporting dry (for happy-path tests)."""
+    return SecondaryRainReading(
+        is_raining=False,
+        timestamp=datetime.now(),
+        sensor_id="hydreon-rg15",
+    )
 
 
 class TestSafetyThresholds:
@@ -416,6 +432,8 @@ class TestFullEvaluation:
         await monitor.update_sun_altitude(-18.0)  # Night
         await monitor.update_enclosure_status(True)
         await monitor.update_power_status(100.0)
+        # SAFE-002: both rain sensors must be fresh + dry for "all OK".
+        await monitor.update_secondary_rain_sensor(_fresh_dry_secondary())
 
         status = monitor.evaluate()
 
@@ -525,6 +543,9 @@ class TestHysteresis:
     @pytest.mark.asyncio
     async def test_wind_hysteresis(self, monitor, mock_weather):
         """Test wind hysteresis prevents oscillation."""
+        # SAFE-002: provide a fresh, dry secondary rain reading so the
+        # dual-redundant rain vote passes and weather_ok reflects wind alone.
+        await monitor.update_secondary_rain_sensor(_fresh_dry_secondary())
         # Start with safe wind
         await monitor.update_weather(mock_weather)
         status = monitor.evaluate()

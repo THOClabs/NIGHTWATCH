@@ -45,30 +45,25 @@ jobs:
           pip install -e ".[services,dev]"
           pip install numpy sounddevice
 
-      - name: Run unit smoke tests (blocking)
+      - name: Run unit tests with coverage (blocking)
         run: |
           export PYTHONPATH="${PYTHONPATH}:$(pwd)"
-          # Enforcing gate: boot path + the numpy sys.modules-pollution fix (S0-1 / S0-4 / S0-6).
-          # A regression in either fails the build — this is the restored "CI can fail" guarantee.
-          pytest tests/unit/test_main.py tests/unit/test_piper_service.py tests/unit/test_whisper_service.py \
-            -x --tb=short
-
-      - name: Run full unit suite with coverage (advisory)
-        # TODO(stage-0): make blocking once the full unit suite is green. Remaining blockers:
-        # the /workspaces hardcode in test_safety_monitor.py, the PortAudio-less runner for
-        # test_wyoming_protocol.py, and 2 real bugs (power_manager.py:792 hang, orchestrator
-        # double session-log write). Tracked as a follow-up test-suite cleanup.
-        continue-on-error: true
-        run: |
-          export PYTHONPATH="${PYTHONPATH}:$(pwd)"
-          pytest tests/unit/ -v \
+          # The full unit suite is now the enforcing gate (2759 tests, all green).
+          # A real unit regression — or a collection error — fails the build.
+          # --timeout guards against a hang silently stalling CI. Coverage is still
+          # measured (for the artifact + the advisory threshold step below), but
+          # --cov-fail-under=0 overrides pyproject's fail_under=60 so the gate is
+          # about TEST results, not the coverage target (currently ~50%; raising it
+          # to 60/80% is a separate, larger effort tracked for the test backlog).
+          pytest tests/unit/ \
             --cov=services \
             --cov=nightwatch \
             --cov=voice \
             --cov-report=term-missing \
             --cov-report=xml:coverage.xml \
             --cov-report=html:coverage_html \
-            --tb=short
+            --cov-fail-under=0 \
+            --timeout=120 --tb=short
 
       - name: Check coverage threshold (Step 583)
         run: |

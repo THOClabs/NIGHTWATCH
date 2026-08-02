@@ -633,22 +633,27 @@ class FocuserService:
         return True
 
     async def _do_move(self, position: int):
-        """Execute focuser move."""
-        steps = abs(position - self._position)
-        # Simulate movement time (roughly 100 steps/second)
-        move_time = steps / 100.0
+        """Execute focuser move (simulated).
 
-        logger.debug(f"Moving focuser: {self._position} -> {position} ({steps} steps)")
-
-        # Simulate gradual movement
+        The gradual position update is simulated over a small, bounded number
+        of increments rather than in real time proportional to the step count.
+        A wall-clock model (e.g. ~100 steps/sec) makes a large move take
+        minutes of real time - impractical for tests and no extra fidelity for
+        this simulator. The final position is always exact.
+        """
         start_pos = self._position
-        start_time = datetime.now()
+        steps = abs(position - start_pos)
 
-        while self._position != position:
-            await asyncio.sleep(0.1)
-            elapsed = (datetime.now() - start_time).total_seconds()
-            progress = min(1.0, elapsed / move_time)
-            self._position = int(start_pos + (position - start_pos) * progress)
+        logger.debug(f"Moving focuser: {start_pos} -> {position} ({steps} steps)")
+
+        if steps:
+            # Update position progressively so any observer can see intermediate
+            # values, but keep the move fast and independent of distance.
+            increments = min(steps, 20)
+            for i in range(1, increments + 1):
+                await asyncio.sleep(0.001)
+                progress = i / increments
+                self._position = int(start_pos + (position - start_pos) * progress)
 
         self._position = position
         logger.debug(f"Move complete: position {self._position}")
@@ -1907,10 +1912,28 @@ class FocuserService:
     # =========================================================================
 
     def enable_temp_compensation(self):
-        """Enable temperature compensation."""
+        """Enable temperature compensation.
+
+        This is a synchronous method that may legitimately be called from a
+        non-async context (setup code, tests). ``asyncio.create_task`` requires
+        a running event loop, so start the background monitor only when one is
+        present; otherwise defer it rather than raising ``RuntimeError`` and
+        leaking an un-awaited coroutine. In the normal async runtime a loop is
+        running and the monitor starts immediately as before.
+        """
         self._temp_comp_enabled = True
         if not self._temp_monitor_task:
-            self._temp_monitor_task = asyncio.create_task(self._temperature_monitor())
+            try:
+                loop = asyncio.get_running_loop()
+            except RuntimeError:
+                loop = None
+            if loop is not None:
+                self._temp_monitor_task = asyncio.create_task(self._temperature_monitor())
+            else:
+                logger.debug(
+                    "No running event loop; temperature monitor task deferred "
+                    "until compensation is (re)enabled from async context"
+                )
         logger.info("Temperature compensation enabled")
 
     def disable_temp_compensation(self):

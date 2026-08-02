@@ -243,6 +243,14 @@ class CatalogDatabase:
             CatalogObject if found, None otherwise
         """
         query = query.strip().upper()
+
+        # An empty/blank query must not resolve to an arbitrary object. Without
+        # this guard the partial-name branch below runs `LIKE '%%'`, which
+        # matches every row and returns a random object - dangerous for a
+        # voice-driven goto system.
+        if not query:
+            return None
+
         cursor = self._conn.cursor()
 
         # Try exact catalog_id match
@@ -793,6 +801,11 @@ class CatalogService:
             fuzzy_search("orion") -> [(Orion Nebula, 0.95), ...]
             fuzzy_search("betle") -> [(Betelgeuse, 0.75), ...]
         """
+        # An empty/blank query would match every object (target.startswith("")
+        # is always True -> score 0.95), so return nothing for empty input.
+        if not query or not query.strip():
+            return []
+
         cursor = self.db._conn.cursor()
 
         # Get all objects with names

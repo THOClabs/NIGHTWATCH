@@ -498,8 +498,13 @@ class AudioPlayer:
             self._sd = sd
             self._loaded = True
             logger.info("Audio player initialized")
-        except ImportError:
-            logger.warning("sounddevice not installed, using mock audio player")
+        except (ImportError, OSError) as e:
+            # ImportError: sounddevice package not installed.
+            # OSError: package present but the PortAudio C library is missing
+            # (common on headless/CI hosts). Both mean no real audio output is
+            # available, so degrade gracefully to the mock player rather than
+            # crashing playback.
+            logger.warning(f"sounddevice unavailable ({e}), using mock audio player")
             self._sd = None
             self._loaded = True
 
@@ -960,8 +965,10 @@ class AudioCapture:
         try:
             import sounddevice as sd
             self._sd = sd
-        except ImportError:
-            logger.warning("sounddevice not installed, audio capture disabled")
+        except (ImportError, OSError) as e:
+            # ImportError: package missing; OSError: PortAudio C library missing
+            # (headless/CI). Either way, audio capture is unavailable.
+            logger.warning(f"sounddevice unavailable ({e}), audio capture disabled")
             self._sd = None
 
         try:

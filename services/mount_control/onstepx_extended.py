@@ -124,15 +124,20 @@ class OnStepXExtended(LX200Client):
         # OnStepX returns: I = Index detected, R = Recording, P = Playing, r = Ready
         recording = False
         playing = False
-        ready = False
+        # PEC data is "ready" (available for playback) whenever the mount is
+        # not actively (re)recording the correction table. Default to ready so
+        # that, absent a response, callers may still attempt playback.
+        ready = True
         index_detected = False
         record_progress = 0.0
 
         if response:
             recording = "R" in response
             playing = "P" in response
-            ready = "r" in response.lower() or "R" not in response and "P" not in response
             index_detected = "I" in response
+            # Ready unless a recording is in progress: during recording the PEC
+            # table is being written and is not yet usable for playback.
+            ready = not recording
 
             # Get recording progress if recording
             if recording:
