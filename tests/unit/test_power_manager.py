@@ -277,9 +277,16 @@ class TestPowerManager:
 
     def test_get_events_since(self, manager):
         """Test getting events since timestamp."""
-        # Log some events
+        import time
+        # Log an old event, take the cutoff, then a new one. Small sleeps make
+        # the timestamps strictly increasing so the cutoff unambiguously falls
+        # between the two events; without them the three bare datetime.now()
+        # reads can collide within a single microsecond on a fast clock, making
+        # this test flaky (OLD wrongly included, or NEW wrongly excluded).
         manager._log_event("OLD", "Old event")
+        time.sleep(0.005)
         cutoff = datetime.now()
+        time.sleep(0.005)
         manager._log_event("NEW", "New event")
 
         events = manager.get_events_since(cutoff)
