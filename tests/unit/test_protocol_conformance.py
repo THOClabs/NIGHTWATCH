@@ -95,49 +95,28 @@ KNOWN_GAPS: Dict[Tuple[str, str], str] = {
 
     # --- EphemerisServiceProtocol <- EphemerisService ----------------------
     # S4-1a FIXED: start, stop, is_running lifecycle added.
-    # S4-1b (still owed): get_planet_position, get_twilight_times semantic aliases.
-    ("EphemerisService", "get_planet_position"): (
-        "S4-1b: EphemerisService exposes get_body_position(...); no get_planet_position(str)."
-    ),
-    ("EphemerisService", "get_twilight_times"): (
-        "S4-1b: EphemerisService exposes get_twilight_phase(...); no get_twilight_times()."
-    ),
+    # S4-1b FIXED: get_planet_position (-> get_body_position) and
+    # get_twilight_times (-> get_twilight_phase) adapters added; both conform.
 
     # --- WeatherServiceProtocol <- UnifiedWeatherService -------------------
     # S4-1a FIXED: start, stop, is_running lifecycle added.
-    # S4-1b (still owed): is_safe/current_conditions kind + naming reconcile.
-    ("UnifiedWeatherService", "is_safe"): (
-        "S4-1b: UnifiedWeatherService.is_safe is an async coroutine; Protocol pins a "
-        "synchronous property."
-    ),
-    ("UnifiedWeatherService", "current_conditions"): (
-        "S4-1b: UnifiedWeatherService exposes async get_conditions(); no current_conditions property."
-    ),
+    # S4-1b FIXED: the async is_safe was renamed to check_safe; is_safe is now a
+    # sync property (last cached verdict, fail-safe False) and current_conditions
+    # is a property (latest cached UnifiedConditions). Both conform.
 
     # --- SafetyServiceProtocol <- SafetyMonitor ----------------------------
     # S4-1a FIXED: start (begin monitoring), stop (now async), is_running added.
-    # S4-1b (still owed): is_safe/get_unsafe_reasons semantic aliases.
-    ("SafetyMonitor", "is_safe"): (
-        "S4-1b: SafetyMonitor exposes verdict via evaluate() -> SafetyStatus; no is_safe property."
-    ),
-    ("SafetyMonitor", "get_unsafe_reasons"): (
-        "S4-1b: SafetyMonitor surfaces reasons on SafetyStatus; no get_unsafe_reasons() method."
-    ),
+    # S4-1b FIXED: is_safe property (last_status.is_safe, fail-safe False) and
+    # get_unsafe_reasons() (last status reasons, empty if safe/none) added.
 
     # --- CameraServiceProtocol <- ASICamera --------------------------------
     # S4-1a FIXED: start, stop, is_running lifecycle added.
-    # S4-1b (still owed): capture/is_exposing semantic aliases.
-    ("ASICamera", "capture"): (
-        "S4-1b: ASICamera exposes capture_single/capture_frame; no capture(exposure, gain)."
-    ),
-    ("ASICamera", "is_exposing"): "S4-1b: ASICamera has no is_exposing property.",
+    # S4-1b FIXED: capture(exposure, gain) (-> capture_frame) and is_exposing
+    # property (-> _capturing) added; both conform.
 
     # --- GuidingServiceProtocol <- PHD2Client ------------------------------
     # S4-1a FIXED: start, stop, is_running lifecycle added.
-    # S4-1b (still owed): is_guiding semantic alias.
-    ("PHD2Client", "is_guiding"): (
-        "S4-1b: PHD2Client exposes state -> GuideState property; no is_guiding bool property."
-    ),
+    # S4-1b FIXED: is_guiding property (state == GuideState.GUIDING) added.
 
     # --- FocusServiceProtocol <- FocuserService ----------------------------
     # S4-1a FIXED: start, stop, is_running lifecycle added.
@@ -147,16 +126,12 @@ KNOWN_GAPS: Dict[Tuple[str, str], str] = {
 
     # --- AlertServiceProtocol <- AlertManager ------------------------------
     # S4-1a FIXED: start, stop, is_running lifecycle added.
-    # S4-1b (still owed): send_alert semantic alias.
-    ("AlertManager", "send_alert"): (
-        "S4-1b: AlertManager exposes raise_alert(Alert); no send_alert(level: str, message: str)."
-    ),
+    # S4-1b FIXED: send_alert(level, message) (-> raise_alert(Alert)) added.
 
     # --- PowerServiceProtocol <- PowerManager ------------------------------
     # S4-1a FIXED: is_running property added (start/stop already conformed).
-    # S4-1b (still owed): on_battery/battery_percent semantic aliases.
-    ("PowerManager", "on_battery"): "S4-1b: PowerManager has no on_battery property.",
-    ("PowerManager", "battery_percent"): "S4-1b: PowerManager has no battery_percent property.",
+    # S4-1b FIXED: on_battery (not status.on_mains) and battery_percent
+    # (status.battery_percent) properties added; both conform.
 
     # --- EnclosureServiceProtocol <- RoofController ------------------------
     # S4-1a FIXED: start, is_running added (stop/open/close/is_open already conformed).

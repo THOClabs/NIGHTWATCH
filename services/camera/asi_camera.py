@@ -466,6 +466,16 @@ class ASICamera:
         return self._capturing
 
     @property
+    def is_exposing(self) -> bool:
+        """S4-1b Protocol adapter: whether an exposure is currently in flight.
+
+        Conforms to ``CameraServiceProtocol.is_exposing`` (a sync property).
+        Mirrors the existing :attr:`capturing` flag under the Protocol-declared
+        name — ``True`` for the duration of any single-frame or burst exposure.
+        """
+        return self._capturing
+
+    @property
     def info(self) -> Optional[CameraInfo]:
         """Camera information."""
         return self._info
@@ -971,6 +981,18 @@ class ASICamera:
 
         logger.info("Capture stopped")
         return session
+
+    async def capture(self, exposure: float, gain: int = 0) -> Any:
+        """S4-1b Protocol adapter: capture a single frame.
+
+        Conforms to ``CameraServiceProtocol.capture(exposure, gain=0)``. Thin
+        ADAPTER that DELEGATES to the existing :meth:`capture_frame` (the guarded
+        single-frame primitive), returning its raw image ``bytes`` (or ``None``
+        on failure). ``exposure`` is seconds. A ``gain`` of 0 (the Protocol
+        default) is passed through as ``None`` so the camera's current gain is
+        preserved rather than clobbered to zero; any non-zero gain is applied.
+        """
+        return await self.capture_frame(exposure_sec=exposure, gain=gain or None)
 
     async def capture_single(self,
                             exposure_sec: float = 1.0,

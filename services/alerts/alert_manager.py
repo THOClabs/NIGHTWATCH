@@ -589,6 +589,32 @@ class AlertManager:
 
         return True
 
+    async def send_alert(self, level: str, message: str, source: str = "") -> bool:
+        """S4-1b Protocol adapter: send an alert by level name + message.
+
+        Conforms to ``AlertServiceProtocol.send_alert(level, message)``. Thin
+        ADAPTER that constructs an :class:`Alert` and DELEGATES to the existing
+        :meth:`raise_alert` (rate-limiting, dedup, channel routing, escalation,
+        history all live there). ``level`` is a case-insensitive
+        :class:`AlertLevel` name (e.g. ``"warning"``, ``"critical"``);
+        unrecognised values fall back to ``AlertLevel.INFO``. Returns whatever
+        ``raise_alert`` returns (``True`` if dispatched, ``False`` if
+        suppressed).
+        """
+        if isinstance(level, AlertLevel):
+            alert_level = level
+        else:
+            try:
+                alert_level = AlertLevel[str(level).upper()]
+            except KeyError:
+                logger.warning(
+                    f"send_alert: unknown level {level!r}; defaulting to INFO"
+                )
+                alert_level = AlertLevel.INFO
+        return await self.raise_alert(
+            Alert(level=alert_level, source=source, message=message)
+        )
+
     async def _send_to_channel(self, alert: Alert, channel: AlertChannel):
         """Send alert to specific channel."""
         if channel == AlertChannel.LOG:

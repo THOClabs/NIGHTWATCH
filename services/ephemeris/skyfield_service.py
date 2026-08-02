@@ -14,11 +14,12 @@ Uses the Skyfield library with JPL DE440 ephemeris data.
 """
 
 import asyncio
+import logging
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from enum import Enum
 from pathlib import Path
-from typing import Optional, List, Tuple
+from typing import Dict, Optional, List, Tuple
 import math
 
 try:
@@ -320,6 +321,30 @@ class EphemerisService:
             dec_apparent=dec_app.degrees
         )
 
+    def get_planet_position(self, planet: str) -> Optional[tuple]:
+        """S4-1b Protocol adapter: planet position by name -> (ra_hours, dec_degrees).
+
+        Thin ADAPTER conforming to ``EphemerisServiceProtocol.get_planet_position``.
+        Resolves the ``planet`` string to a :class:`CelestialBody` and DELEGATES
+        to the existing :meth:`get_body_position`, projecting its :class:`Position`
+        down to the ``(ra_hours, dec_degrees)`` tuple the Protocol declares.
+
+        Returns ``None`` for an unrecognised body name or if the underlying
+        ephemeris lookup fails, matching the Protocol's ``Optional[tuple]``.
+        """
+        try:
+            body = CelestialBody(planet.lower())
+        except ValueError:
+            return None
+        try:
+            pos = self.get_body_position(body)
+        except Exception as e:  # ephemeris/SDK failure -> no position
+            logging.getLogger("NIGHTWATCH.Ephemeris").error(
+                f"get_planet_position({planet!r}) failed: {e}"
+            )
+            return None
+        return (pos.ra_hours, pos.dec_degrees)
+
     def get_body_altaz(
         self,
         body: CelestialBody,
@@ -433,6 +458,23 @@ class EphemerisService:
             return TwilightPhase.ASTRONOMICAL
         else:
             return TwilightPhase.NIGHT
+
+    def get_twilight_times(self, when: Optional[datetime] = None) -> Dict[str, datetime]:
+        """S4-1b Protocol adapter: twilight snapshot -> {phase_name: timestamp}.
+
+        Thin ADAPTER conforming to ``EphemerisServiceProtocol.get_twilight_times``.
+        DELEGATES to the existing :meth:`get_twilight_phase` and returns the
+        current phase keyed by its name against the evaluation timestamp, so the
+        return shape matches the Protocol's ``Dict[str, datetime]``.
+
+        This is the minimal conforming surface (no product caller consumes it
+        yet); a fuller almanac-based implementation returning each twilight
+        transition's clock time is deferred and would slot in here without
+        changing the signature.
+        """
+        stamp = when or datetime.now(timezone.utc)
+        phase = self.get_twilight_phase(when)
+        return {phase.value: stamp}
 
     def is_astronomical_night(self, when: Optional[datetime] = None) -> bool:
         """Check if it's astronomical night (sun < -18°)."""
