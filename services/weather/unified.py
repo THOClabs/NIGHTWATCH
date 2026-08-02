@@ -161,6 +161,8 @@ class UnifiedWeatherService:
         self._callbacks: List[Callable] = []
         self._latest: Optional[UnifiedConditions] = None
         self._polling_task: Optional[asyncio.Task] = None
+        # S4-1a: ServiceProtocol lifecycle flag (start/stop/is_running).
+        self._running = False
 
         # Initialize Ecowitt client if configured
         if ecowitt_ip:
@@ -194,6 +196,33 @@ class UnifiedWeatherService:
     def latest(self) -> Optional[UnifiedConditions]:
         """Get most recent unified conditions."""
         return self._latest
+
+    @property
+    def is_running(self) -> bool:
+        """Whether the service lifecycle is active (S4-1a: ServiceProtocol)."""
+        return self._running
+
+    async def start(self) -> None:
+        """Start the weather service (S4-1a: ServiceProtocol lifecycle).
+
+        Thin wrapper that DELEGATES to the existing async :meth:`connect`
+        (establishes CloudWatcher connection / verifies Ecowitt). Idempotent.
+        """
+        if self._running:
+            return
+        await self.connect()
+        self._running = True
+
+    async def stop(self) -> None:
+        """Stop the weather service (S4-1a: ServiceProtocol lifecycle).
+
+        Thin wrapper that DELEGATES to the existing async :meth:`disconnect`
+        (cancels polling + disconnects sensors). Idempotent.
+        """
+        if not self._running:
+            return
+        await self.disconnect()
+        self._running = False
 
     async def connect(self) -> bool:
         """

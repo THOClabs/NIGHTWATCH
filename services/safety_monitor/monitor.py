@@ -316,6 +316,11 @@ class SafetyMonitor:
         self._safe_since: Optional[datetime] = None
         self._callbacks: List[Callable] = []
         self._running = False
+        # S4-1a: background task handle for the ServiceProtocol start()/stop()
+        # lifecycle. start() launches run() as a task; stop() cancels it.
+        # Stays None when run() is driven directly (e.g. NightwatchSafetySystem
+        # or the integration tests), in which case stop() only clears _running.
+        self._monitor_task: Optional[asyncio.Task] = None
         # Optional async action callback invoked on power-failure response;
         # stays None until set_action_callback wires one in.
         self._action_callback = None
@@ -373,6 +378,16 @@ class SafetyMonitor:
     def last_status(self) -> Optional[SafetyStatus]:
         """Most recent safety assessment."""
         return self._last_status
+
+    @property
+    def is_running(self) -> bool:
+        """Whether the monitoring loop is active (S4-1a: ServiceProtocol).
+
+        Backed by the same ``_running`` flag the :meth:`run` loop checks, so
+        it reflects the live state of the monitoring loop whether it was
+        started via :meth:`start` or by driving :meth:`run` directly.
+        """
+        return self._running
 
     def register_callback(self, callback: Callable[["SafetyStatus"], None]):
         """
@@ -1685,10 +1700,53 @@ class SafetyMonitor:
 
             await asyncio.sleep(poll_interval)
 
-    def stop(self):
-        """Stop the monitoring loop."""
+    async def start(self, poll_interval: float = 10.0) -> None:
+        """Begin safety monitoring (S4-1a: ServiceProtocol lifecycle).
+
+        Map: ``start`` -> begin monitoring. Launches the existing
+        :meth:`run` loop as a background task and returns immediately so the
+        orchestrator can start every service uniformly. Idempotent: a second
+        call while already running is a no-op (guards against double-start).
+        :meth:`stop` cancels the task.
+
+        ``run`` also sets ``_running = True`` itself; we set it here first so
+        :attr:`is_running` is truthy the instant ``start`` returns, before the
+        task is scheduled.
+        """
+        if self._running:
+            return
+        self._running = True
+        self._monitor_task = asyncio.create_task(self.run(poll_interval))
+
+    async def stop(self) -> None:
+        """Stop safety monitoring (S4-1a: async per ServiceProtocol).
+
+        Was a *synchronous* ``def stop(self)`` before S4-1a; the
+        ServiceProtocol pins ``stop`` as an awaitable, so it is now ``async``.
+        Behavior is preserved: it clears the ``_running`` flag the :meth:`run`
+        loop checks (which lets a directly-driven loop exit) and logs, exactly
+        as the old sync version did. Additionally, if :meth:`start` launched a
+        background task, that task is cancelled and awaited so no orphaned
+        monitoring loop survives.
+
+        SAFETY: every caller MUST now ``await`` this. An un-awaited
+        ``monitor.stop()`` returns a coroutine WITHOUT clearing ``_running``,
+        leaving the safety loop running — an un-awaited coroutine in a safety
+        path silently no-ops. Callers updated in this change:
+        ``NightwatchSafetySystem.stop`` (below) and
+        ``tests/integration/test_safety_cancellation.py``.
+        """
         self._running = False
         logger.info("Safety monitor stopped")
+
+        task = self._monitor_task
+        self._monitor_task = None
+        if task is not None:
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
 
 
 # =============================================================================
@@ -1715,7 +1773,10 @@ class NightwatchSafetySystem:
 
     async def stop(self):
         """Stop all safety monitoring."""
-        self.monitor.stop()
+        # S4-1a: SafetyMonitor.stop is now async (ServiceProtocol pins it as an
+        # awaitable). This caller is already async, so await it — an un-awaited
+        # coroutine here would leave the monitor loop running.
+        await self.monitor.stop()
         for task in self._tasks:
             task.cancel()
 

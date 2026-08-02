@@ -539,7 +539,9 @@ class TestSafe001OrderingThroughRunLoop:
         run_task = asyncio.create_task(monitor.run(poll_interval=0.01))
         # Wait long enough for one full iteration including the settle wait.
         await asyncio.sleep(0.5)
-        monitor.stop()
+        # S4-1a: SafetyMonitor.stop is now async — must be awaited or the
+        # _running flag is never cleared and the loop never exits.
+        await monitor.stop()
         try:
             await asyncio.wait_for(run_task, timeout=2.0)
         except TimeoutError:
@@ -626,7 +628,8 @@ class TestSafe001OrderingThroughRunLoop:
         start = time.monotonic()
         run_task = asyncio.create_task(monitor.run(poll_interval=0.01))
         await asyncio.sleep(0.2)
-        monitor.stop()
+        # S4-1a: SafetyMonitor.stop is now async — must be awaited.
+        await monitor.stop()
         try:
             await asyncio.wait_for(run_task, timeout=2.0)
         except TimeoutError:

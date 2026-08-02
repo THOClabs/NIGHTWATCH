@@ -447,6 +447,8 @@ class AlertManager:
         self._escalation_tasks: Dict[str, asyncio.Task] = {}
         self._callbacks: List[Callable] = []
         self._http_session = None  # Lazy initialized for webhook/ntfy
+        # S4-1a: ServiceProtocol lifecycle flag (start/stop/is_running).
+        self._running = False
 
         # Initialize history database if configured
         self._history_db: Optional[AlertHistoryDB] = None
@@ -1268,6 +1270,35 @@ class AlertManager:
             self._history_db = None
 
         logger.info("Alert manager closed")
+
+    # =========================================================================
+    # SERVICE LIFECYCLE (S4-1a: ServiceProtocol)
+    # =========================================================================
+
+    @property
+    def is_running(self) -> bool:
+        """Whether the service lifecycle is active (S4-1a: ServiceProtocol)."""
+        return self._running
+
+    async def start(self) -> None:
+        """Start the alert manager (S4-1a: ServiceProtocol lifecycle).
+
+        The history DB is opened lazily in ``__init__`` and channels are
+        dialed per-alert, so there is no connect step to delegate to: this
+        correct no-op lifecycle just marks the service running. Idempotent.
+        """
+        self._running = True
+
+    async def stop(self) -> None:
+        """Stop the alert manager (S4-1a: ServiceProtocol lifecycle).
+
+        Thin wrapper that DELEGATES to the existing synchronous :meth:`close`
+        (cancels escalation tasks + closes the history DB). Idempotent.
+        """
+        if not self._running:
+            return
+        self.close()
+        self._running = False
 
     # =========================================================================
     # ESCALATION

@@ -683,6 +683,8 @@ class CatalogService:
     def __init__(self, db_path: str = "nightwatch_catalog.db", cache_size: int = 100):
         self.db = CatalogDatabase(db_path)
         self._cache = LRUCache(maxsize=cache_size)
+        # S4-1a: ServiceProtocol lifecycle flag (start/stop/is_running).
+        self._running = False
 
     def initialize(self):
         """Initialize database with all catalog data."""
@@ -700,6 +702,38 @@ class CatalogService:
     def close(self):
         """Close database connection."""
         self.db.close()
+
+    # =========================================================================
+    # SERVICE LIFECYCLE (S4-1a: ServiceProtocol)
+    # =========================================================================
+
+    @property
+    def is_running(self) -> bool:
+        """Whether the service lifecycle is active (S4-1a: ServiceProtocol)."""
+        return self._running
+
+    async def start(self) -> None:
+        """Start the catalog service (S4-1a: ServiceProtocol lifecycle).
+
+        Thin wrapper that DELEGATES to the existing synchronous
+        :meth:`initialize` (opens the SQLite connection + loads catalogs).
+        Idempotent.
+        """
+        if self._running:
+            return
+        self.initialize()
+        self._running = True
+
+    async def stop(self) -> None:
+        """Stop the catalog service (S4-1a: ServiceProtocol lifecycle).
+
+        Thin wrapper that DELEGATES to the existing synchronous
+        :meth:`close` (closes the SQLite connection). Idempotent.
+        """
+        if not self._running:
+            return
+        self.close()
+        self._running = False
 
     def clear_cache(self):
         """Clear the lookup cache."""

@@ -504,6 +504,10 @@ class RoofController:
         self._last_rain_time: Optional[datetime] = None
         self._status_task: Optional[asyncio.Task] = None
         self._callbacks: List[Callable] = []
+        # S4-1a: ServiceProtocol lifecycle flag (start/is_running). The
+        # ServiceProtocol.stop maps to the existing async motion stop() below,
+        # so only start() and is_running are added here.
+        self._running = False
         # GPIO backend handle; None in simulation so _run_motor's current
         # monitoring is skipped instead of raising AttributeError.
         self._gpio = None
@@ -547,6 +551,24 @@ class RoofController:
     def is_open(self) -> bool:
         """Check if roof is fully open."""
         return self._state == RoofState.OPEN
+
+    @property
+    def is_running(self) -> bool:
+        """Whether the service lifecycle is active (S4-1a: ServiceProtocol)."""
+        return self._running
+
+    async def start(self) -> None:
+        """Start the enclosure service (S4-1a: ServiceProtocol lifecycle).
+
+        Thin wrapper that DELEGATES to the existing async :meth:`connect`
+        (opens the controller link + starts the status loop). Idempotent.
+        The ServiceProtocol ``stop`` maps to the existing async :meth:`stop`
+        (halt roof motion), which is left unchanged.
+        """
+        if self._running:
+            return
+        await self.connect()
+        self._running = True
 
     @property
     def is_closed(self) -> bool:
