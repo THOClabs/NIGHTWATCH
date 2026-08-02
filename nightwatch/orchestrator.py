@@ -2073,9 +2073,9 @@ class Orchestrator:
                 logger.error(f"Failed to close enclosure during shutdown: {e}")
                 self.record_service_error("enclosure")
 
-        # Step 254: Save session log
+        # Step 254: End the session. end_session() saves the session log itself,
+        # so it must not be saved separately here (that produced a double write).
         if self.session.is_observing:
-            await self._save_session_log()
             await self.end_session()
 
     async def _save_session_log(self):

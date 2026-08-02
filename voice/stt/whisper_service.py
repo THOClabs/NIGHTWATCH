@@ -26,7 +26,10 @@ import numpy as np
 try:
     import sounddevice as sd
     SOUNDDEVICE_AVAILABLE = True
-except ImportError:
+except (ImportError, OSError):
+    # sounddevice raises OSError (not ImportError) when the PortAudio system
+    # library is absent (e.g. a headless CI runner). Degrade gracefully.
+    sd = None
     SOUNDDEVICE_AVAILABLE = False
 
 # Try to import neural VAD (pymicro-vad)

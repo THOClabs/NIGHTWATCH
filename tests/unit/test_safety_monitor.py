@@ -13,7 +13,10 @@ import pytest
 
 # Import safety monitor components
 import sys
-sys.path.insert(0, "/workspaces/NIGHTWATCH/services/safety_monitor")
+import pathlib
+sys.path.insert(
+    0, str(pathlib.Path(__file__).resolve().parents[2] / "services" / "safety_monitor")
+)
 from monitor import (
     SafetyMonitor,
     SafetyStatus,
