@@ -20,7 +20,7 @@ masquerades as measured or specified data.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 from . import units as u
 
@@ -199,8 +199,9 @@ ENC_MOTOR_AMT103 = Encoder("AMT103-V motor-side", counts_per_rev_native=8192.0, 
 ENC_AXIS_AS5600 = Encoder("AS5600 12-bit on-axis", counts_per_rev_native=4096.0, on_axis=True)
 
 # Bold v2 proposal: on-axis absolute tape ring (Renishaw RESA-class) sized for sub-arcsec.
-# A 200 mm ring at 20 um pitch with x4096 interpolation ~ 2.6e9 counts/rev; we spec a
-# conservative delivered figure and let the encoder budget check it.
+# A ~200 mm ring (circumference pi*200 = 628 mm) at ~15 um signal pitch gives ~41,900
+# periods, and Renishaw x5000-class interpolation yields ~2.3e8 counts/rev (~0.0055
+# arcsec/LSB). We use that delivered figure and let the encoder budget check it.
 ENC_AXIS_RESA = Encoder("Renishaw RESA ring on-axis (proposed)", counts_per_rev_native=234_000_000.0, on_axis=True)
 
 

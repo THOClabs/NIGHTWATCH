@@ -17,7 +17,7 @@ import math
 
 from . import params as P
 from . import units as u
-from .budget import BudgetResult, Verdict, verdict_from_sf
+from .budget import BudgetResult, verdict_from_sf
 
 # Modelled geometry (DERIVED estimates; the pier/stiffness modules refine these).
 RA_CG_OFFSET_M = 0.20          # horizontal CG offset of payload from the polar axis
@@ -90,8 +90,9 @@ def evaluate(ota_key: str = "MN78", counterweight_free: bool = True) -> BudgetRe
         title="Axis torque budget",
         verdict=verdict,
         headline=(
-            f"{ota.name}, {mode}: RA needs {ra['total']:.1f} Nm vs 127 Nm rated "
-            f"(SF {ra_sf_rated:.1f}); DEC needs {dec['total']:.1f} Nm vs 70 Nm rated "
+            f"{ota.name}, {mode}: RA needs {ra['total']:.1f} Nm vs "
+            f"{P.RA_DRIVE.rated_torque_Nm:.0f} Nm rated (SF {ra_sf_rated:.1f}); "
+            f"DEC needs {dec['total']:.1f} Nm vs {P.DEC_DRIVE.rated_torque_Nm:.0f} Nm rated "
             f"(SF {dec_sf_rated:.1f})."
         ),
         target="Required axis torque < rated (SF>=2 continuous, peak covers goto)",
@@ -112,6 +113,8 @@ def evaluate(ota_key: str = "MN78", counterweight_free: bool = True) -> BudgetRe
         f"RA CG offset from polar axis = {RA_CG_OFFSET_M*1000:.0f} mm (GEM geometry estimate, DERIVED)",
         f"Balance residual (counterweighted) = {BALANCE_ERROR_FRAC*100:.0f}% (ASSUMED)",
         f"Drive+bearing friction = {FRICTION_FRACTION*100:.0f}% of rated torque (ASSUMED)",
+        f"DEC wind center-of-pressure at {DEC_WIND_LEVER_FRAC*100:.0f}% of tube length "
+        f"from the DEC pivot (ASSUMED, conservative; governs the DEC total).",
         "Wind torque uses the 35 mph emergency-close gust (max wind while open), SOURCED.",
         f"Air density {P.SITE.air_density:.3f} kg/m^3 at 1800 m (DERIVED), 17% below sea level.",
     ]
