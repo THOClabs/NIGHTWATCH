@@ -95,6 +95,8 @@ class LX200Client:
         self._connection = None
         self._lock = threading.Lock()
         self._connected = False
+        # S4-1a: ServiceProtocol lifecycle flag (start/stop/is_running).
+        self._running = False
 
     def connect(self) -> bool:
         """Establish connection to mount controller."""
@@ -125,6 +127,27 @@ class LX200Client:
                 self._connection.close()
                 self._connection = None
             self._connected = False
+
+    # =========================================================================
+    # SERVICE LIFECYCLE (S4-1a: ServiceProtocol)
+    # =========================================================================
+
+    @property
+    def is_running(self) -> bool:
+        """Whether the service lifecycle is active (S4-1a: ServiceProtocol)."""
+        return self._running
+
+    async def start(self) -> None:
+        """Start the mount service (S4-1a: ServiceProtocol lifecycle).
+
+        Thin lifecycle wrapper that DELEGATES to the existing synchronous
+        :meth:`connect`. Idempotent: a second call while running is a no-op.
+        ``stop`` (already async from S4-3) tears the connection down.
+        """
+        if self._running:
+            return
+        self.connect()
+        self._running = True
 
     def _send_command(self, command: str) -> Optional[str]:
         """Send command and receive response."""

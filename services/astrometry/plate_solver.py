@@ -177,6 +177,35 @@ class PlateSolver:
         # a subprocess that died on its own. Cleared at the top of every
         # public solve() call so a previous cancel doesn't poison the next.
         self._cancelled: bool = False
+        # S4-1a: ServiceProtocol lifecycle flag (start/stop/is_running).
+        self._running = False
+
+    # =========================================================================
+    # SERVICE LIFECYCLE (S4-1a: ServiceProtocol)
+    # =========================================================================
+
+    @property
+    def is_running(self) -> bool:
+        """Whether the service lifecycle is active (S4-1a: ServiceProtocol)."""
+        return self._running
+
+    async def start(self) -> None:
+        """Start the plate solver (S4-1a: ServiceProtocol lifecycle).
+
+        The solver holds no persistent resource (each :meth:`solve` spawns
+        its own subprocess), so this is a correct no-op lifecycle that just
+        marks the service running. Idempotent.
+        """
+        self._running = True
+
+    async def stop(self) -> None:
+        """Stop the plate solver (S4-1a: ServiceProtocol lifecycle).
+
+        No persistent resource to tear down; clears the running flag. An
+        in-flight solve is aborted via the distinct :meth:`cancel`.
+        Idempotent.
+        """
+        self._running = False
 
     async def solve(self,
                    image_path: str,

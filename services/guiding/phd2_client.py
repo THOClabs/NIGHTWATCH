@@ -127,10 +127,42 @@ class PHD2Client:
         self._rms_alert_threshold: float = 2.0  # arcsec
         self._rms_alert_callback: Optional[Callable] = None
 
+        # S4-1a: ServiceProtocol lifecycle flag (start/stop/is_running).
+        self._running = False
+
     @property
     def connected(self) -> bool:
         """Check if connected to PHD2."""
         return self._connected
+
+    @property
+    def is_running(self) -> bool:
+        """Whether the service lifecycle is active (S4-1a: ServiceProtocol)."""
+        return self._running
+
+    async def start(self) -> None:
+        """Start the guiding client (S4-1a: ServiceProtocol lifecycle).
+
+        Thin wrapper that DELEGATES to the existing async :meth:`connect`
+        (opens the PHD2 socket + event listener). Idempotent.
+        """
+        if self._running:
+            return
+        await self.connect()
+        self._running = True
+
+    async def stop(self) -> None:
+        """Stop the guiding client (S4-1a: ServiceProtocol lifecycle).
+
+        Thin wrapper that DELEGATES to the existing async :meth:`disconnect`
+        (stops the event listener + closes the socket). Idempotent. This is
+        the connection lifecycle stop; guiding itself is stopped via the
+        distinct :meth:`stop_guiding`.
+        """
+        if not self._running:
+            return
+        await self.disconnect()
+        self._running = False
 
     @property
     def state(self) -> GuideState:

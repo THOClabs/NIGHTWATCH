@@ -447,11 +447,18 @@ class ASICamera:
         self._capturing = False
         self._current_session: Optional[CaptureSession] = None
         self._settings = CameraSettings()
+        # S4-1a: ServiceProtocol lifecycle flag (start/stop/is_running).
+        self._running = False
 
     @property
     def initialized(self) -> bool:
         """Check if camera is initialized."""
         return self._initialized
+
+    @property
+    def is_running(self) -> bool:
+        """Whether the service lifecycle is active (S4-1a: ServiceProtocol)."""
+        return self._running
 
     @property
     def capturing(self) -> bool:
@@ -528,6 +535,33 @@ class ASICamera:
         self._initialized = False
         self._camera = None
         logger.info("Camera closed")
+
+    # =========================================================================
+    # SERVICE LIFECYCLE (S4-1a: ServiceProtocol)
+    # =========================================================================
+
+    async def start(self) -> None:
+        """Start the camera service (S4-1a: ServiceProtocol lifecycle).
+
+        Thin wrapper that DELEGATES to the existing synchronous
+        :meth:`initialize` (opens the SDK / connects to the camera).
+        Idempotent.
+        """
+        if self._running:
+            return
+        self.initialize()
+        self._running = True
+
+    async def stop(self) -> None:
+        """Stop the camera service (S4-1a: ServiceProtocol lifecycle).
+
+        Thin wrapper that DELEGATES to the existing synchronous
+        :meth:`close` (closes the camera handle). Idempotent.
+        """
+        if not self._running:
+            return
+        self.close()
+        self._running = False
 
     def _apply_settings(self, settings: CameraSettings):
         """Apply camera settings."""

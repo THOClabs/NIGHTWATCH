@@ -489,6 +489,8 @@ class FocuserService:
         self._temp_comp_enabled = False
         self._temp_monitor_task: Optional[asyncio.Task] = None
         self._callbacks: List[Callable] = []
+        # S4-1a: ServiceProtocol lifecycle flag (start/stop/is_running).
+        self._running = False
 
         # Step 188: Position history tracking
         self._position_history: List[FocusPositionRecord] = []
@@ -503,6 +505,33 @@ class FocuserService:
     def connected(self) -> bool:
         """Check if focuser is connected."""
         return self._connected
+
+    @property
+    def is_running(self) -> bool:
+        """Whether the service lifecycle is active (S4-1a: ServiceProtocol)."""
+        return self._running
+
+    async def start(self) -> None:
+        """Start the focuser service (S4-1a: ServiceProtocol lifecycle).
+
+        Thin wrapper that DELEGATES to the existing async :meth:`connect`.
+        Idempotent.
+        """
+        if self._running:
+            return
+        await self.connect()
+        self._running = True
+
+    async def stop(self) -> None:
+        """Stop the focuser service (S4-1a: ServiceProtocol lifecycle).
+
+        Thin wrapper that DELEGATES to the existing async :meth:`disconnect`
+        (cancels temp-compensation task + disconnects). Idempotent.
+        """
+        if not self._running:
+            return
+        await self.disconnect()
+        self._running = False
 
     @property
     def state(self) -> FocuserState:

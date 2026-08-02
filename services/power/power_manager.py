@@ -933,6 +933,16 @@ class PowerManager:
         """Power event history."""
         return self._event_log.copy()
 
+    @property
+    def is_running(self) -> bool:
+        """Whether the service lifecycle is active (S4-1a: ServiceProtocol).
+
+        Backed by the existing ``_running`` flag that :meth:`start` sets True
+        and :meth:`stop` clears — both of which already conform to the
+        ServiceProtocol, so this property is the only piece S4-1a adds.
+        """
+        return self._running
+
     # =========================================================================
     # LIFECYCLE
     # =========================================================================

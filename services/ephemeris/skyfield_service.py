@@ -207,6 +207,8 @@ class EphemerisService:
         self._earth = None
         self._observer = None
         self._initialized = False
+        # S4-1a: ServiceProtocol lifecycle flag (start/stop/is_running).
+        self._running = False
 
     def initialize(self):
         """Load ephemeris data (can be slow on first run)."""
@@ -239,6 +241,36 @@ class EphemerisService:
         """Ensure service is initialized."""
         if not self._initialized:
             self.initialize()
+
+    # =========================================================================
+    # SERVICE LIFECYCLE (S4-1a: ServiceProtocol)
+    # =========================================================================
+
+    @property
+    def is_running(self) -> bool:
+        """Whether the service lifecycle is active (S4-1a: ServiceProtocol)."""
+        return self._running
+
+    async def start(self) -> None:
+        """Start the ephemeris service (S4-1a: ServiceProtocol lifecycle).
+
+        Thin wrapper that DELEGATES to the existing synchronous
+        :meth:`initialize` (loads the Skyfield timescale + ephemeris).
+        Idempotent.
+        """
+        if self._running:
+            return
+        self.initialize()
+        self._running = True
+
+    async def stop(self) -> None:
+        """Stop the ephemeris service (S4-1a: ServiceProtocol lifecycle).
+
+        The Skyfield ephemeris holds no external connection to tear down,
+        so this correct no-op lifecycle just clears the running flag.
+        Idempotent.
+        """
+        self._running = False
 
     def _get_time(self, dt: Optional[datetime] = None):
         """Get Skyfield time object."""
