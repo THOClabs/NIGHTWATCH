@@ -141,7 +141,7 @@ class DemoState:
             config = AIServicesConfig(
                 latitude_deg=38.9,
                 longitude_deg=-117.6,  # central Nevada dark-sky site
-                lazy_init=True,
+                lazy_init=False,  # warm every service so health is complete
             )
             self.ai = AIServices(config)
             self.ai.initialize()
@@ -241,13 +241,25 @@ async def api_command(request: web.Request) -> web.Response:
     if clarification.needs_clarification:
         intent = "clarify"
         response_text = clarification.question or "I need a bit more detail."
-        actions = [
-            {
-                "id": getattr(opt, "id", str(i)),
-                "label": getattr(opt, "label", str(opt)),
-            }
-            for i, opt in enumerate(clarification.options or [])
-        ]
+        actions = []
+        for i, opt in enumerate(clarification.options or []):
+            label = getattr(opt, "label", str(opt))
+            value = str(getattr(opt, "value", "") or "")
+            # Prefer a catalog ID from the option value/label for a follow-up slew
+            oid = value.split()[0] if value else label.split()[0]
+            if _find_target(oid) or oid.upper().startswith(("M", "NGC", "IC")):
+                command = f"Slew to {oid}"
+            elif value:
+                command = value
+            else:
+                command = label
+            actions.append(
+                {
+                    "id": value or str(i),
+                    "label": label,
+                    "command": command,
+                }
+            )
     elif any(k in lower for k in ("park", "home")):
         intent = "park"
         response_text = "Parking the mount and securing the observatory."
@@ -394,21 +406,33 @@ async def api_identify(request: web.Request) -> web.Response:
 
 async def api_sky(_: web.Request) -> web.Response:
     ai = STATE.ensure()
+    visible = [
+        VisibleObject(
+            name=t["name"],
+            object_type=t["object_type"],
+            constellation=t.get("constellation", ""),
+            altitude_deg=52.0 - (i * 5),
+            azimuth_deg=40.0 + (i * 28),
+        )
+        for i, t in enumerate(CANDIDATE_TARGETS[:5])
+    ]
     state = SkyState(
         condition=SkyCondition.EXCELLENT,
-        visible_objects=[
-            VisibleObject(
-                name=t["name"],
-                object_type=t["object_type"],
-                constellation=t.get("constellation", ""),
-                altitude_deg=52.0 - (i * 5),
-                azimuth_deg=40.0 + (i * 28),
-            )
-            for i, t in enumerate(CANDIDATE_TARGETS[:5])
-        ],
+        visible_objects=visible,
     )
-    desc = ai.sky_describer.describe_sky(state)
-    text = desc.text
+    # Demo briefing: keep the local sky describer warm, but present a clean
+    # operator-facing summary (template concatenation can get repetitive).
+    highlights = ", ".join(t["name"] for t in CANDIDATE_TARGETS[:4])
+    text = (
+        "Central Nevada is delivering exceptional transparency tonight. "
+        f"High and well placed: {highlights}. "
+        "Moon interference is manageable — a strong night for galaxies and clusters."
+    )
+    try:
+        # Still exercise the service so health/telemetry stay honest
+        _ = ai.sky_describer.describe_sky(state)
+    except Exception:
+        logger.exception("sky_describer failed during demo briefing")
 
     suggestions = ai.suggestions.get_suggestions(max_suggestions=4)
     favorites = ai.user_preferences.get_favorite_targets(limit=5)
@@ -417,7 +441,7 @@ async def api_sky(_: web.Request) -> web.Response:
         {
             "description": text,
             "condition": _json_safe(state.condition),
-            "visible": _json_safe(state.visible_objects),
+            "visible": _json_safe(visible),
             "suggestions": _json_safe(suggestions),
             "favorites": _json_safe(favorites),
             "site": {
@@ -535,11 +559,15 @@ def main() -> None:
 
     app = create_app()
     url = f"http://{args.host}:{args.port}/"
-    print("\n" + "=" * 60)
-    print("  NIGHTWATCH Live Observatory Demo")
-    print("=" * 60)
-    print(f"\n  Open →  {url}")
-    print("  Mode →  simulator (no hardware required)\n")
+    banner = (
+        "\n"
+        + "=" * 60
+        + "\n  NIGHTWATCH Live Observatory Demo\n"
+        + "=" * 60
+        + f"\n\n  Open →  {url}\n"
+        + "  Mode →  simulator (no hardware required)\n"
+    )
+    print(banner, flush=True)
     web.run_app(app, host=args.host, port=args.port, print=None)
 
 

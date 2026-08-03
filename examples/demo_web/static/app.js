@@ -1,8 +1,9 @@
 const PROMPTS = [
-  "Slew to Andromeda",
+  "Slew to M31",
   "What's the weather like?",
   "Schedule tonight",
   "Go to the nebula",
+  "Slew to Andromeda",
   "Nightwatch, watch for meteors",
   "Park the telescope",
 ];
@@ -41,7 +42,9 @@ function addMessage({ role, text, meta, actions }) {
       const btn = document.createElement("button");
       btn.type = "button";
       btn.textContent = action.label;
-      btn.addEventListener("click", () => sendCommand(action.label));
+      btn.addEventListener("click", () =>
+        sendCommand(action.command || action.label)
+      );
       row.appendChild(btn);
     }
     el.appendChild(row);
@@ -306,7 +309,7 @@ setInterval(tickClock, 1000);
 
 /* -------- Animated starfield -------- */
 (function starfield() {
-  const canvas = document.getElementById("sky");
+  const canvas = document.getElementById("sky-canvas");
   const ctx = canvas.getContext("2d");
   let stars = [];
   let w = 0;
