@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>NIGHTWATCH — Live Observatory Demo</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Outfit:wght@300;400;500;600;700&family=Syne:wght@600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/app.css" />
+</head>
+<body>
+  <canvas id="sky" aria-hidden="true"></canvas>
+  <div class="atmosphere" aria-hidden="true"></div>
+
+  <header class="topbar">
+    <a class="mark" href="#top" aria-label="NIGHTWATCH home">
+      <span class="mark-beacon"></span>
+      <span class="mark-name">NIGHTWATCH</span>
+    </a>
+    <nav class="topnav">
+      <a href="#console">Console</a>
+      <a href="#schedule">Schedule</a>
+      <a href="#identify">Identify</a>
+      <a href="#health">Systems</a>
+    </nav>
+    <div class="status-chip" id="mode-chip">
+      <span class="pulse"></span>
+      <span>SIMULATOR</span>
+    </div>
+  </header>
+
+  <main id="top">
+    <section class="hero">
+      <p class="hero-site" id="site-line">Central Nevada · Dark Sky Site</p>
+      <h1 class="brand">NIGHTWATCH</h1>
+      <p class="hero-line">Voice at the eyepiece.</p>
+      <p class="hero-sub">
+        Local AI for an autonomous Maksutov-Newtonian observatory —
+        schedule, identify, and command without the cloud.
+      </p>
+      <div class="cta-row">
+        <a class="btn primary" href="#console">Open live console</a>
+        <button class="btn ghost" type="button" id="btn-sky-brief">Sky briefing</button>
+      </div>
+      <p class="hero-meta" id="hero-meta">Warming AI services…</p>
+    </section>
+
+    <section class="panel" id="console">
+      <div class="panel-head">
+        <h2>Voice console</h2>
+        <p>Speak in type — vocabulary, clarification, and intent run live.</p>
+      </div>
+      <div class="console-grid">
+        <div class="console-feed" id="chat-feed" aria-live="polite"></div>
+        <aside class="console-side">
+          <h3>Try saying</h3>
+          <div class="chip-stack" id="prompt-chips"></div>
+          <div class="stat-block">
+            <div><span>Wake word</span><strong id="wake-word">nightwatch</strong></div>
+            <div><span>Detections</span><strong id="wake-count">0</strong></div>
+            <div><span>Vocab terms</span><strong id="vocab-count">—</strong></div>
+          </div>
+        </aside>
+      </div>
+      <form class="command-form" id="command-form">
+        <label class="sr-only" for="command-input">Observatory command</label>
+        <input
+          id="command-input"
+          name="command"
+          autocomplete="off"
+          placeholder='“Slew to Andromeda” or “Nightwatch, what’s the weather?”'
+        />
+        <button class="btn primary" type="submit">Send</button>
+      </form>
+    </section>
+
+    <section class="panel" id="schedule">
+      <div class="panel-head">
+        <h2>Tonight’s schedule</h2>
+        <p>Weather-aware ranking with moon avoidance and condition scores.</p>
+      </div>
+      <p class="narration" id="schedule-narration">Building observing plan…</p>
+      <div class="schedule-meta" id="schedule-meta"></div>
+      <div class="target-board" id="target-board"></div>
+    </section>
+
+    <section class="panel" id="identify">
+      <div class="panel-head">
+        <h2>Object identification</h2>
+        <p>Offline catalog match by coordinates, ID, or asterism pattern.</p>
+      </div>
+      <div class="identify-grid">
+        <form class="identify-form" id="coord-form">
+          <h3>By coordinates</h3>
+          <div class="field-row">
+            <label>RA (hours)<input name="ra" type="number" step="0.001" value="0.712" /></label>
+            <label>Dec (°)<input name="dec" type="number" step="0.001" value="41.269" /></label>
+          </div>
+          <button class="btn secondary" type="submit">Identify</button>
+        </form>
+        <form class="identify-form" id="catalog-form">
+          <h3>By catalog ID</h3>
+          <label>Object<input name="object_id" value="M42" placeholder="M42, NGC 7000…" /></label>
+          <button class="btn secondary" type="submit">Look up</button>
+        </form>
+        <form class="identify-form" id="pattern-form">
+          <h3>Asterism pattern</h3>
+          <label>Stars<input name="stars" value="Vega, Deneb, Altair" /></label>
+          <button class="btn secondary" type="submit">Match pattern</button>
+        </form>
+      </div>
+      <div class="identify-result" id="identify-result" hidden></div>
+    </section>
+
+    <section class="panel sky-panel" id="sky">
+      <div class="panel-head">
+        <h2>Sky state</h2>
+        <p>Natural-language briefing from the local sky describer.</p>
+      </div>
+      <blockquote class="sky-quote" id="sky-quote">Listening to the night…</blockquote>
+      <div class="visible-row" id="visible-row"></div>
+    </section>
+
+    <section class="panel" id="health">
+      <div class="panel-head">
+        <h2>Systems</h2>
+        <p>Eleven v0.5 AI services — all local, all offline-capable.</p>
+      </div>
+      <div class="health-summary" id="health-summary"></div>
+      <div class="health-grid" id="health-grid"></div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <span>NIGHTWATCH · Intes Micro MN76 · OnStepX · DGX Spark</span>
+    <span id="footer-clock"></span>
+  </footer>
+
+  <script src="/app.js" type="module"></script>
+</body>
+</html>

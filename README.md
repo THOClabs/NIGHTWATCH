@@ -30,6 +30,10 @@ pytest tests/unit/ -v
 
 # Start with simulators (no hardware required)
 python -m nightwatch.main --simulator
+
+# Or launch the interactive AI demo console (no hardware)
+python examples/v05_ai_demo.py
+# → http://127.0.0.1:8765
 ```
 
 **Voice Commands** (examples):

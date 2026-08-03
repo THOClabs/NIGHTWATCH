@@ -2,18 +2,20 @@
 """
 NIGHTWATCH v0.5 AI Enhancement Demonstration
 
-This script demonstrates all v0.5 AI capabilities:
-- Intelligent Scheduling (weather-aware, moon avoidance, scoring)
-- Natural Language (context, clarification, suggestions, descriptions)
-- Voice Enhancement (vocabulary, wake word training)
-- Object Identification (offline recognition)
+Launches the interactive Live Observatory Console by default —
+a browser UI over scheduling, NLP, voice enhancement, and object ID.
 
-Run with: python examples/v05_ai_demo.py
+    python examples/v05_ai_demo.py              # open web console
+    python examples/v05_ai_demo.py --cli        # classic terminal walkthrough
+    python examples/v05_ai_demo.py --host 0.0.0.0 --port 8765
 """
 
-from datetime import datetime, timedelta
-from pathlib import Path
+from __future__ import annotations
+
+import argparse
 import sys
+from datetime import datetime
+from pathlib import Path
 
 # Add parent to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -25,14 +27,13 @@ def print_section(title: str) -> None:
     """Print a section header."""
     print(f"\n{'=' * 60}")
     print(f"  {title}")
-    print('=' * 60)
+    print("=" * 60)
 
 
 def demo_scheduling(ai: AIServices) -> None:
     """Demonstrate intelligent scheduling capabilities."""
     print_section("Intelligent Scheduling (Steps 116-119)")
 
-    # Sample targets for tonight
     candidates = [
         {
             "id": "M31",
@@ -73,7 +74,7 @@ def demo_scheduling(ai: AIServices) -> None:
 
     print(f"   Scheduled {result['target_count']} targets")
     print(f"   Total observation time: {result['total_minutes']:.0f} minutes")
-    print(f"\n   Narration: \"{result['narration']}\"")
+    print(f'\n   Narration: "{result["narration"]}"')
 
     print("\n2. Evaluating individual target (M31)...")
     info = ai.describe_target("M31", 0.712, 41.269, "galaxy")
@@ -92,7 +93,6 @@ def demo_nlp(ai: AIServices) -> None:
     """Demonstrate natural language capabilities."""
     print_section("Natural Language Processing (Steps 128-131, 137)")
 
-    # Multi-turn context
     print("\n1. Multi-turn conversation context...")
     context = ai.context_manager
     context.add_user_message("Point the telescope at M31")
@@ -104,27 +104,23 @@ def demo_nlp(ai: AIServices) -> None:
     if recent:
         last_msg = recent[-1]
         content = last_msg.get("content", "") if isinstance(last_msg, dict) else str(last_msg)
-        print(f"   Last entry: \"{content[:60]}...\"")
+        print(f'   Last entry: "{content[:60]}..."')
 
-    # Clarification
     print("\n2. Clarification service...")
     clarification = ai.clarification
     result = clarification.check_command("Go to the nebula")
-    print(f"   Input: \"Go to the nebula\"")
+    print('   Input: "Go to the nebula"')
     print(f"   Needs clarification: {result.needs_clarification}")
     if result.needs_clarification:
         print(f"   Reason: {result.ambiguity_type.value if result.ambiguity_type else 'N/A'}")
 
-    # Suggestions
     print("\n3. Proactive suggestions...")
     suggestions = ai.suggestions
-    # Simulate some context
     suggestion_list = suggestions.get_suggestions(max_suggestions=2)
     print(f"   Generated {len(suggestion_list)} suggestions")
     for s in suggestion_list[:2]:
         print(f"   - [{s.priority.value}] {s.text}")
 
-    # User preferences
     print("\n4. User preferences learning...")
     prefs = ai.user_preferences
     prefs.record_target_observation("M31", success=True, quality=0.9)
@@ -132,10 +128,10 @@ def demo_nlp(ai: AIServices) -> None:
     fav = prefs.get_favorite_targets(limit=3)
     print(f"   Recorded observations, tracking {len(fav)} favorites")
 
-    # Sky description
     print("\n5. Natural sky descriptions...")
     describer = ai.sky_describer
-    from services.nlp import SkyState, VisibleObject, SkyCondition
+    from services.nlp import SkyCondition, SkyState, VisibleObject
+
     state = SkyState(
         condition=SkyCondition.GOOD,
         visible_objects=[
@@ -149,14 +145,13 @@ def demo_nlp(ai: AIServices) -> None:
         ],
     )
     desc = describer.describe_sky(state)
-    print(f"   Sky description: \"{desc.text}\"")
+    print(f'   Sky description: "{desc.text}"')
 
 
 def demo_voice(ai: AIServices) -> None:
     """Demonstrate voice enhancement capabilities."""
     print_section("Voice Enhancement (Steps 134-135)")
 
-    # Vocabulary training
     print("\n1. Astronomy vocabulary trainer...")
     vocab = ai.vocabulary_trainer
     test_phrases = [
@@ -167,21 +162,21 @@ def demo_voice(ai: AIServices) -> None:
     print("   Normalizing astronomy terms:")
     for phrase in test_phrases:
         normalized = vocab.normalize_text(phrase)
-        print(f"   - \"{phrase}\" -> \"{normalized}\"")
+        print(f'   - "{phrase}" -> "{normalized}"')
 
-    # Record some term usage
     vocab.record_usage("M31", success=True)
     vocab.record_usage("Andromeda", success=True)
     stats = vocab.get_statistics()
-    print(f"\n   Vocabulary stats: {stats.get('total_terms', stats.get('terms_count', 'N/A'))} terms tracked")
+    print(
+        f"\n   Vocabulary stats: "
+        f"{stats.get('total_terms', stats.get('terms_count', 'N/A'))} terms tracked"
+    )
 
-    # Wake word training
     print("\n2. Wake word trainer...")
     wake = ai.wake_word_trainer
-    print(f"   Wake word: \"{wake.primary_phrase}\"")
+    print(f'   Wake word: "{wake.primary_phrase}"')
     print(f"   Training phase: {wake.get_status().phase.value}")
 
-    # Record some detection events
     wake.record_detection("nightwatch start session", detected=True, was_correct=True)
     wake.record_detection("hey nightwatch", detected=True, was_correct=True)
     status = wake.get_status()
@@ -195,7 +190,6 @@ def demo_object_identification(ai: AIServices) -> None:
 
     identifier = ai.object_identifier
 
-    # Identify by coordinates
     print("\n1. Identifying object by coordinates...")
     print("   Position: RA=0.712h, Dec=41.27°")
     result = identifier.identify_at_coordinates(0.712, 41.269, search_radius_arcmin=60.0)
@@ -207,7 +201,6 @@ def demo_object_identification(ai: AIServices) -> None:
     else:
         print("   No matches found")
 
-    # Identify by catalog ID
     print("\n2. Identifying object by catalog ID...")
     match = identifier.get_object_info("M42")
     if match:
@@ -217,9 +210,7 @@ def demo_object_identification(ai: AIServices) -> None:
     else:
         print("   Not found")
 
-    # Pattern matching (asterisms)
     print("\n3. Asterism pattern matching...")
-    # Try to match some famous star patterns
     test_stars = ["Vega", "Deneb", "Altair"]
     matches = identifier.match_pattern(test_stars)
     print(f"   Testing stars: {', '.join(test_stars)}")
@@ -247,24 +238,22 @@ def demo_health_report(ai: AIServices) -> None:
         print(f"   {symbol} {name}: {status.status.value}")
 
 
-def main():
-    """Run the v0.5 AI demonstration."""
+def run_cli_demo() -> None:
+    """Run the classic terminal walkthrough."""
     print("\n" + "=" * 60)
-    print("  NIGHTWATCH v0.5 AI Enhancement Demo")
+    print("  NIGHTWATCH v0.5 AI Enhancement Demo (CLI)")
     print("=" * 60)
     print("\nThis demo showcases all v0.5 AI capabilities.")
     print("No hardware required - all services run in simulation mode.")
 
-    # Initialize AI services
     config = AIServicesConfig(
-        latitude_deg=35.0,
-        longitude_deg=-120.0,
+        latitude_deg=38.9,
+        longitude_deg=-117.6,
         lazy_init=True,
     )
     ai = AIServices(config)
     ai.initialize()
 
-    # Run demonstrations
     demo_scheduling(ai)
     demo_nlp(ai)
     demo_voice(ai)
@@ -273,11 +262,43 @@ def main():
 
     print_section("Demo Complete")
     print("\nv0.5 AI Enhancement milestone: 100% complete")
-    print("All 16 roadmap items implemented and tested.")
-    print("\nFor more information, see:")
-    print("  - ROADMAP.md")
-    print("  - services/__init__.py")
-    print("  - tests/unit/test_*.py")
+    print("Tip: run without --cli for the interactive web console.")
+    print(f"Finished at {datetime.now().isoformat(timespec='seconds')}")
+
+
+def run_web_demo(host: str, port: int) -> None:
+    """Launch the interactive Live Observatory Console."""
+    import importlib.util
+
+    server_path = Path(__file__).parent / "demo_web" / "server.py"
+    spec = importlib.util.spec_from_file_location("nightwatch_demo_server", server_path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"Unable to load demo server from {server_path}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    # Re-bind argv so the aiohttp server argparse sees host/port
+    sys.argv = ["nightwatch-demo", "--host", host, "--port", str(port)]
+    module.main()
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(
+        description="NIGHTWATCH v0.5 AI demonstration",
+    )
+    parser.add_argument(
+        "--cli",
+        action="store_true",
+        help="Run the classic terminal walkthrough instead of the web console",
+    )
+    parser.add_argument("--host", default="127.0.0.1", help="Web demo bind host")
+    parser.add_argument("--port", type=int, default=8765, help="Web demo port")
+    args = parser.parse_args()
+
+    if args.cli:
+        run_cli_demo()
+    else:
+        run_web_demo(args.host, args.port)
 
 
 if __name__ == "__main__":
