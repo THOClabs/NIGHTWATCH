@@ -53,6 +53,32 @@ def get_meteor_service():
     return MeteorTrackingService, MeteorConfig, MeteorAlert
 
 
+def get_close_approach_client():
+    """Get NASA/JPL CNEOS Close Approach Data client (requires aiohttp)."""
+    from .close_approach_client import (
+        CADClient,
+        CloseApproach,
+        ThreatLevel,
+        estimate_diameter_from_h,
+        fetch_upcoming_approaches,
+        generate_approach_prayer,
+    )
+    return (
+        CADClient,
+        CloseApproach,
+        ThreatLevel,
+        estimate_diameter_from_h,
+        fetch_upcoming_approaches,
+        generate_approach_prayer,
+    )
+
+
+def get_neo_feed_client():
+    """Get NASA NEO Feed API client (requires aiohttp)."""
+    from .neo_feed_client import NEOFeedClient
+    return NEOFeedClient
+
+
 __all__ = [
     # Shower calendar
     'ShowerCalendar',
