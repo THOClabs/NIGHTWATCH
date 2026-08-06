@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1120" height="792" viewBox="0 0 1120 792" font-family="Helvetica,Arial,sans-serif">
+<rect x="0" y="0" width="1120" height="792" fill="white"/>
+<rect x="16" y="16" width="1088" height="760" fill="none" stroke="black" stroke-width="2"/>
+<text x="60" y="66" font-size="14" font-weight="bold">NW-TP-001 — Counterweight shaft</text>
+<text x="60" y="84" font-size="11" fill="#555">Envelope (ROUND) — bid control drawing; .scad/STEP is the 3-D master.</text>
+<rect x="130.5" y="288.5763888888889" width="329.0" height="22.84722222222222" fill="#eef3fb" stroke="black" stroke-width="1.5"/>
+<line x1="120.5" y1="300.0" x2="469.5" y2="300.0" stroke="#0645ad" stroke-width="0.7" stroke-dasharray="8 3 2 3"/>
+<line x1="130.5" y1="270.5763888888889" x2="459.5" y2="270.5763888888889" stroke="#0645ad" stroke-width="1"/><line x1="130.5" y1="266.5763888888889" x2="130.5" y2="274.5763888888889" stroke="#0645ad" stroke-width="1"/><line x1="459.5" y1="266.5763888888889" x2="459.5" y2="274.5763888888889" stroke="#0645ad" stroke-width="1"/><text x="295.0" y="264.5763888888889" font-size="12" fill="#0645ad" text-anchor="middle">L 457.2 mm [18.000 in]</text>
+<line x1="477.5" y1="288.5763888888889" x2="477.5" y2="311.42361111111114" stroke="#0645ad" stroke-width="1"/><line x1="477.5" y1="284.5763888888889" x2="477.5" y2="292.5763888888889" stroke="#0645ad" stroke-width="1"/><line x1="477.5" y1="307.42361111111114" x2="477.5" y2="315.42361111111114" stroke="#0645ad" stroke-width="1"/><text x="477.5" y="314.0" font-size="12" fill="#0645ad" text-anchor="middle">Ø 31.8 mm [1.250 in]</text>
+<text x="295.0" y="304.0" font-size="12" fill="#333" text-anchor="middle">Ø31.8 mm [1.250 in]</text>
+<text x="560" y="112" font-size="13" font-weight="bold">KEY DIMENSIONS &amp; FEATURES</text>
+<text x="560" y="134" font-size="12">• Diameter: 31.8 mm [1.250 in]</text>
+<text x="560" y="152" font-size="12">• Length: 457.2 mm [18.000 in]</text>
+<text x="560" y="170" font-size="12">• Stud end: M12 x 40</text>
+<text x="560" y="188" font-size="12">• Safety-stop thread: M12</text>
+<text x="560" y="206" font-size="12">• Root fillet R: 3</text>
+<text x="560" y="230" font-size="11" fill="#555">PROVENANCE: Dia/length = P.COUNTERWEIGHTS (SOURCED).</text>
+<text x="560" y="248" font-size="11" fill="#555">NOTE: Counterweight-FREE build makes this OPTIONAL (see BP-00 / trade study). Include only if counterweighted variant is bid.</text>
+<rect x="16" y="626" width="1088" height="150" fill="none" stroke="black" stroke-width="2"/>
+<line x1="16" y1="652" x2="1104" y2="652" stroke="black" stroke-width="1"/>
+<line x1="16" y1="684" x2="1104" y2="684" stroke="black" stroke-width="1"/>
+<line x1="16" y1="716" x2="1104" y2="716" stroke="black" stroke-width="1"/>
+<line x1="16" y1="748" x2="1104" y2="748" stroke="black" stroke-width="1"/>
+<line x1="804" y1="626" x2="804" y2="776" stroke="black" stroke-width="1"/>
+<text x="26" y="644" font-size="13" font-weight="bold" fill="black">NIGHTWATCH OBSERVATORY — MOUNT &amp; ROLL-OFF TENDER</text>
+<text x="26" y="672" font-size="13" font-weight="bold" fill="black">PART: Counterweight shaft</text>
+<text x="26" y="698" font-size="12" font-weight="normal" fill="black">MATERIAL: 303 stainless per ASTM A582</text>
+<text x="26" y="724" font-size="12" font-weight="normal" fill="black">FINISH: Passivate per ASTM A967 (nitric)</text>
+<text x="26" y="750" font-size="12" font-weight="normal" fill="black">TOLERANCE: General ISO 2768-mK; journal diameters h6; concentricity 0.02 TIR</text>
+<text x="26" y="774" font-size="11" font-weight="normal" fill="black">SURFACE FINISH: Ra 0.8 um</text>
+<text x="814" y="644" font-size="13" font-weight="bold" fill="black">DWG NW-TP-001</text>
+<text x="814" y="670" font-size="10" font-weight="normal" fill="black">PKG BP-02 — Precision turned parts</text>
+<text x="814" y="696" font-size="10" font-weight="normal" fill="black">PROCESS: CNC turn</text>
+<text x="814" y="722" font-size="10" font-weight="normal" fill="black">QTY: 1    REV: A    UNITS: mm [in]</text>
+<text x="814" y="748" font-size="9" font-weight="bold" fill="#a00">STATUS:</text>
+<text x="814" y="762" font-size="8" font-weight="bold" fill="#a00">ISSUED FOR BID / FOR PE REVIEW — NOT FOR CONSTRUCTION</text>
+</svg>

@@ -1,0 +1,573 @@
+<!doctype html><html><head><meta charset='utf-8'>
+<title>NIGHTWATCH Tender — Drawing Set</title><style>
+* { box-sizing: border-box; }
+body { font-family: Helvetica, Arial, sans-serif; margin: 0; color: #111; }
+.page { page-break-after: always; padding: 24px; }
+.cover h1 { color: #1F3864; margin: 0 0 4px; }
+.status { color: #a00; font-weight: bold; letter-spacing: .5px; }
+table { border-collapse: collapse; width: 100%; font-size: 12px; margin-top: 12px; }
+th, td { border: 1px solid #bbb; padding: 5px 7px; text-align: left; vertical-align: top; }
+th { background: #1F3864; color: #fff; }
+.drawing svg { width: 100%; height: auto; border: 1px solid #ccc; }
+.cap { font-size: 12px; color: #555; margin: 6px 0 0; }
+@media print { .page { padding: 0; } @page { size: 1120px 792px; margin: 8mm; } }
+</style></head><body>
+<div class='page cover'><h1>NIGHTWATCH Observatory</h1><h2>Mount &amp; Roll-off 'Turret' — Fabrication Drawing Set</h2><p class='status'>ISSUED FOR BID / FOR PE REVIEW — NOT FOR CONSTRUCTION</p><p class='cap'>Control drawings generated from design/mechanical/calc/params.py. The parametric <code>cad/*.scad</code> (and STEP exported from it) is the 3-D machining master; these sheets are the dimensioned, quotable summary. Dimensions are dual-unit (mm [inch]). Rev A.</p><h3>Drawing register</h3><table><tr><th>Drawing</th><th>Part</th><th>Pkg</th><th>Material</th><th>Finish</th><th>Stock kg</th></tr><tr><td>NW-MH-001</td><td>RA (polar) axis housing</td><td>BP-01</td><td>6061-T6 aluminium plate per ASTM B209 / AMS-QQ-A-250/11</td><td>Type III hardcoat anodize, 0.002 in, per MIL-A-8625F Class 1 (clear)</td><td>8.5</td></tr>
+<tr><td>NW-MH-002</td><td>DEC axis housing + Losmandy-D saddle</td><td>BP-01</td><td>6061-T6 aluminium plate per ASTM B209 / AMS-QQ-A-250/11</td><td>Type III hardcoat anodize, 0.002 in, per MIL-A-8625F Class 1 (clear)</td><td>4.0</td></tr>
+<tr><td>NW-MH-003</td><td>DEC saddle clamp bar</td><td>BP-01</td><td>6061-T6 aluminium plate per ASTM B209 / AMS-QQ-A-250/11</td><td>Type III hardcoat anodize, 0.002 in, per MIL-A-8625F Class 1 (clear)</td><td>0.5</td></tr>
+<tr><td>NW-TP-001</td><td>Counterweight shaft</td><td>BP-02</td><td>303 stainless per ASTM A582</td><td>Passivate per ASTM A967 (nitric)</td><td>2.9</td></tr>
+<tr><td>NW-TP-002</td><td>RA drive spindle / drawbar adapter</td><td>BP-02</td><td>303 stainless per ASTM A582</td><td>Passivate per ASTM A967 (nitric)</td><td>5.0</td></tr>
+<tr><td>NW-TP-003</td><td>DEC drive spindle / saddle stub</td><td>BP-02</td><td>303 stainless per ASTM A582</td><td>Passivate per ASTM A967 (nitric)</td><td>3.2</td></tr>
+<tr><td>NW-PF-001</td><td>Reinforced-concrete telescope pier</td><td>BP-03</td><td>Cast-in-place concrete f'c = 4000 psi (27.6 MPa) per ACI 318 / ACI 301</td><td>none</td><td>320.3</td></tr>
+<tr><td>NW-PF-002</td><td>Pier top plate</td><td>BP-03</td><td>ASTM A36 structural steel</td><td>Hot-dip galvanize per ASTM A123</td><td>6.9</td></tr>
+<tr><td>NW-PF-003</td><td>Pier-to-mount adapter plate</td><td>BP-03</td><td>6061-T6 aluminium per ASTM B209</td><td>Type III hardcoat anodize, 0.002 in, per MIL-A-8625F Class 1 (clear)</td><td>3.3</td></tr>
+<tr><td>NW-RR-001</td><td>Roof frame perimeter (HSS)</td><td>BP-04</td><td>ASTM A500 Gr B HSS (steel)</td><td>Hot-dip galvanize per ASTM A123</td><td>57.0</td></tr>
+<tr><td>NW-RR-002</td><td>Roof rafters / purlins</td><td>BP-04</td><td>ASTM A500 Gr B HSS (steel)</td><td>Hot-dip galvanize per ASTM A123</td><td>52.2</td></tr>
+<tr><td>NW-RR-003</td><td>Track rail beams (box track)</td><td>BP-04</td><td>ASTM A36 structural steel</td><td>Hot-dip galvanize per ASTM A123</td><td>89.7</td></tr>
+<tr><td>NW-RR-004</td><td>Wheel axle brackets</td><td>BP-04</td><td>ASTM A36 structural steel</td><td>Hot-dip galvanize per ASTM A123</td><td>4.6</td></tr>
+<tr><td>NW-RR-005</td><td>Drive bracket + end stops</td><td>BP-04</td><td>ASTM A36 structural steel</td><td>Hot-dip galvanize per ASTM A123</td><td>4.5</td></tr>
+<tr><td>NW-RR-006</td><td>Wind hold-down anchor brackets</td><td>BP-04</td><td>ASTM A36 structural steel</td><td>Hot-dip galvanize per ASTM A123</td><td>5.1</td></tr></table></div>
+<div class='page drawing'><svg xmlns="http://www.w3.org/2000/svg" width="1120" height="792" viewBox="0 0 1120 792" font-family="Helvetica,Arial,sans-serif">
+<rect x="0" y="0" width="1120" height="792" fill="white"/>
+<rect x="16" y="16" width="1088" height="760" fill="none" stroke="black" stroke-width="2"/>
+<text x="60" y="66" font-size="14" font-weight="bold">NW-MH-001 — RA (polar) axis housing</text>
+<text x="60" y="84" font-size="11" fill="#555">Envelope (PLATE) — bid control drawing; .scad/STEP is the 3-D master.</text>
+<rect x="148.0" y="153.0" width="294.0" height="294.0" fill="#eef3fb" stroke="black" stroke-width="1.5"/>
+<line x1="148.0" y1="135.0" x2="442.0" y2="135.0" stroke="#0645ad" stroke-width="1"/><line x1="148.0" y1="131.0" x2="148.0" y2="139.0" stroke="#0645ad" stroke-width="1"/><line x1="442.0" y1="131.0" x2="442.0" y2="139.0" stroke="#0645ad" stroke-width="1"/><text x="295.0" y="129.0" font-size="12" fill="#0645ad" text-anchor="middle">L 203.2 mm [8.000 in]</text>
+<line x1="460.0" y1="153.0" x2="460.0" y2="447.0" stroke="#0645ad" stroke-width="1"/><line x1="460.0" y1="149.0" x2="460.0" y2="157.0" stroke="#0645ad" stroke-width="1"/><line x1="460.0" y1="443.0" x2="460.0" y2="451.0" stroke="#0645ad" stroke-width="1"/><text x="460.0" y="314.0" font-size="12" fill="#0645ad" text-anchor="middle">W 203.2 mm [8.000 in]</text>
+<text x="295.0" y="304.0" font-size="12" fill="#333" text-anchor="middle">THK 76.2 mm [3.000 in]</text>
+<text x="560" y="112" font-size="13" font-weight="bold">KEY DIMENSIONS &amp; FEATURES</text>
+<text x="560" y="134" font-size="12">• Outer X: 203.2 mm [8.000 in]</text>
+<text x="560" y="152" font-size="12">• Outer Y: 203.2 mm [8.000 in]</text>
+<text x="560" y="170" font-size="12">• Depth (bearing span): 76.2 mm [3.000 in]</text>
+<text x="560" y="188" font-size="12">• Wall: 8.0 mm [0.315 in]</text>
+<text x="560" y="206" font-size="12">• Bearing seat bore (7008) H7: 68.0 mm [2.677 in]</text>
+<text x="560" y="224" font-size="12">• Drive register bore (CSF-32): 80.0 mm [3.150 in]</text>
+<text x="560" y="242" font-size="12">• Flange bolt circle: 104.0 mm [4.094 in]</text>
+<text x="560" y="260" font-size="12">• Flange holes: 8</text>
+<text x="560" y="278" font-size="12">• Corner holes (M6): 4</text>
+<text x="560" y="302" font-size="11" fill="#555">PROVENANCE: Outer/wall/depth = P.RA_HOUSING (SOURCED); bearing seat=7008 remediation; flange PCD DERIVED ~1.3x bore.</text>
+<text x="560" y="320" font-size="11" fill="#555">NOTE: Bearing seat sized for angular-contact 7008 (remediation of 6008). Pocket-lighten at bidder&#x27;s option; keep bore/flange datums.</text>
+<rect x="16" y="626" width="1088" height="150" fill="none" stroke="black" stroke-width="2"/>
+<line x1="16" y1="652" x2="1104" y2="652" stroke="black" stroke-width="1"/>
+<line x1="16" y1="684" x2="1104" y2="684" stroke="black" stroke-width="1"/>
+<line x1="16" y1="716" x2="1104" y2="716" stroke="black" stroke-width="1"/>
+<line x1="16" y1="748" x2="1104" y2="748" stroke="black" stroke-width="1"/>
+<line x1="804" y1="626" x2="804" y2="776" stroke="black" stroke-width="1"/>
+<text x="26" y="644" font-size="13" font-weight="bold" fill="black">NIGHTWATCH OBSERVATORY — MOUNT &amp; ROLL-OFF TENDER</text>
+<text x="26" y="672" font-size="13" font-weight="bold" fill="black">PART: RA (polar) axis housing</text>
+<text x="26" y="698" font-size="12" font-weight="normal" fill="black">MATERIAL: 6061-T6 aluminium plate per ASTM B209 / AMS-QQ-A-250/11</text>
+<text x="26" y="724" font-size="12" font-weight="normal" fill="black">FINISH: Type III hardcoat anodize, 0.002 in, per MIL-A-8625F Class 1 (clear)</text>
+<text x="26" y="750" font-size="12" font-weight="normal" fill="black">TOLERANCE: General ISO 2768-mK; bearing bores H7 (+0.030/0); flange faces flat 0.05</text>
+<text x="26" y="774" font-size="11" font-weight="normal" fill="black">SURFACE FINISH: Ra 1.6 um</text>
+<text x="814" y="644" font-size="13" font-weight="bold" fill="black">DWG NW-MH-001</text>
+<text x="814" y="670" font-size="10" font-weight="normal" fill="black">PKG BP-01 — Mount head machining</text>
+<text x="814" y="696" font-size="10" font-weight="normal" fill="black">PROCESS: CNC mill, 3-axis</text>
+<text x="814" y="722" font-size="10" font-weight="normal" fill="black">QTY: 1    REV: A    UNITS: mm [in]</text>
+<text x="814" y="748" font-size="9" font-weight="bold" fill="#a00">STATUS:</text>
+<text x="814" y="762" font-size="8" font-weight="bold" fill="#a00">ISSUED FOR BID / FOR PE REVIEW — NOT FOR CONSTRUCTION</text>
+</svg></div>
+<div class='page drawing'><svg xmlns="http://www.w3.org/2000/svg" width="1120" height="792" viewBox="0 0 1120 792" font-family="Helvetica,Arial,sans-serif">
+<rect x="0" y="0" width="1120" height="792" fill="white"/>
+<rect x="16" y="16" width="1088" height="760" fill="none" stroke="black" stroke-width="2"/>
+<text x="60" y="66" font-size="14" font-weight="bold">NW-MH-002 — DEC axis housing + Losmandy-D saddle</text>
+<text x="60" y="84" font-size="11" fill="#555">Envelope (PLATE) — bid control drawing; .scad/STEP is the 3-D master.</text>
+<rect x="148.0" y="153.0" width="294.0" height="294.0" fill="#eef3fb" stroke="black" stroke-width="1.5"/>
+<line x1="148.0" y1="135.0" x2="442.0" y2="135.0" stroke="#0645ad" stroke-width="1"/><line x1="148.0" y1="131.0" x2="148.0" y2="139.0" stroke="#0645ad" stroke-width="1"/><line x1="442.0" y1="131.0" x2="442.0" y2="139.0" stroke="#0645ad" stroke-width="1"/><text x="295.0" y="129.0" font-size="12" fill="#0645ad" text-anchor="middle">L 152.4 mm [6.000 in]</text>
+<line x1="460.0" y1="153.0" x2="460.0" y2="447.0" stroke="#0645ad" stroke-width="1"/><line x1="460.0" y1="149.0" x2="460.0" y2="157.0" stroke="#0645ad" stroke-width="1"/><line x1="460.0" y1="443.0" x2="460.0" y2="451.0" stroke="#0645ad" stroke-width="1"/><text x="460.0" y="314.0" font-size="12" fill="#0645ad" text-anchor="middle">W 152.4 mm [6.000 in]</text>
+<text x="295.0" y="304.0" font-size="12" fill="#333" text-anchor="middle">THK 63.5 mm [2.500 in]</text>
+<text x="560" y="112" font-size="13" font-weight="bold">KEY DIMENSIONS &amp; FEATURES</text>
+<text x="560" y="134" font-size="12">• Outer X: 152.4 mm [6.000 in]</text>
+<text x="560" y="152" font-size="12">• Outer Y: 152.4 mm [6.000 in]</text>
+<text x="560" y="170" font-size="12">• Depth (bearing span): 63.5 mm [2.500 in]</text>
+<text x="560" y="188" font-size="12">• Wall: 8.0 mm [0.315 in]</text>
+<text x="560" y="206" font-size="12">• Bearing seat bore (7006) H7: 55.0 mm [2.165 in]</text>
+<text x="560" y="224" font-size="12">• Drive register bore (CSF-25): 64.0 mm [2.520 in]</text>
+<text x="560" y="242" font-size="12">• Flange bolt circle: 83.0 mm [3.268 in]</text>
+<text x="560" y="260" font-size="12">• Losmandy-D saddle width: 76.2 mm [3.000 in]</text>
+<text x="560" y="278" font-size="12">• Dovetail angle (deg): 15</text>
+<text x="560" y="302" font-size="11" fill="#555">PROVENANCE: Outer/wall/depth = P.DEC_HOUSING (SOURCED); saddle = Losmandy-D ASSUMED std; bearing seat=7006 remediation.</text>
+<text x="560" y="320" font-size="11" fill="#555">NOTE: Integral Losmandy-D dovetail saddle. Bearing seat sized for angular-contact 7006.</text>
+<rect x="16" y="626" width="1088" height="150" fill="none" stroke="black" stroke-width="2"/>
+<line x1="16" y1="652" x2="1104" y2="652" stroke="black" stroke-width="1"/>
+<line x1="16" y1="684" x2="1104" y2="684" stroke="black" stroke-width="1"/>
+<line x1="16" y1="716" x2="1104" y2="716" stroke="black" stroke-width="1"/>
+<line x1="16" y1="748" x2="1104" y2="748" stroke="black" stroke-width="1"/>
+<line x1="804" y1="626" x2="804" y2="776" stroke="black" stroke-width="1"/>
+<text x="26" y="644" font-size="13" font-weight="bold" fill="black">NIGHTWATCH OBSERVATORY — MOUNT &amp; ROLL-OFF TENDER</text>
+<text x="26" y="672" font-size="13" font-weight="bold" fill="black">PART: DEC axis housing + Losmandy-D saddle</text>
+<text x="26" y="698" font-size="12" font-weight="normal" fill="black">MATERIAL: 6061-T6 aluminium plate per ASTM B209 / AMS-QQ-A-250/11</text>
+<text x="26" y="724" font-size="12" font-weight="normal" fill="black">FINISH: Type III hardcoat anodize, 0.002 in, per MIL-A-8625F Class 1 (clear)</text>
+<text x="26" y="750" font-size="12" font-weight="normal" fill="black">TOLERANCE: General ISO 2768-mK; bearing bores H7 (+0.030/0); flange faces flat 0.05</text>
+<text x="26" y="774" font-size="11" font-weight="normal" fill="black">SURFACE FINISH: Ra 1.6 um</text>
+<text x="814" y="644" font-size="13" font-weight="bold" fill="black">DWG NW-MH-002</text>
+<text x="814" y="670" font-size="10" font-weight="normal" fill="black">PKG BP-01 — Mount head machining</text>
+<text x="814" y="696" font-size="10" font-weight="normal" fill="black">PROCESS: CNC mill, 3-axis</text>
+<text x="814" y="722" font-size="10" font-weight="normal" fill="black">QTY: 1    REV: A    UNITS: mm [in]</text>
+<text x="814" y="748" font-size="9" font-weight="bold" fill="#a00">STATUS:</text>
+<text x="814" y="762" font-size="8" font-weight="bold" fill="#a00">ISSUED FOR BID / FOR PE REVIEW — NOT FOR CONSTRUCTION</text>
+</svg></div>
+<div class='page drawing'><svg xmlns="http://www.w3.org/2000/svg" width="1120" height="792" viewBox="0 0 1120 792" font-family="Helvetica,Arial,sans-serif">
+<rect x="0" y="0" width="1120" height="792" fill="white"/>
+<rect x="16" y="16" width="1088" height="760" fill="none" stroke="black" stroke-width="2"/>
+<text x="60" y="66" font-size="14" font-weight="bold">NW-MH-003 — DEC saddle clamp bar</text>
+<text x="60" y="84" font-size="11" fill="#555">Envelope (PLATE) — bid control drawing; .scad/STEP is the 3-D master.</text>
+<rect x="130.49999999999997" y="176.62499999999997" width="329.00000000000006" height="246.75000000000006" fill="#eef3fb" stroke="black" stroke-width="1.5"/>
+<line x1="130.49999999999997" y1="158.62499999999997" x2="459.5" y2="158.62499999999997" stroke="#0645ad" stroke-width="1"/><line x1="130.49999999999997" y1="154.62499999999997" x2="130.49999999999997" y2="162.62499999999997" stroke="#0645ad" stroke-width="1"/><line x1="459.5" y1="154.62499999999997" x2="459.5" y2="162.62499999999997" stroke="#0645ad" stroke-width="1"/><text x="295.0" y="152.62499999999997" font-size="12" fill="#0645ad" text-anchor="middle">L 101.6 mm [4.000 in]</text>
+<line x1="477.5" y1="176.62499999999997" x2="477.5" y2="423.375" stroke="#0645ad" stroke-width="1"/><line x1="477.5" y1="172.62499999999997" x2="477.5" y2="180.62499999999997" stroke="#0645ad" stroke-width="1"/><line x1="477.5" y1="419.375" x2="477.5" y2="427.375" stroke="#0645ad" stroke-width="1"/><text x="477.5" y="314.0" font-size="12" fill="#0645ad" text-anchor="middle">W 76.2 mm [3.000 in]</text>
+<text x="295.0" y="304.0" font-size="12" fill="#333" text-anchor="middle">THK 25.4 mm [1.000 in]</text>
+<text x="560" y="112" font-size="13" font-weight="bold">KEY DIMENSIONS &amp; FEATURES</text>
+<text x="560" y="134" font-size="12">• Length: 101.6 mm [4.000 in]</text>
+<text x="560" y="152" font-size="12">• Width: 76.2 mm [3.000 in]</text>
+<text x="560" y="170" font-size="12">• Thickness: 25.4 mm [1.000 in]</text>
+<text x="560" y="188" font-size="12">• Clamp screws (M8): 2</text>
+<text x="560" y="206" font-size="12">• Dovetail angle (deg): 15</text>
+<text x="560" y="230" font-size="11" fill="#555">PROVENANCE: ASSUMED design-intent — Losmandy-D clamp not dimensioned in repo.</text>
+<text x="560" y="248" font-size="11" fill="#555">NOTE: Pairs with NW-MH-002 saddle to clamp the OTA dovetail.</text>
+<rect x="16" y="626" width="1088" height="150" fill="none" stroke="black" stroke-width="2"/>
+<line x1="16" y1="652" x2="1104" y2="652" stroke="black" stroke-width="1"/>
+<line x1="16" y1="684" x2="1104" y2="684" stroke="black" stroke-width="1"/>
+<line x1="16" y1="716" x2="1104" y2="716" stroke="black" stroke-width="1"/>
+<line x1="16" y1="748" x2="1104" y2="748" stroke="black" stroke-width="1"/>
+<line x1="804" y1="626" x2="804" y2="776" stroke="black" stroke-width="1"/>
+<text x="26" y="644" font-size="13" font-weight="bold" fill="black">NIGHTWATCH OBSERVATORY — MOUNT &amp; ROLL-OFF TENDER</text>
+<text x="26" y="672" font-size="13" font-weight="bold" fill="black">PART: DEC saddle clamp bar</text>
+<text x="26" y="698" font-size="12" font-weight="normal" fill="black">MATERIAL: 6061-T6 aluminium plate per ASTM B209 / AMS-QQ-A-250/11</text>
+<text x="26" y="724" font-size="12" font-weight="normal" fill="black">FINISH: Type III hardcoat anodize, 0.002 in, per MIL-A-8625F Class 1 (clear)</text>
+<text x="26" y="750" font-size="12" font-weight="normal" fill="black">TOLERANCE: General ISO 2768-mK; bearing bores H7 (+0.030/0); flange faces flat 0.05</text>
+<text x="26" y="774" font-size="11" font-weight="normal" fill="black">SURFACE FINISH: Ra 3.2 um</text>
+<text x="814" y="644" font-size="13" font-weight="bold" fill="black">DWG NW-MH-003</text>
+<text x="814" y="670" font-size="10" font-weight="normal" fill="black">PKG BP-01 — Mount head machining</text>
+<text x="814" y="696" font-size="10" font-weight="normal" fill="black">PROCESS: CNC mill, 3-axis</text>
+<text x="814" y="722" font-size="10" font-weight="normal" fill="black">QTY: 1    REV: A    UNITS: mm [in]</text>
+<text x="814" y="748" font-size="9" font-weight="bold" fill="#a00">STATUS:</text>
+<text x="814" y="762" font-size="8" font-weight="bold" fill="#a00">ISSUED FOR BID / FOR PE REVIEW — NOT FOR CONSTRUCTION</text>
+</svg></div>
+<div class='page drawing'><svg xmlns="http://www.w3.org/2000/svg" width="1120" height="792" viewBox="0 0 1120 792" font-family="Helvetica,Arial,sans-serif">
+<rect x="0" y="0" width="1120" height="792" fill="white"/>
+<rect x="16" y="16" width="1088" height="760" fill="none" stroke="black" stroke-width="2"/>
+<text x="60" y="66" font-size="14" font-weight="bold">NW-TP-001 — Counterweight shaft</text>
+<text x="60" y="84" font-size="11" fill="#555">Envelope (ROUND) — bid control drawing; .scad/STEP is the 3-D master.</text>
+<rect x="130.5" y="288.5763888888889" width="329.0" height="22.84722222222222" fill="#eef3fb" stroke="black" stroke-width="1.5"/>
+<line x1="120.5" y1="300.0" x2="469.5" y2="300.0" stroke="#0645ad" stroke-width="0.7" stroke-dasharray="8 3 2 3"/>
+<line x1="130.5" y1="270.5763888888889" x2="459.5" y2="270.5763888888889" stroke="#0645ad" stroke-width="1"/><line x1="130.5" y1="266.5763888888889" x2="130.5" y2="274.5763888888889" stroke="#0645ad" stroke-width="1"/><line x1="459.5" y1="266.5763888888889" x2="459.5" y2="274.5763888888889" stroke="#0645ad" stroke-width="1"/><text x="295.0" y="264.5763888888889" font-size="12" fill="#0645ad" text-anchor="middle">L 457.2 mm [18.000 in]</text>
+<line x1="477.5" y1="288.5763888888889" x2="477.5" y2="311.42361111111114" stroke="#0645ad" stroke-width="1"/><line x1="477.5" y1="284.5763888888889" x2="477.5" y2="292.5763888888889" stroke="#0645ad" stroke-width="1"/><line x1="477.5" y1="307.42361111111114" x2="477.5" y2="315.42361111111114" stroke="#0645ad" stroke-width="1"/><text x="477.5" y="314.0" font-size="12" fill="#0645ad" text-anchor="middle">Ø 31.8 mm [1.250 in]</text>
+<text x="295.0" y="304.0" font-size="12" fill="#333" text-anchor="middle">Ø31.8 mm [1.250 in]</text>
+<text x="560" y="112" font-size="13" font-weight="bold">KEY DIMENSIONS &amp; FEATURES</text>
+<text x="560" y="134" font-size="12">• Diameter: 31.8 mm [1.250 in]</text>
+<text x="560" y="152" font-size="12">• Length: 457.2 mm [18.000 in]</text>
+<text x="560" y="170" font-size="12">• Stud end: M12 x 40</text>
+<text x="560" y="188" font-size="12">• Safety-stop thread: M12</text>
+<text x="560" y="206" font-size="12">• Root fillet R: 3</text>
+<text x="560" y="230" font-size="11" fill="#555">PROVENANCE: Dia/length = P.COUNTERWEIGHTS (SOURCED).</text>
+<text x="560" y="248" font-size="11" fill="#555">NOTE: Counterweight-FREE build makes this OPTIONAL (see BP-00 / trade study). Include only if counterweighted variant is bid.</text>
+<rect x="16" y="626" width="1088" height="150" fill="none" stroke="black" stroke-width="2"/>
+<line x1="16" y1="652" x2="1104" y2="652" stroke="black" stroke-width="1"/>
+<line x1="16" y1="684" x2="1104" y2="684" stroke="black" stroke-width="1"/>
+<line x1="16" y1="716" x2="1104" y2="716" stroke="black" stroke-width="1"/>
+<line x1="16" y1="748" x2="1104" y2="748" stroke="black" stroke-width="1"/>
+<line x1="804" y1="626" x2="804" y2="776" stroke="black" stroke-width="1"/>
+<text x="26" y="644" font-size="13" font-weight="bold" fill="black">NIGHTWATCH OBSERVATORY — MOUNT &amp; ROLL-OFF TENDER</text>
+<text x="26" y="672" font-size="13" font-weight="bold" fill="black">PART: Counterweight shaft</text>
+<text x="26" y="698" font-size="12" font-weight="normal" fill="black">MATERIAL: 303 stainless per ASTM A582</text>
+<text x="26" y="724" font-size="12" font-weight="normal" fill="black">FINISH: Passivate per ASTM A967 (nitric)</text>
+<text x="26" y="750" font-size="12" font-weight="normal" fill="black">TOLERANCE: General ISO 2768-mK; journal diameters h6; concentricity 0.02 TIR</text>
+<text x="26" y="774" font-size="11" font-weight="normal" fill="black">SURFACE FINISH: Ra 0.8 um</text>
+<text x="814" y="644" font-size="13" font-weight="bold" fill="black">DWG NW-TP-001</text>
+<text x="814" y="670" font-size="10" font-weight="normal" fill="black">PKG BP-02 — Precision turned parts</text>
+<text x="814" y="696" font-size="10" font-weight="normal" fill="black">PROCESS: CNC turn</text>
+<text x="814" y="722" font-size="10" font-weight="normal" fill="black">QTY: 1    REV: A    UNITS: mm [in]</text>
+<text x="814" y="748" font-size="9" font-weight="bold" fill="#a00">STATUS:</text>
+<text x="814" y="762" font-size="8" font-weight="bold" fill="#a00">ISSUED FOR BID / FOR PE REVIEW — NOT FOR CONSTRUCTION</text>
+</svg></div>
+<div class='page drawing'><svg xmlns="http://www.w3.org/2000/svg" width="1120" height="792" viewBox="0 0 1120 792" font-family="Helvetica,Arial,sans-serif">
+<rect x="0" y="0" width="1120" height="792" fill="white"/>
+<rect x="16" y="16" width="1088" height="760" fill="none" stroke="black" stroke-width="2"/>
+<text x="60" y="66" font-size="14" font-weight="bold">NW-TP-002 — RA drive spindle / drawbar adapter</text>
+<text x="60" y="84" font-size="11" fill="#555">Envelope (ROUND) — bid control drawing; .scad/STEP is the 3-D master.</text>
+<rect x="130.49999999999997" y="156.06249999999997" width="329.00000000000006" height="287.87500000000006" fill="#eef3fb" stroke="black" stroke-width="1.5"/>
+<line x1="120.49999999999997" y1="300.0" x2="469.5" y2="300.0" stroke="#0645ad" stroke-width="0.7" stroke-dasharray="8 3 2 3"/>
+<line x1="130.49999999999997" y1="138.06249999999997" x2="459.5" y2="138.06249999999997" stroke="#0645ad" stroke-width="1"/><line x1="130.49999999999997" y1="134.06249999999997" x2="130.49999999999997" y2="142.06249999999997" stroke="#0645ad" stroke-width="1"/><line x1="459.5" y1="134.06249999999997" x2="459.5" y2="142.06249999999997" stroke="#0645ad" stroke-width="1"/><text x="295.0" y="132.06249999999997" font-size="12" fill="#0645ad" text-anchor="middle">L 101.6 mm [4.000 in]</text>
+<line x1="477.5" y1="156.06249999999997" x2="477.5" y2="443.9375" stroke="#0645ad" stroke-width="1"/><line x1="477.5" y1="152.06249999999997" x2="477.5" y2="160.06249999999997" stroke="#0645ad" stroke-width="1"/><line x1="477.5" y1="439.9375" x2="477.5" y2="447.9375" stroke="#0645ad" stroke-width="1"/><text x="477.5" y="314.0" font-size="12" fill="#0645ad" text-anchor="middle">Ø 88.9 mm [3.500 in]</text>
+<text x="295.0" y="304.0" font-size="12" fill="#333" text-anchor="middle">Ø88.9 mm [3.500 in]</text>
+<text x="560" y="112" font-size="13" font-weight="bold">KEY DIMENSIONS &amp; FEATURES</text>
+<text x="560" y="134" font-size="12">• Body dia: 88.9 mm [3.500 in]</text>
+<text x="560" y="152" font-size="12">• Length: 101.6 mm [4.000 in]</text>
+<text x="560" y="170" font-size="12">• Bearing journal (7008) j6: 40.0 mm [1.575 in]</text>
+<text x="560" y="188" font-size="12">• CSF-32 wave-gen register: 80.0 mm [3.150 in]</text>
+<text x="560" y="206" font-size="12">• Bolt pattern: 8 x M4 on 104 PCD</text>
+<text x="560" y="230" font-size="11" fill="#555">PROVENANCE: Journal = 7008 bore (remediation); CSF-32 register = P.RA_DRIVE.bore_m (SOURCED). Body dia ASSUMED.</text>
+<text x="560" y="248" font-size="11" fill="#555">NOTE: Couples the CSF-32 output to the RA axis; carries the inner race of the 7008 pair.</text>
+<rect x="16" y="626" width="1088" height="150" fill="none" stroke="black" stroke-width="2"/>
+<line x1="16" y1="652" x2="1104" y2="652" stroke="black" stroke-width="1"/>
+<line x1="16" y1="684" x2="1104" y2="684" stroke="black" stroke-width="1"/>
+<line x1="16" y1="716" x2="1104" y2="716" stroke="black" stroke-width="1"/>
+<line x1="16" y1="748" x2="1104" y2="748" stroke="black" stroke-width="1"/>
+<line x1="804" y1="626" x2="804" y2="776" stroke="black" stroke-width="1"/>
+<text x="26" y="644" font-size="13" font-weight="bold" fill="black">NIGHTWATCH OBSERVATORY — MOUNT &amp; ROLL-OFF TENDER</text>
+<text x="26" y="672" font-size="13" font-weight="bold" fill="black">PART: RA drive spindle / drawbar adapter</text>
+<text x="26" y="698" font-size="12" font-weight="normal" fill="black">MATERIAL: 303 stainless per ASTM A582</text>
+<text x="26" y="724" font-size="12" font-weight="normal" fill="black">FINISH: Passivate per ASTM A967 (nitric)</text>
+<text x="26" y="750" font-size="12" font-weight="normal" fill="black">TOLERANCE: General ISO 2768-mK; journal diameters h6; concentricity 0.02 TIR</text>
+<text x="26" y="774" font-size="11" font-weight="normal" fill="black">SURFACE FINISH: Ra 0.8 um</text>
+<text x="814" y="644" font-size="13" font-weight="bold" fill="black">DWG NW-TP-002</text>
+<text x="814" y="670" font-size="10" font-weight="normal" fill="black">PKG BP-02 — Precision turned parts</text>
+<text x="814" y="696" font-size="10" font-weight="normal" fill="black">PROCESS: CNC turn + mill</text>
+<text x="814" y="722" font-size="10" font-weight="normal" fill="black">QTY: 1    REV: A    UNITS: mm [in]</text>
+<text x="814" y="748" font-size="9" font-weight="bold" fill="#a00">STATUS:</text>
+<text x="814" y="762" font-size="8" font-weight="bold" fill="#a00">ISSUED FOR BID / FOR PE REVIEW — NOT FOR CONSTRUCTION</text>
+</svg></div>
+<div class='page drawing'><svg xmlns="http://www.w3.org/2000/svg" width="1120" height="792" viewBox="0 0 1120 792" font-family="Helvetica,Arial,sans-serif">
+<rect x="0" y="0" width="1120" height="792" fill="white"/>
+<rect x="16" y="16" width="1088" height="760" fill="none" stroke="black" stroke-width="2"/>
+<text x="60" y="66" font-size="14" font-weight="bold">NW-TP-003 — DEC drive spindle / saddle stub</text>
+<text x="60" y="84" font-size="11" fill="#555">Envelope (ROUND) — bid control drawing; .scad/STEP is the 3-D master.</text>
+<rect x="130.5" y="159.0" width="329.0" height="282.0" fill="#eef3fb" stroke="black" stroke-width="1.5"/>
+<line x1="120.5" y1="300.0" x2="469.5" y2="300.0" stroke="#0645ad" stroke-width="0.7" stroke-dasharray="8 3 2 3"/>
+<line x1="130.5" y1="141.0" x2="459.5" y2="141.0" stroke="#0645ad" stroke-width="1"/><line x1="130.5" y1="137.0" x2="130.5" y2="145.0" stroke="#0645ad" stroke-width="1"/><line x1="459.5" y1="137.0" x2="459.5" y2="145.0" stroke="#0645ad" stroke-width="1"/><text x="295.0" y="135.0" font-size="12" fill="#0645ad" text-anchor="middle">L 88.9 mm [3.500 in]</text>
+<line x1="477.5" y1="159.0" x2="477.5" y2="441.0" stroke="#0645ad" stroke-width="1"/><line x1="477.5" y1="155.0" x2="477.5" y2="163.0" stroke="#0645ad" stroke-width="1"/><line x1="477.5" y1="437.0" x2="477.5" y2="445.0" stroke="#0645ad" stroke-width="1"/><text x="477.5" y="314.0" font-size="12" fill="#0645ad" text-anchor="middle">Ø 76.2 mm [3.000 in]</text>
+<text x="295.0" y="304.0" font-size="12" fill="#333" text-anchor="middle">Ø76.2 mm [3.000 in]</text>
+<text x="560" y="112" font-size="13" font-weight="bold">KEY DIMENSIONS &amp; FEATURES</text>
+<text x="560" y="134" font-size="12">• Body dia: 76.2 mm [3.000 in]</text>
+<text x="560" y="152" font-size="12">• Length: 88.9 mm [3.500 in]</text>
+<text x="560" y="170" font-size="12">• Bearing journal (7006) j6: 30.0 mm [1.181 in]</text>
+<text x="560" y="188" font-size="12">• CSF-25 wave-gen register: 64.0 mm [2.520 in]</text>
+<text x="560" y="206" font-size="12">• Bolt pattern: 8 x M4 on 83 PCD</text>
+<text x="560" y="230" font-size="11" fill="#555">PROVENANCE: Journal = 7006 bore (remediation); CSF-25 register = P.DEC_DRIVE.bore_m (SOURCED). Body dia ASSUMED.</text>
+<text x="560" y="248" font-size="11" fill="#555">NOTE: Couples the CSF-25 output to the DEC axis / saddle side.</text>
+<rect x="16" y="626" width="1088" height="150" fill="none" stroke="black" stroke-width="2"/>
+<line x1="16" y1="652" x2="1104" y2="652" stroke="black" stroke-width="1"/>
+<line x1="16" y1="684" x2="1104" y2="684" stroke="black" stroke-width="1"/>
+<line x1="16" y1="716" x2="1104" y2="716" stroke="black" stroke-width="1"/>
+<line x1="16" y1="748" x2="1104" y2="748" stroke="black" stroke-width="1"/>
+<line x1="804" y1="626" x2="804" y2="776" stroke="black" stroke-width="1"/>
+<text x="26" y="644" font-size="13" font-weight="bold" fill="black">NIGHTWATCH OBSERVATORY — MOUNT &amp; ROLL-OFF TENDER</text>
+<text x="26" y="672" font-size="13" font-weight="bold" fill="black">PART: DEC drive spindle / saddle stub</text>
+<text x="26" y="698" font-size="12" font-weight="normal" fill="black">MATERIAL: 303 stainless per ASTM A582</text>
+<text x="26" y="724" font-size="12" font-weight="normal" fill="black">FINISH: Passivate per ASTM A967 (nitric)</text>
+<text x="26" y="750" font-size="12" font-weight="normal" fill="black">TOLERANCE: General ISO 2768-mK; journal diameters h6; concentricity 0.02 TIR</text>
+<text x="26" y="774" font-size="11" font-weight="normal" fill="black">SURFACE FINISH: Ra 0.8 um</text>
+<text x="814" y="644" font-size="13" font-weight="bold" fill="black">DWG NW-TP-003</text>
+<text x="814" y="670" font-size="10" font-weight="normal" fill="black">PKG BP-02 — Precision turned parts</text>
+<text x="814" y="696" font-size="10" font-weight="normal" fill="black">PROCESS: CNC turn + mill</text>
+<text x="814" y="722" font-size="10" font-weight="normal" fill="black">QTY: 1    REV: A    UNITS: mm [in]</text>
+<text x="814" y="748" font-size="9" font-weight="bold" fill="#a00">STATUS:</text>
+<text x="814" y="762" font-size="8" font-weight="bold" fill="#a00">ISSUED FOR BID / FOR PE REVIEW — NOT FOR CONSTRUCTION</text>
+</svg></div>
+<div class='page drawing'><svg xmlns="http://www.w3.org/2000/svg" width="1120" height="792" viewBox="0 0 1120 792" font-family="Helvetica,Arial,sans-serif">
+<rect x="0" y="0" width="1120" height="792" fill="white"/>
+<rect x="16" y="16" width="1088" height="760" fill="none" stroke="black" stroke-width="2"/>
+<text x="60" y="66" font-size="14" font-weight="bold">NW-PF-001 — Reinforced-concrete telescope pier</text>
+<text x="60" y="84" font-size="11" fill="#555">Envelope (ROUND) — bid control drawing; .scad/STEP is the 3-D master.</text>
+<rect x="130.5" y="272.58333333333337" width="329.0" height="54.833333333333336" fill="#eef3fb" stroke="black" stroke-width="1.5"/>
+<line x1="120.5" y1="300.00000000000006" x2="469.5" y2="300.00000000000006" stroke="#0645ad" stroke-width="0.7" stroke-dasharray="8 3 2 3"/>
+<line x1="130.5" y1="254.58333333333337" x2="459.5" y2="254.58333333333337" stroke="#0645ad" stroke-width="1"/><line x1="130.5" y1="250.58333333333337" x2="130.5" y2="258.58333333333337" stroke="#0645ad" stroke-width="1"/><line x1="459.5" y1="250.58333333333337" x2="459.5" y2="258.58333333333337" stroke="#0645ad" stroke-width="1"/><text x="295.0" y="248.58333333333337" font-size="12" fill="#0645ad" text-anchor="middle">L 1828.8 mm [72.000 in]</text>
+<line x1="477.5" y1="272.58333333333337" x2="477.5" y2="327.4166666666667" stroke="#0645ad" stroke-width="1"/><line x1="477.5" y1="268.58333333333337" x2="477.5" y2="276.58333333333337" stroke="#0645ad" stroke-width="1"/><line x1="477.5" y1="323.4166666666667" x2="477.5" y2="331.4166666666667" stroke="#0645ad" stroke-width="1"/><text x="477.5" y="314.0" font-size="12" fill="#0645ad" text-anchor="middle">Ø 304.8 mm [12.000 in]</text>
+<text x="295.0" y="304.00000000000006" font-size="12" fill="#333" text-anchor="middle">Ø304.8 mm [12.000 in]</text>
+<text x="560" y="112" font-size="13" font-weight="bold">KEY DIMENSIONS &amp; FEATURES</text>
+<text x="560" y="134" font-size="12">• Diameter: 304.8 mm [12.000 in]</text>
+<text x="560" y="152" font-size="12">• Height above grade: 914.4 mm [36.000 in]</text>
+<text x="560" y="170" font-size="12">• Embedment: 914.4 mm [36.000 in]</text>
+<text x="560" y="188" font-size="12">• f&#x27;c (psi): 4000</text>
+<text x="560" y="206" font-size="12">• Vertical rebar: 6 x #4 (A615 Gr60)</text>
+<text x="560" y="224" font-size="12">• Ties: #3 @ 12 in oc</text>
+<text x="560" y="248" font-size="11" fill="#555">PROVENANCE: Ø/height/embed/f&#x27;c = P.PIER (SOURCED); rebar schedule ASSUMED design-intent (PE to confirm).</text>
+<text x="560" y="266" font-size="11" fill="#555">NOTE: ISOLATED from any building slab (vibration). Embedment&gt;frost line. Rebar cage + anchor template cast integrally. REQUIRES PE STAMP.</text>
+<rect x="16" y="626" width="1088" height="150" fill="none" stroke="black" stroke-width="2"/>
+<line x1="16" y1="652" x2="1104" y2="652" stroke="black" stroke-width="1"/>
+<line x1="16" y1="684" x2="1104" y2="684" stroke="black" stroke-width="1"/>
+<line x1="16" y1="716" x2="1104" y2="716" stroke="black" stroke-width="1"/>
+<line x1="16" y1="748" x2="1104" y2="748" stroke="black" stroke-width="1"/>
+<line x1="804" y1="626" x2="804" y2="776" stroke="black" stroke-width="1"/>
+<text x="26" y="644" font-size="13" font-weight="bold" fill="black">NIGHTWATCH OBSERVATORY — MOUNT &amp; ROLL-OFF TENDER</text>
+<text x="26" y="672" font-size="13" font-weight="bold" fill="black">PART: Reinforced-concrete telescope pier</text>
+<text x="26" y="698" font-size="12" font-weight="normal" fill="black">MATERIAL: Cast-in-place concrete f&#x27;c = 4000 psi (27.6 MPa) per ACI 318 / ACI 301</text>
+<text x="26" y="724" font-size="12" font-weight="normal" fill="black">FINISH: none</text>
+<text x="26" y="750" font-size="12" font-weight="normal" fill="black">TOLERANCE: Plumb 1:200; top level 0.5 deg</text>
+<text x="26" y="774" font-size="11" font-weight="normal" fill="black">SURFACE FINISH: n/a</text>
+<text x="814" y="644" font-size="13" font-weight="bold" fill="black">DWG NW-PF-001</text>
+<text x="814" y="670" font-size="10" font-weight="normal" fill="black">PKG BP-03 — Pier &amp; foundation</text>
+<text x="814" y="696" font-size="10" font-weight="normal" fill="black">PROCESS: Cast-in-place</text>
+<text x="814" y="722" font-size="10" font-weight="normal" fill="black">QTY: 1    REV: A    UNITS: mm [in]</text>
+<text x="814" y="748" font-size="9" font-weight="bold" fill="#a00">STATUS:</text>
+<text x="814" y="762" font-size="8" font-weight="bold" fill="#a00">ISSUED FOR BID / FOR PE REVIEW — NOT FOR CONSTRUCTION</text>
+</svg></div>
+<div class='page drawing'><svg xmlns="http://www.w3.org/2000/svg" width="1120" height="792" viewBox="0 0 1120 792" font-family="Helvetica,Arial,sans-serif">
+<rect x="0" y="0" width="1120" height="792" fill="white"/>
+<rect x="16" y="16" width="1088" height="760" fill="none" stroke="black" stroke-width="2"/>
+<text x="60" y="66" font-size="14" font-weight="bold">NW-PF-002 — Pier top plate</text>
+<text x="60" y="84" font-size="11" fill="#555">Envelope (PLATE) — bid control drawing; .scad/STEP is the 3-D master.</text>
+<rect x="148.0" y="153.0" width="294.0" height="294.0" fill="#eef3fb" stroke="black" stroke-width="1.5"/>
+<line x1="148.0" y1="135.0" x2="442.0" y2="135.0" stroke="#0645ad" stroke-width="1"/><line x1="148.0" y1="131.0" x2="148.0" y2="139.0" stroke="#0645ad" stroke-width="1"/><line x1="442.0" y1="131.0" x2="442.0" y2="139.0" stroke="#0645ad" stroke-width="1"/><text x="295.0" y="129.0" font-size="12" fill="#0645ad" text-anchor="middle">L 304.8 mm [12.000 in]</text>
+<line x1="460.0" y1="153.0" x2="460.0" y2="447.0" stroke="#0645ad" stroke-width="1"/><line x1="460.0" y1="149.0" x2="460.0" y2="157.0" stroke="#0645ad" stroke-width="1"/><line x1="460.0" y1="443.0" x2="460.0" y2="451.0" stroke="#0645ad" stroke-width="1"/><text x="460.0" y="314.0" font-size="12" fill="#0645ad" text-anchor="middle">W 304.8 mm [12.000 in]</text>
+<text x="295.0" y="304.0" font-size="12" fill="#333" text-anchor="middle">THK 9.5 mm [0.375 in]</text>
+<text x="560" y="112" font-size="13" font-weight="bold">KEY DIMENSIONS &amp; FEATURES</text>
+<text x="560" y="134" font-size="12">• Side: 304.8 mm [12.000 in]</text>
+<text x="560" y="152" font-size="12">• Thickness: 9.5 mm [0.375 in]</text>
+<text x="560" y="170" font-size="12">• Anchor holes: 4 x Ø0.81 (for Ø0.75 F1554)</text>
+<text x="560" y="188" font-size="12">• Centre pattern: matches NW-PF-003</text>
+<text x="560" y="212" font-size="11" fill="#555">PROVENANCE: Side/thickness = P.PIER (SOURCED); hole pattern DERIVED.</text>
+<text x="560" y="230" font-size="11" fill="#555">NOTE: Grouted onto the pier over the cast-in anchor bolts.</text>
+<rect x="16" y="626" width="1088" height="150" fill="none" stroke="black" stroke-width="2"/>
+<line x1="16" y1="652" x2="1104" y2="652" stroke="black" stroke-width="1"/>
+<line x1="16" y1="684" x2="1104" y2="684" stroke="black" stroke-width="1"/>
+<line x1="16" y1="716" x2="1104" y2="716" stroke="black" stroke-width="1"/>
+<line x1="16" y1="748" x2="1104" y2="748" stroke="black" stroke-width="1"/>
+<line x1="804" y1="626" x2="804" y2="776" stroke="black" stroke-width="1"/>
+<text x="26" y="644" font-size="13" font-weight="bold" fill="black">NIGHTWATCH OBSERVATORY — MOUNT &amp; ROLL-OFF TENDER</text>
+<text x="26" y="672" font-size="13" font-weight="bold" fill="black">PART: Pier top plate</text>
+<text x="26" y="698" font-size="12" font-weight="normal" fill="black">MATERIAL: ASTM A36 structural steel</text>
+<text x="26" y="724" font-size="12" font-weight="normal" fill="black">FINISH: Hot-dip galvanize per ASTM A123</text>
+<text x="26" y="750" font-size="12" font-weight="normal" fill="black">TOLERANCE: General ISO 2768-mK; hole pattern 0.25</text>
+<text x="26" y="774" font-size="11" font-weight="normal" fill="black">SURFACE FINISH: Ra 3.2 um</text>
+<text x="814" y="644" font-size="13" font-weight="bold" fill="black">DWG NW-PF-002</text>
+<text x="814" y="670" font-size="10" font-weight="normal" fill="black">PKG BP-03 — Pier &amp; foundation</text>
+<text x="814" y="696" font-size="10" font-weight="normal" fill="black">PROCESS: Laser/waterjet cut + drill</text>
+<text x="814" y="722" font-size="10" font-weight="normal" fill="black">QTY: 1    REV: A    UNITS: mm [in]</text>
+<text x="814" y="748" font-size="9" font-weight="bold" fill="#a00">STATUS:</text>
+<text x="814" y="762" font-size="8" font-weight="bold" fill="#a00">ISSUED FOR BID / FOR PE REVIEW — NOT FOR CONSTRUCTION</text>
+</svg></div>
+<div class='page drawing'><svg xmlns="http://www.w3.org/2000/svg" width="1120" height="792" viewBox="0 0 1120 792" font-family="Helvetica,Arial,sans-serif">
+<rect x="0" y="0" width="1120" height="792" fill="white"/>
+<rect x="16" y="16" width="1088" height="760" fill="none" stroke="black" stroke-width="2"/>
+<text x="60" y="66" font-size="14" font-weight="bold">NW-PF-003 — Pier-to-mount adapter plate</text>
+<text x="60" y="84" font-size="11" fill="#555">Envelope (PLATE) — bid control drawing; .scad/STEP is the 3-D master.</text>
+<rect x="148.0" y="153.0" width="294.0" height="294.0" fill="#eef3fb" stroke="black" stroke-width="1.5"/>
+<line x1="148.0" y1="135.0" x2="442.0" y2="135.0" stroke="#0645ad" stroke-width="1"/><line x1="148.0" y1="131.0" x2="148.0" y2="139.0" stroke="#0645ad" stroke-width="1"/><line x1="442.0" y1="131.0" x2="442.0" y2="139.0" stroke="#0645ad" stroke-width="1"/><text x="295.0" y="129.0" font-size="12" fill="#0645ad" text-anchor="middle">L 254.0 mm [10.000 in]</text>
+<line x1="460.0" y1="153.0" x2="460.0" y2="447.0" stroke="#0645ad" stroke-width="1"/><line x1="460.0" y1="149.0" x2="460.0" y2="157.0" stroke="#0645ad" stroke-width="1"/><line x1="460.0" y1="443.0" x2="460.0" y2="451.0" stroke="#0645ad" stroke-width="1"/><text x="460.0" y="314.0" font-size="12" fill="#0645ad" text-anchor="middle">W 254.0 mm [10.000 in]</text>
+<text x="295.0" y="304.0" font-size="12" fill="#333" text-anchor="middle">THK 19.1 mm [0.750 in]</text>
+<text x="560" y="112" font-size="13" font-weight="bold">KEY DIMENSIONS &amp; FEATURES</text>
+<text x="560" y="134" font-size="12">• Side: 254.0 mm [10.000 in]</text>
+<text x="560" y="152" font-size="12">• Thickness: 19.1 mm [0.750 in]</text>
+<text x="560" y="170" font-size="12">• RA housing pattern: 4 x M6 (matches NW-MH-001)</text>
+<text x="560" y="188" font-size="12">• Pier plate pattern: 4 x Ø0.44 (matches NW-PF-002)</text>
+<text x="560" y="206" font-size="12">• Centre bore: 90.0 mm [3.543 in]</text>
+<text x="560" y="230" font-size="11" fill="#555">PROVENANCE: ASSUMED design-intent — adapter geometry not in repo (bridges 12x12 plate to 8x8 housing).</text>
+<text x="560" y="248" font-size="11" fill="#555">NOTE: Levels/orients the RA axis to site latitude 38.9 deg (wedge or shim set, bidder to detail).</text>
+<rect x="16" y="626" width="1088" height="150" fill="none" stroke="black" stroke-width="2"/>
+<line x1="16" y1="652" x2="1104" y2="652" stroke="black" stroke-width="1"/>
+<line x1="16" y1="684" x2="1104" y2="684" stroke="black" stroke-width="1"/>
+<line x1="16" y1="716" x2="1104" y2="716" stroke="black" stroke-width="1"/>
+<line x1="16" y1="748" x2="1104" y2="748" stroke="black" stroke-width="1"/>
+<line x1="804" y1="626" x2="804" y2="776" stroke="black" stroke-width="1"/>
+<text x="26" y="644" font-size="13" font-weight="bold" fill="black">NIGHTWATCH OBSERVATORY — MOUNT &amp; ROLL-OFF TENDER</text>
+<text x="26" y="672" font-size="13" font-weight="bold" fill="black">PART: Pier-to-mount adapter plate</text>
+<text x="26" y="698" font-size="12" font-weight="normal" fill="black">MATERIAL: 6061-T6 aluminium per ASTM B209</text>
+<text x="26" y="724" font-size="12" font-weight="normal" fill="black">FINISH: Type III hardcoat anodize, 0.002 in, per MIL-A-8625F Class 1 (clear)</text>
+<text x="26" y="750" font-size="12" font-weight="normal" fill="black">TOLERANCE: General ISO 2768-mK; bearing bores H7 (+0.030/0); flange faces flat 0.05</text>
+<text x="26" y="774" font-size="11" font-weight="normal" fill="black">SURFACE FINISH: Ra 3.2 um</text>
+<text x="814" y="644" font-size="13" font-weight="bold" fill="black">DWG NW-PF-003</text>
+<text x="814" y="670" font-size="10" font-weight="normal" fill="black">PKG BP-03 — Pier &amp; foundation</text>
+<text x="814" y="696" font-size="10" font-weight="normal" fill="black">PROCESS: CNC mill</text>
+<text x="814" y="722" font-size="10" font-weight="normal" fill="black">QTY: 1    REV: A    UNITS: mm [in]</text>
+<text x="814" y="748" font-size="9" font-weight="bold" fill="#a00">STATUS:</text>
+<text x="814" y="762" font-size="8" font-weight="bold" fill="#a00">ISSUED FOR BID / FOR PE REVIEW — NOT FOR CONSTRUCTION</text>
+</svg></div>
+<div class='page drawing'><svg xmlns="http://www.w3.org/2000/svg" width="1120" height="792" viewBox="0 0 1120 792" font-family="Helvetica,Arial,sans-serif">
+<rect x="0" y="0" width="1120" height="792" fill="white"/>
+<rect x="16" y="16" width="1088" height="760" fill="none" stroke="black" stroke-width="2"/>
+<text x="60" y="66" font-size="14" font-weight="bold">NW-RR-001 — Roof frame perimeter (HSS)</text>
+<text x="60" y="84" font-size="11" fill="#555">Envelope (HSS) — bid control drawing; .scad/STEP is the 3-D master.</text>
+<rect x="130.5" y="297.2144666666667" width="329.0" height="5.571066666666666" fill="#eef3fb" stroke="black" stroke-width="1.5"/>
+<line x1="130.5" y1="279.2144666666667" x2="459.5" y2="279.2144666666667" stroke="#0645ad" stroke-width="1"/><line x1="130.5" y1="275.2144666666667" x2="130.5" y2="283.2144666666667" stroke="#0645ad" stroke-width="1"/><line x1="459.5" y1="275.2144666666667" x2="459.5" y2="283.2144666666667" stroke="#0645ad" stroke-width="1"/><text x="295.0" y="273.2144666666667" font-size="12" fill="#0645ad" text-anchor="middle">L 3000.0 mm [118.110 in]</text>
+<line x1="477.5" y1="297.2144666666667" x2="477.5" y2="302.7855333333333" stroke="#0645ad" stroke-width="1"/><line x1="477.5" y1="293.2144666666667" x2="477.5" y2="301.2144666666667" stroke="#0645ad" stroke-width="1"/><line x1="477.5" y1="298.7855333333333" x2="477.5" y2="306.7855333333333" stroke="#0645ad" stroke-width="1"/><text x="477.5" y="314.0" font-size="12" fill="#0645ad" text-anchor="middle">W 50.8 mm [2.000 in]</text>
+<text x="295.0" y="304.0" font-size="12" fill="#333" text-anchor="middle">50.8 mm [2.000 in] sq x 3.2 mm [0.125 in] wall</text>
+<text x="560" y="112" font-size="13" font-weight="bold">KEY DIMENSIONS &amp; FEATURES</text>
+<text x="560" y="134" font-size="12">• Member length (each): 3000.0 mm [118.110 in]</text>
+<text x="560" y="152" font-size="12">• Members: 4</text>
+<text x="560" y="170" font-size="12">• Member: HSS 2x2x1/8</text>
+<text x="560" y="188" font-size="12">• Corner joints: fully welded, gusseted</text>
+<text x="560" y="212" font-size="11" fill="#555">PROVENANCE: Roof span/length = P.ENCLOSURE (ASSUMED footprint); 4 perimeter members; size ASSUMED design-intent.</text>
+<text x="560" y="230" font-size="11" fill="#555">NOTE: Rectangular roll-off roof frame (4 perimeter members). Sizing to be confirmed vs ASCE 7 snow/wind by PE.</text>
+<rect x="16" y="626" width="1088" height="150" fill="none" stroke="black" stroke-width="2"/>
+<line x1="16" y1="652" x2="1104" y2="652" stroke="black" stroke-width="1"/>
+<line x1="16" y1="684" x2="1104" y2="684" stroke="black" stroke-width="1"/>
+<line x1="16" y1="716" x2="1104" y2="716" stroke="black" stroke-width="1"/>
+<line x1="16" y1="748" x2="1104" y2="748" stroke="black" stroke-width="1"/>
+<line x1="804" y1="626" x2="804" y2="776" stroke="black" stroke-width="1"/>
+<text x="26" y="644" font-size="13" font-weight="bold" fill="black">NIGHTWATCH OBSERVATORY — MOUNT &amp; ROLL-OFF TENDER</text>
+<text x="26" y="672" font-size="13" font-weight="bold" fill="black">PART: Roof frame perimeter (HSS)</text>
+<text x="26" y="698" font-size="12" font-weight="normal" fill="black">MATERIAL: ASTM A500 Gr B HSS (steel)</text>
+<text x="26" y="724" font-size="12" font-weight="normal" fill="black">FINISH: Hot-dip galvanize per ASTM A123</text>
+<text x="26" y="750" font-size="12" font-weight="normal" fill="black">TOLERANCE: Frame square 3 mm/m; diagonal 5 mm</text>
+<text x="26" y="774" font-size="11" font-weight="normal" fill="black">SURFACE FINISH: n/a</text>
+<text x="814" y="644" font-size="13" font-weight="bold" fill="black">DWG NW-RR-001</text>
+<text x="814" y="670" font-size="10" font-weight="normal" fill="black">PKG BP-04 — Roll-off roof (&#x27;disappearing turret&#x27;)</text>
+<text x="814" y="696" font-size="10" font-weight="normal" fill="black">PROCESS: Cut + weld (AWS D1.1)</text>
+<text x="814" y="722" font-size="10" font-weight="normal" fill="black">QTY: 4    REV: A    UNITS: mm [in]</text>
+<text x="814" y="748" font-size="9" font-weight="bold" fill="#a00">STATUS:</text>
+<text x="814" y="762" font-size="8" font-weight="bold" fill="#a00">ISSUED FOR BID / FOR PE REVIEW — NOT FOR CONSTRUCTION</text>
+</svg></div>
+<div class='page drawing'><svg xmlns="http://www.w3.org/2000/svg" width="1120" height="792" viewBox="0 0 1120 792" font-family="Helvetica,Arial,sans-serif">
+<rect x="0" y="0" width="1120" height="792" fill="white"/>
+<rect x="16" y="16" width="1088" height="760" fill="none" stroke="black" stroke-width="2"/>
+<text x="60" y="66" font-size="14" font-weight="bold">NW-RR-002 — Roof rafters / purlins</text>
+<text x="60" y="84" font-size="11" fill="#555">Envelope (HSS) — bid control drawing; .scad/STEP is the 3-D master.</text>
+<rect x="130.5" y="297.91085" width="329.0" height="4.1783" fill="#eef3fb" stroke="black" stroke-width="1.5"/>
+<line x1="130.5" y1="279.91085" x2="459.5" y2="279.91085" stroke="#0645ad" stroke-width="1"/><line x1="130.5" y1="275.91085" x2="130.5" y2="283.91085" stroke="#0645ad" stroke-width="1"/><line x1="459.5" y1="275.91085" x2="459.5" y2="283.91085" stroke="#0645ad" stroke-width="1"/><text x="295.0" y="273.91085" font-size="12" fill="#0645ad" text-anchor="middle">L 3000.0 mm [118.110 in]</text>
+<line x1="477.5" y1="297.91085" x2="477.5" y2="302.08914999999996" stroke="#0645ad" stroke-width="1"/><line x1="477.5" y1="293.91085" x2="477.5" y2="301.91085" stroke="#0645ad" stroke-width="1"/><line x1="477.5" y1="298.08914999999996" x2="477.5" y2="306.08914999999996" stroke="#0645ad" stroke-width="1"/><text x="477.5" y="314.0" font-size="12" fill="#0645ad" text-anchor="middle">W 38.1 mm [1.500 in]</text>
+<text x="295.0" y="304.0" font-size="12" fill="#333" text-anchor="middle">38.1 mm [1.500 in] sq x 3.2 mm [0.125 in] wall</text>
+<text x="560" y="112" font-size="13" font-weight="bold">KEY DIMENSIONS &amp; FEATURES</text>
+<text x="560" y="134" font-size="12">• Member length (each): 3000.0 mm [118.110 in]</text>
+<text x="560" y="152" font-size="12">• Spacing: 600</text>
+<text x="560" y="170" font-size="12">• Member: HSS 2x1x1/8</text>
+<text x="560" y="188" font-size="12">• Members: 5</text>
+<text x="560" y="212" font-size="11" fill="#555">PROVENANCE: ASSUMED design-intent (5 purlins @ ~600 mm).</text>
+<text x="560" y="230" font-size="11" fill="#555">NOTE: Carries the metal roofing panel + snow load (10.8 kN closed-roof snow case, see enclosure proof).</text>
+<rect x="16" y="626" width="1088" height="150" fill="none" stroke="black" stroke-width="2"/>
+<line x1="16" y1="652" x2="1104" y2="652" stroke="black" stroke-width="1"/>
+<line x1="16" y1="684" x2="1104" y2="684" stroke="black" stroke-width="1"/>
+<line x1="16" y1="716" x2="1104" y2="716" stroke="black" stroke-width="1"/>
+<line x1="16" y1="748" x2="1104" y2="748" stroke="black" stroke-width="1"/>
+<line x1="804" y1="626" x2="804" y2="776" stroke="black" stroke-width="1"/>
+<text x="26" y="644" font-size="13" font-weight="bold" fill="black">NIGHTWATCH OBSERVATORY — MOUNT &amp; ROLL-OFF TENDER</text>
+<text x="26" y="672" font-size="13" font-weight="bold" fill="black">PART: Roof rafters / purlins</text>
+<text x="26" y="698" font-size="12" font-weight="normal" fill="black">MATERIAL: ASTM A500 Gr B HSS (steel)</text>
+<text x="26" y="724" font-size="12" font-weight="normal" fill="black">FINISH: Hot-dip galvanize per ASTM A123</text>
+<text x="26" y="750" font-size="12" font-weight="normal" fill="black">TOLERANCE: n/a</text>
+<text x="26" y="774" font-size="11" font-weight="normal" fill="black">SURFACE FINISH: n/a</text>
+<text x="814" y="644" font-size="13" font-weight="bold" fill="black">DWG NW-RR-002</text>
+<text x="814" y="670" font-size="10" font-weight="normal" fill="black">PKG BP-04 — Roll-off roof (&#x27;disappearing turret&#x27;)</text>
+<text x="814" y="696" font-size="10" font-weight="normal" fill="black">PROCESS: Cut + weld (AWS D1.1)</text>
+<text x="814" y="722" font-size="10" font-weight="normal" fill="black">QTY: 5    REV: A    UNITS: mm [in]</text>
+<text x="814" y="748" font-size="9" font-weight="bold" fill="#a00">STATUS:</text>
+<text x="814" y="762" font-size="8" font-weight="bold" fill="#a00">ISSUED FOR BID / FOR PE REVIEW — NOT FOR CONSTRUCTION</text>
+</svg></div>
+<div class='page drawing'><svg xmlns="http://www.w3.org/2000/svg" width="1120" height="792" viewBox="0 0 1120 792" font-family="Helvetica,Arial,sans-serif">
+<rect x="0" y="0" width="1120" height="792" fill="white"/>
+<rect x="16" y="16" width="1088" height="760" fill="none" stroke="black" stroke-width="2"/>
+<text x="60" y="66" font-size="14" font-weight="bold">NW-RR-003 — Track rail beams (box track)</text>
+<text x="60" y="84" font-size="11" fill="#555">Envelope (HSS) — bid control drawing; .scad/STEP is the 3-D master.</text>
+<rect x="130.5" y="298.2590416666667" width="329.0" height="3.4819166666666663" fill="#eef3fb" stroke="black" stroke-width="1.5"/>
+<line x1="130.5" y1="280.2590416666667" x2="459.5" y2="280.2590416666667" stroke="#0645ad" stroke-width="1"/><line x1="130.5" y1="276.2590416666667" x2="130.5" y2="284.2590416666667" stroke="#0645ad" stroke-width="1"/><line x1="459.5" y1="276.2590416666667" x2="459.5" y2="284.2590416666667" stroke="#0645ad" stroke-width="1"/><text x="295.0" y="274.2590416666667" font-size="12" fill="#0645ad" text-anchor="middle">L 6000.0 mm [236.220 in]</text>
+<line x1="477.5" y1="298.2590416666667" x2="477.5" y2="301.74095833333337" stroke="#0645ad" stroke-width="1"/><line x1="477.5" y1="294.2590416666667" x2="477.5" y2="302.2590416666667" stroke="#0645ad" stroke-width="1"/><line x1="477.5" y1="297.74095833333337" x2="477.5" y2="305.74095833333337" stroke="#0645ad" stroke-width="1"/><text x="477.5" y="314.0" font-size="12" fill="#0645ad" text-anchor="middle">W 63.5 mm [2.500 in]</text>
+<text x="295.0" y="304.0" font-size="12" fill="#333" text-anchor="middle">63.5 mm [2.500 in] sq x 4.0 mm [0.157 in] wall</text>
+<text x="560" y="112" font-size="13" font-weight="bold">KEY DIMENSIONS &amp; FEATURES</text>
+<text x="560" y="134" font-size="12">• Rail length (each): 6000.0 mm [236.220 in]</text>
+<text x="560" y="152" font-size="12">• Rails: 2</text>
+<text x="560" y="170" font-size="12">• Gauge (rail spacing): 3000</text>
+<text x="560" y="188" font-size="12">• Section: box track 2.5 in class</text>
+<text x="560" y="212" font-size="11" fill="#555">PROVENANCE: ASSUMED design-intent — rail run = 2x roof length so the roof fully clears the aperture.</text>
+<text x="560" y="230" font-size="11" fill="#555">NOTE: Roof travels its own length off the building. Rail brand/section = COTS (BP-05). End stops required.</text>
+<rect x="16" y="626" width="1088" height="150" fill="none" stroke="black" stroke-width="2"/>
+<line x1="16" y1="652" x2="1104" y2="652" stroke="black" stroke-width="1"/>
+<line x1="16" y1="684" x2="1104" y2="684" stroke="black" stroke-width="1"/>
+<line x1="16" y1="716" x2="1104" y2="716" stroke="black" stroke-width="1"/>
+<line x1="16" y1="748" x2="1104" y2="748" stroke="black" stroke-width="1"/>
+<line x1="804" y1="626" x2="804" y2="776" stroke="black" stroke-width="1"/>
+<text x="26" y="644" font-size="13" font-weight="bold" fill="black">NIGHTWATCH OBSERVATORY — MOUNT &amp; ROLL-OFF TENDER</text>
+<text x="26" y="672" font-size="13" font-weight="bold" fill="black">PART: Track rail beams (box track)</text>
+<text x="26" y="698" font-size="12" font-weight="normal" fill="black">MATERIAL: ASTM A36 structural steel</text>
+<text x="26" y="724" font-size="12" font-weight="normal" fill="black">FINISH: Hot-dip galvanize per ASTM A123</text>
+<text x="26" y="750" font-size="12" font-weight="normal" fill="black">TOLERANCE: Rail straightness 3 mm over run; gauge 2 mm</text>
+<text x="26" y="774" font-size="11" font-weight="normal" fill="black">SURFACE FINISH: n/a</text>
+<text x="814" y="644" font-size="13" font-weight="bold" fill="black">DWG NW-RR-003</text>
+<text x="814" y="670" font-size="10" font-weight="normal" fill="black">PKG BP-04 — Roll-off roof (&#x27;disappearing turret&#x27;)</text>
+<text x="814" y="696" font-size="10" font-weight="normal" fill="black">PROCESS: Cut + weld / bolt to piers</text>
+<text x="814" y="722" font-size="10" font-weight="normal" fill="black">QTY: 2    REV: A    UNITS: mm [in]</text>
+<text x="814" y="748" font-size="9" font-weight="bold" fill="#a00">STATUS:</text>
+<text x="814" y="762" font-size="8" font-weight="bold" fill="#a00">ISSUED FOR BID / FOR PE REVIEW — NOT FOR CONSTRUCTION</text>
+</svg></div>
+<div class='page drawing'><svg xmlns="http://www.w3.org/2000/svg" width="1120" height="792" viewBox="0 0 1120 792" font-family="Helvetica,Arial,sans-serif">
+<rect x="0" y="0" width="1120" height="792" fill="white"/>
+<rect x="16" y="16" width="1088" height="760" fill="none" stroke="black" stroke-width="2"/>
+<text x="60" y="66" font-size="14" font-weight="bold">NW-RR-004 — Wheel axle brackets</text>
+<text x="60" y="84" font-size="11" fill="#555">Envelope (PLATE) — bid control drawing; .scad/STEP is the 3-D master.</text>
+<rect x="130.49999999999997" y="176.62499999999997" width="329.00000000000006" height="246.75000000000006" fill="#eef3fb" stroke="black" stroke-width="1.5"/>
+<line x1="130.49999999999997" y1="158.62499999999997" x2="459.5" y2="158.62499999999997" stroke="#0645ad" stroke-width="1"/><line x1="130.49999999999997" y1="154.62499999999997" x2="130.49999999999997" y2="162.62499999999997" stroke="#0645ad" stroke-width="1"/><line x1="459.5" y1="154.62499999999997" x2="459.5" y2="162.62499999999997" stroke="#0645ad" stroke-width="1"/><text x="295.0" y="152.62499999999997" font-size="12" fill="#0645ad" text-anchor="middle">L 101.6 mm [4.000 in]</text>
+<line x1="477.5" y1="176.62499999999997" x2="477.5" y2="423.375" stroke="#0645ad" stroke-width="1"/><line x1="477.5" y1="172.62499999999997" x2="477.5" y2="180.62499999999997" stroke="#0645ad" stroke-width="1"/><line x1="477.5" y1="419.375" x2="477.5" y2="427.375" stroke="#0645ad" stroke-width="1"/><text x="477.5" y="314.0" font-size="12" fill="#0645ad" text-anchor="middle">W 76.2 mm [3.000 in]</text>
+<text x="295.0" y="304.0" font-size="12" fill="#333" text-anchor="middle">THK 9.5 mm [0.375 in]</text>
+<text x="560" y="112" font-size="13" font-weight="bold">KEY DIMENSIONS &amp; FEATURES</text>
+<text x="560" y="134" font-size="12">• Count: 8</text>
+<text x="560" y="152" font-size="12">• Wheel bore: for Ø4 in V-groove wheel (COTS)</text>
+<text x="560" y="170" font-size="12">• Axle: M16</text>
+<text x="560" y="194" font-size="11" fill="#555">PROVENANCE: ASSUMED design-intent — 8 wheels (4 per side).</text>
+<text x="560" y="212" font-size="11" fill="#555">NOTE: Carry the COTS V-groove wheels (BP-05). Roof 180 kg + snow -&gt; size wheels for &gt;=4x.</text>
+<rect x="16" y="626" width="1088" height="150" fill="none" stroke="black" stroke-width="2"/>
+<line x1="16" y1="652" x2="1104" y2="652" stroke="black" stroke-width="1"/>
+<line x1="16" y1="684" x2="1104" y2="684" stroke="black" stroke-width="1"/>
+<line x1="16" y1="716" x2="1104" y2="716" stroke="black" stroke-width="1"/>
+<line x1="16" y1="748" x2="1104" y2="748" stroke="black" stroke-width="1"/>
+<line x1="804" y1="626" x2="804" y2="776" stroke="black" stroke-width="1"/>
+<text x="26" y="644" font-size="13" font-weight="bold" fill="black">NIGHTWATCH OBSERVATORY — MOUNT &amp; ROLL-OFF TENDER</text>
+<text x="26" y="672" font-size="13" font-weight="bold" fill="black">PART: Wheel axle brackets</text>
+<text x="26" y="698" font-size="12" font-weight="normal" fill="black">MATERIAL: ASTM A36 structural steel</text>
+<text x="26" y="724" font-size="12" font-weight="normal" fill="black">FINISH: Hot-dip galvanize per ASTM A123</text>
+<text x="26" y="750" font-size="12" font-weight="normal" fill="black">TOLERANCE: Hole pattern 0.25</text>
+<text x="26" y="774" font-size="11" font-weight="normal" fill="black">SURFACE FINISH: n/a</text>
+<text x="814" y="644" font-size="13" font-weight="bold" fill="black">DWG NW-RR-004</text>
+<text x="814" y="670" font-size="10" font-weight="normal" fill="black">PKG BP-04 — Roll-off roof (&#x27;disappearing turret&#x27;)</text>
+<text x="814" y="696" font-size="10" font-weight="normal" fill="black">PROCESS: Laser cut + weld</text>
+<text x="814" y="722" font-size="10" font-weight="normal" fill="black">QTY: 8    REV: A    UNITS: mm [in]</text>
+<text x="814" y="748" font-size="9" font-weight="bold" fill="#a00">STATUS:</text>
+<text x="814" y="762" font-size="8" font-weight="bold" fill="#a00">ISSUED FOR BID / FOR PE REVIEW — NOT FOR CONSTRUCTION</text>
+</svg></div>
+<div class='page drawing'><svg xmlns="http://www.w3.org/2000/svg" width="1120" height="792" viewBox="0 0 1120 792" font-family="Helvetica,Arial,sans-serif">
+<rect x="0" y="0" width="1120" height="792" fill="white"/>
+<rect x="16" y="16" width="1088" height="760" fill="none" stroke="black" stroke-width="2"/>
+<text x="60" y="66" font-size="14" font-weight="bold">NW-RR-005 — Drive bracket + end stops</text>
+<text x="60" y="84" font-size="11" fill="#555">Envelope (PLATE) — bid control drawing; .scad/STEP is the 3-D master.</text>
+<rect x="130.5" y="190.33333333333331" width="329.0" height="219.33333333333334" fill="#eef3fb" stroke="black" stroke-width="1.5"/>
+<line x1="130.5" y1="172.33333333333331" x2="459.5" y2="172.33333333333331" stroke="#0645ad" stroke-width="1"/><line x1="130.5" y1="168.33333333333331" x2="130.5" y2="176.33333333333331" stroke="#0645ad" stroke-width="1"/><line x1="459.5" y1="168.33333333333331" x2="459.5" y2="176.33333333333331" stroke="#0645ad" stroke-width="1"/><text x="295.0" y="166.33333333333331" font-size="12" fill="#0645ad" text-anchor="middle">L 150.0 mm [5.906 in]</text>
+<line x1="477.5" y1="190.33333333333331" x2="477.5" y2="409.66666666666663" stroke="#0645ad" stroke-width="1"/><line x1="477.5" y1="186.33333333333331" x2="477.5" y2="194.33333333333331" stroke="#0645ad" stroke-width="1"/><line x1="477.5" y1="405.66666666666663" x2="477.5" y2="413.66666666666663" stroke="#0645ad" stroke-width="1"/><text x="477.5" y="314.0" font-size="12" fill="#0645ad" text-anchor="middle">W 100.0 mm [3.937 in]</text>
+<text x="295.0" y="304.0" font-size="12" fill="#333" text-anchor="middle">THK 9.5 mm [0.375 in]</text>
+<text x="560" y="112" font-size="13" font-weight="bold">KEY DIMENSIONS &amp; FEATURES</text>
+<text x="560" y="134" font-size="12">• Drive: gate-operator / rack (COTS)</text>
+<text x="560" y="152" font-size="12">• End stops: 4.0 mm [0.157 in]</text>
+<text x="560" y="170" font-size="12">• Bump pads: rubber</text>
+<text x="560" y="194" font-size="11" fill="#555">PROVENANCE: ASSUMED design-intent — drive = gate operator sized for 180 kg (enclosure proof: 235 N move force).</text>
+<text x="560" y="212" font-size="11" fill="#555">NOTE: Mounts the COTS drive (BP-05) and hard end stops. Wind-during-motion limit per enclosure proof.</text>
+<rect x="16" y="626" width="1088" height="150" fill="none" stroke="black" stroke-width="2"/>
+<line x1="16" y1="652" x2="1104" y2="652" stroke="black" stroke-width="1"/>
+<line x1="16" y1="684" x2="1104" y2="684" stroke="black" stroke-width="1"/>
+<line x1="16" y1="716" x2="1104" y2="716" stroke="black" stroke-width="1"/>
+<line x1="16" y1="748" x2="1104" y2="748" stroke="black" stroke-width="1"/>
+<line x1="804" y1="626" x2="804" y2="776" stroke="black" stroke-width="1"/>
+<text x="26" y="644" font-size="13" font-weight="bold" fill="black">NIGHTWATCH OBSERVATORY — MOUNT &amp; ROLL-OFF TENDER</text>
+<text x="26" y="672" font-size="13" font-weight="bold" fill="black">PART: Drive bracket + end stops</text>
+<text x="26" y="698" font-size="12" font-weight="normal" fill="black">MATERIAL: ASTM A36 structural steel</text>
+<text x="26" y="724" font-size="12" font-weight="normal" fill="black">FINISH: Hot-dip galvanize per ASTM A123</text>
+<text x="26" y="750" font-size="12" font-weight="normal" fill="black">TOLERANCE: n/a</text>
+<text x="26" y="774" font-size="11" font-weight="normal" fill="black">SURFACE FINISH: n/a</text>
+<text x="814" y="644" font-size="13" font-weight="bold" fill="black">DWG NW-RR-005</text>
+<text x="814" y="670" font-size="10" font-weight="normal" fill="black">PKG BP-04 — Roll-off roof (&#x27;disappearing turret&#x27;)</text>
+<text x="814" y="696" font-size="10" font-weight="normal" fill="black">PROCESS: Laser cut + weld</text>
+<text x="814" y="722" font-size="10" font-weight="normal" fill="black">QTY: 4    REV: A    UNITS: mm [in]</text>
+<text x="814" y="748" font-size="9" font-weight="bold" fill="#a00">STATUS:</text>
+<text x="814" y="762" font-size="8" font-weight="bold" fill="#a00">ISSUED FOR BID / FOR PE REVIEW — NOT FOR CONSTRUCTION</text>
+</svg></div>
+<div class='page drawing'><svg xmlns="http://www.w3.org/2000/svg" width="1120" height="792" viewBox="0 0 1120 792" font-family="Helvetica,Arial,sans-serif">
+<rect x="0" y="0" width="1120" height="792" fill="white"/>
+<rect x="16" y="16" width="1088" height="760" fill="none" stroke="black" stroke-width="2"/>
+<text x="60" y="66" font-size="14" font-weight="bold">NW-RR-006 — Wind hold-down anchor brackets</text>
+<text x="60" y="84" font-size="11" fill="#555">Envelope (PLATE) — bid control drawing; .scad/STEP is the 3-D master.</text>
+<rect x="130.5" y="168.4" width="329.0" height="263.2" fill="#eef3fb" stroke="black" stroke-width="1.5"/>
+<line x1="130.5" y1="150.4" x2="459.5" y2="150.4" stroke="#0645ad" stroke-width="1"/><line x1="130.5" y1="146.4" x2="130.5" y2="154.4" stroke="#0645ad" stroke-width="1"/><line x1="459.5" y1="146.4" x2="459.5" y2="154.4" stroke="#0645ad" stroke-width="1"/><text x="295.0" y="144.4" font-size="12" fill="#0645ad" text-anchor="middle">L 127.0 mm [5.000 in]</text>
+<line x1="477.5" y1="168.4" x2="477.5" y2="431.6" stroke="#0645ad" stroke-width="1"/><line x1="477.5" y1="164.4" x2="477.5" y2="172.4" stroke="#0645ad" stroke-width="1"/><line x1="477.5" y1="427.6" x2="477.5" y2="435.6" stroke="#0645ad" stroke-width="1"/><text x="477.5" y="314.0" font-size="12" fill="#0645ad" text-anchor="middle">W 101.6 mm [4.000 in]</text>
+<text x="295.0" y="304.0" font-size="12" fill="#333" text-anchor="middle">THK 12.7 mm [0.500 in]</text>
+<text x="560" y="112" font-size="13" font-weight="bold">KEY DIMENSIONS &amp; FEATURES</text>
+<text x="560" y="134" font-size="12">• Count: 4</text>
+<text x="560" y="152" font-size="12">• Anchor: Ø0.75 F1554 (to building/pier)</text>
+<text x="560" y="170" font-size="12">• Capacity (each): &gt;=2 klbf</text>
+<text x="560" y="194" font-size="11" fill="#555">PROVENANCE: REMEDIATION — wind proof: survival uplift 9.2 kN, 4 x 2 klbf anchors -&gt; SF 3.9.</text>
+<text x="560" y="212" font-size="11" fill="#555">NOTE: MANDATORY. Clamp the roof/building against 105 mph survival uplift. Interlocked with the drive.</text>
+<rect x="16" y="626" width="1088" height="150" fill="none" stroke="black" stroke-width="2"/>
+<line x1="16" y1="652" x2="1104" y2="652" stroke="black" stroke-width="1"/>
+<line x1="16" y1="684" x2="1104" y2="684" stroke="black" stroke-width="1"/>
+<line x1="16" y1="716" x2="1104" y2="716" stroke="black" stroke-width="1"/>
+<line x1="16" y1="748" x2="1104" y2="748" stroke="black" stroke-width="1"/>
+<line x1="804" y1="626" x2="804" y2="776" stroke="black" stroke-width="1"/>
+<text x="26" y="644" font-size="13" font-weight="bold" fill="black">NIGHTWATCH OBSERVATORY — MOUNT &amp; ROLL-OFF TENDER</text>
+<text x="26" y="672" font-size="13" font-weight="bold" fill="black">PART: Wind hold-down anchor brackets</text>
+<text x="26" y="698" font-size="12" font-weight="normal" fill="black">MATERIAL: ASTM A36 structural steel</text>
+<text x="26" y="724" font-size="12" font-weight="normal" fill="black">FINISH: Hot-dip galvanize per ASTM A123</text>
+<text x="26" y="750" font-size="12" font-weight="normal" fill="black">TOLERANCE: Hole pattern 0.25</text>
+<text x="26" y="774" font-size="11" font-weight="normal" fill="black">SURFACE FINISH: n/a</text>
+<text x="814" y="644" font-size="13" font-weight="bold" fill="black">DWG NW-RR-006</text>
+<text x="814" y="670" font-size="10" font-weight="normal" fill="black">PKG BP-04 — Roll-off roof (&#x27;disappearing turret&#x27;)</text>
+<text x="814" y="696" font-size="10" font-weight="normal" fill="black">PROCESS: Laser cut + weld</text>
+<text x="814" y="722" font-size="10" font-weight="normal" fill="black">QTY: 4    REV: A    UNITS: mm [in]</text>
+<text x="814" y="748" font-size="9" font-weight="bold" fill="#a00">STATUS:</text>
+<text x="814" y="762" font-size="8" font-weight="bold" fill="#a00">ISSUED FOR BID / FOR PE REVIEW — NOT FOR CONSTRUCTION</text>
+</svg></div>
+</body></html>

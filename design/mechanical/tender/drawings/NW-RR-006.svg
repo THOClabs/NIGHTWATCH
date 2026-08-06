@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1120" height="792" viewBox="0 0 1120 792" font-family="Helvetica,Arial,sans-serif">
+<rect x="0" y="0" width="1120" height="792" fill="white"/>
+<rect x="16" y="16" width="1088" height="760" fill="none" stroke="black" stroke-width="2"/>
+<text x="60" y="66" font-size="14" font-weight="bold">NW-RR-006 — Wind hold-down anchor brackets</text>
+<text x="60" y="84" font-size="11" fill="#555">Envelope (PLATE) — bid control drawing; .scad/STEP is the 3-D master.</text>
+<rect x="130.5" y="168.4" width="329.0" height="263.2" fill="#eef3fb" stroke="black" stroke-width="1.5"/>
+<line x1="130.5" y1="150.4" x2="459.5" y2="150.4" stroke="#0645ad" stroke-width="1"/><line x1="130.5" y1="146.4" x2="130.5" y2="154.4" stroke="#0645ad" stroke-width="1"/><line x1="459.5" y1="146.4" x2="459.5" y2="154.4" stroke="#0645ad" stroke-width="1"/><text x="295.0" y="144.4" font-size="12" fill="#0645ad" text-anchor="middle">L 127.0 mm [5.000 in]</text>
+<line x1="477.5" y1="168.4" x2="477.5" y2="431.6" stroke="#0645ad" stroke-width="1"/><line x1="477.5" y1="164.4" x2="477.5" y2="172.4" stroke="#0645ad" stroke-width="1"/><line x1="477.5" y1="427.6" x2="477.5" y2="435.6" stroke="#0645ad" stroke-width="1"/><text x="477.5" y="314.0" font-size="12" fill="#0645ad" text-anchor="middle">W 101.6 mm [4.000 in]</text>
+<text x="295.0" y="304.0" font-size="12" fill="#333" text-anchor="middle">THK 12.7 mm [0.500 in]</text>
+<text x="560" y="112" font-size="13" font-weight="bold">KEY DIMENSIONS &amp; FEATURES</text>
+<text x="560" y="134" font-size="12">• Count: 4</text>
+<text x="560" y="152" font-size="12">• Anchor: Ø0.75 F1554 (to building/pier)</text>
+<text x="560" y="170" font-size="12">• Capacity (each): &gt;=2 klbf</text>
+<text x="560" y="194" font-size="11" fill="#555">PROVENANCE: REMEDIATION — wind proof: survival uplift 9.2 kN, 4 x 2 klbf anchors -&gt; SF 3.9.</text>
+<text x="560" y="212" font-size="11" fill="#555">NOTE: MANDATORY. Clamp the roof/building against 105 mph survival uplift. Interlocked with the drive.</text>
+<rect x="16" y="626" width="1088" height="150" fill="none" stroke="black" stroke-width="2"/>
+<line x1="16" y1="652" x2="1104" y2="652" stroke="black" stroke-width="1"/>
+<line x1="16" y1="684" x2="1104" y2="684" stroke="black" stroke-width="1"/>
+<line x1="16" y1="716" x2="1104" y2="716" stroke="black" stroke-width="1"/>
+<line x1="16" y1="748" x2="1104" y2="748" stroke="black" stroke-width="1"/>
+<line x1="804" y1="626" x2="804" y2="776" stroke="black" stroke-width="1"/>
+<text x="26" y="644" font-size="13" font-weight="bold" fill="black">NIGHTWATCH OBSERVATORY — MOUNT &amp; ROLL-OFF TENDER</text>
+<text x="26" y="672" font-size="13" font-weight="bold" fill="black">PART: Wind hold-down anchor brackets</text>
+<text x="26" y="698" font-size="12" font-weight="normal" fill="black">MATERIAL: ASTM A36 structural steel</text>
+<text x="26" y="724" font-size="12" font-weight="normal" fill="black">FINISH: Hot-dip galvanize per ASTM A123</text>
+<text x="26" y="750" font-size="12" font-weight="normal" fill="black">TOLERANCE: Hole pattern 0.25</text>
+<text x="26" y="774" font-size="11" font-weight="normal" fill="black">SURFACE FINISH: n/a</text>
+<text x="814" y="644" font-size="13" font-weight="bold" fill="black">DWG NW-RR-006</text>
+<text x="814" y="670" font-size="10" font-weight="normal" fill="black">PKG BP-04 — Roll-off roof (&#x27;disappearing turret&#x27;)</text>
+<text x="814" y="696" font-size="10" font-weight="normal" fill="black">PROCESS: Laser cut + weld</text>
+<text x="814" y="722" font-size="10" font-weight="normal" fill="black">QTY: 4    REV: A    UNITS: mm [in]</text>
+<text x="814" y="748" font-size="9" font-weight="bold" fill="#a00">STATUS:</text>
+<text x="814" y="762" font-size="8" font-weight="bold" fill="#a00">ISSUED FOR BID / FOR PE REVIEW — NOT FOR CONSTRUCTION</text>
+</svg>

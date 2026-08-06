@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1120" height="792" viewBox="0 0 1120 792" font-family="Helvetica,Arial,sans-serif">
+<rect x="0" y="0" width="1120" height="792" fill="white"/>
+<rect x="16" y="16" width="1088" height="760" fill="none" stroke="black" stroke-width="2"/>
+<text x="60" y="66" font-size="14" font-weight="bold">NW-RR-003 — Track rail beams (box track)</text>
+<text x="60" y="84" font-size="11" fill="#555">Envelope (HSS) — bid control drawing; .scad/STEP is the 3-D master.</text>
+<rect x="130.5" y="298.2590416666667" width="329.0" height="3.4819166666666663" fill="#eef3fb" stroke="black" stroke-width="1.5"/>
+<line x1="130.5" y1="280.2590416666667" x2="459.5" y2="280.2590416666667" stroke="#0645ad" stroke-width="1"/><line x1="130.5" y1="276.2590416666667" x2="130.5" y2="284.2590416666667" stroke="#0645ad" stroke-width="1"/><line x1="459.5" y1="276.2590416666667" x2="459.5" y2="284.2590416666667" stroke="#0645ad" stroke-width="1"/><text x="295.0" y="274.2590416666667" font-size="12" fill="#0645ad" text-anchor="middle">L 6000.0 mm [236.220 in]</text>
+<line x1="477.5" y1="298.2590416666667" x2="477.5" y2="301.74095833333337" stroke="#0645ad" stroke-width="1"/><line x1="477.5" y1="294.2590416666667" x2="477.5" y2="302.2590416666667" stroke="#0645ad" stroke-width="1"/><line x1="477.5" y1="297.74095833333337" x2="477.5" y2="305.74095833333337" stroke="#0645ad" stroke-width="1"/><text x="477.5" y="314.0" font-size="12" fill="#0645ad" text-anchor="middle">W 63.5 mm [2.500 in]</text>
+<text x="295.0" y="304.0" font-size="12" fill="#333" text-anchor="middle">63.5 mm [2.500 in] sq x 4.0 mm [0.157 in] wall</text>
+<text x="560" y="112" font-size="13" font-weight="bold">KEY DIMENSIONS &amp; FEATURES</text>
+<text x="560" y="134" font-size="12">• Rail length (each): 6000.0 mm [236.220 in]</text>
+<text x="560" y="152" font-size="12">• Rails: 2</text>
+<text x="560" y="170" font-size="12">• Gauge (rail spacing): 3000</text>
+<text x="560" y="188" font-size="12">• Section: box track 2.5 in class</text>
+<text x="560" y="212" font-size="11" fill="#555">PROVENANCE: ASSUMED design-intent — rail run = 2x roof length so the roof fully clears the aperture.</text>
+<text x="560" y="230" font-size="11" fill="#555">NOTE: Roof travels its own length off the building. Rail brand/section = COTS (BP-05). End stops required.</text>
+<rect x="16" y="626" width="1088" height="150" fill="none" stroke="black" stroke-width="2"/>
+<line x1="16" y1="652" x2="1104" y2="652" stroke="black" stroke-width="1"/>
+<line x1="16" y1="684" x2="1104" y2="684" stroke="black" stroke-width="1"/>
+<line x1="16" y1="716" x2="1104" y2="716" stroke="black" stroke-width="1"/>
+<line x1="16" y1="748" x2="1104" y2="748" stroke="black" stroke-width="1"/>
+<line x1="804" y1="626" x2="804" y2="776" stroke="black" stroke-width="1"/>
+<text x="26" y="644" font-size="13" font-weight="bold" fill="black">NIGHTWATCH OBSERVATORY — MOUNT &amp; ROLL-OFF TENDER</text>
+<text x="26" y="672" font-size="13" font-weight="bold" fill="black">PART: Track rail beams (box track)</text>
+<text x="26" y="698" font-size="12" font-weight="normal" fill="black">MATERIAL: ASTM A36 structural steel</text>
+<text x="26" y="724" font-size="12" font-weight="normal" fill="black">FINISH: Hot-dip galvanize per ASTM A123</text>
+<text x="26" y="750" font-size="12" font-weight="normal" fill="black">TOLERANCE: Rail straightness 3 mm over run; gauge 2 mm</text>
+<text x="26" y="774" font-size="11" font-weight="normal" fill="black">SURFACE FINISH: n/a</text>
+<text x="814" y="644" font-size="13" font-weight="bold" fill="black">DWG NW-RR-003</text>
+<text x="814" y="670" font-size="10" font-weight="normal" fill="black">PKG BP-04 — Roll-off roof (&#x27;disappearing turret&#x27;)</text>
+<text x="814" y="696" font-size="10" font-weight="normal" fill="black">PROCESS: Cut + weld / bolt to piers</text>
+<text x="814" y="722" font-size="10" font-weight="normal" fill="black">QTY: 2    REV: A    UNITS: mm [in]</text>
+<text x="814" y="748" font-size="9" font-weight="bold" fill="#a00">STATUS:</text>
+<text x="814" y="762" font-size="8" font-weight="bold" fill="#a00">ISSUED FOR BID / FOR PE REVIEW — NOT FOR CONSTRUCTION</text>
+</svg>

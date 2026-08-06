@@ -1,0 +1,24 @@
+subsystem,option,role,w_default,w_precision,w_cost,win_default,win_precision,win_cost
+Optical tube assembly,MN78 f/8 (14 kg),baseline,2.94,3.16,2.86,,,
+Optical tube assembly,MN76 f/6 (9 kg),alternative,3.21,3.18,3.07,,,
+Optical tube assembly,MN86 f/6 (8-inch),alternative,2.16,2.56,1.96,,,
+Optical tube assembly,APM-LZOS apo triplet,bold,2.76,3.28,2.18,,,
+Optical tube assembly,ES-MN152 f/4.8,alternative,3.99,3.74,4.37,*,*,*
+Mount topology,Counterweighted GEM,baseline,3.31,3.22,3.35,,,
+Mount topology,Counterweight-FREE GEM,bold,3.68,3.72,3.8,*,*,*
+Mount topology,Fork + field derotator,alternative,2.32,2.28,2.2,,,
+Axis drive train,NEMA17 + 27:1 + harmonic,baseline,3.24,2.92,3.6,*,,*
+Axis drive train,Direct-to-harmonic,alternative,3.16,3.12,3.2,,,
+Axis drive train,Torque-motor direct drive,bold,2.73,3.3,2.07,,*,
+Feedback / encoder chain,AMT103 motor + AS5600 axis,baseline,3.33,2.74,4.05,,,
+Feedback / encoder chain,On-axis high-res absolute ring,bold,2.83,3.38,2.15,,*,
+Feedback / encoder chain,Hybrid (motor + on-axis absolute),alternative,3.07,3.3,2.75,*,,*
+Pier / foundation,Concrete Sonotube,baseline,4.09,3.82,4.45,*,*,*
+Pier / foundation,Isolated pier-in-pier,bold,3.7,3.8,3.5,,,
+Pier / foundation,Steel-concrete hybrid,alternative,2.9,2.92,2.92,,,
+Enclosure,Roll-off roof,baseline,3.92,3.64,4.4,*,,*
+Enclosure,Clamshell dome,alternative,2.44,2.6,2.22,,,
+Enclosure,Roll-off + active thermal,bold,3.88,3.88,3.96,,*,
+Mount-head frame / housings,6061-T6 CNC plates,baseline,3.56,3.4,3.78,*,*,*
+Mount-head frame / housings,Steel weldment,alternative,3.07,3.1,2.97,,,
+Mount-head frame / housings,Cast housings,bold,2.83,3.18,2.37,,,

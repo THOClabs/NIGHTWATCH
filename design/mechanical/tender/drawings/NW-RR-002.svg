@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1120" height="792" viewBox="0 0 1120 792" font-family="Helvetica,Arial,sans-serif">
+<rect x="0" y="0" width="1120" height="792" fill="white"/>
+<rect x="16" y="16" width="1088" height="760" fill="none" stroke="black" stroke-width="2"/>
+<text x="60" y="66" font-size="14" font-weight="bold">NW-RR-002 — Roof rafters / purlins</text>
+<text x="60" y="84" font-size="11" fill="#555">Envelope (HSS) — bid control drawing; .scad/STEP is the 3-D master.</text>
+<rect x="130.5" y="297.91085" width="329.0" height="4.1783" fill="#eef3fb" stroke="black" stroke-width="1.5"/>
+<line x1="130.5" y1="279.91085" x2="459.5" y2="279.91085" stroke="#0645ad" stroke-width="1"/><line x1="130.5" y1="275.91085" x2="130.5" y2="283.91085" stroke="#0645ad" stroke-width="1"/><line x1="459.5" y1="275.91085" x2="459.5" y2="283.91085" stroke="#0645ad" stroke-width="1"/><text x="295.0" y="273.91085" font-size="12" fill="#0645ad" text-anchor="middle">L 3000.0 mm [118.110 in]</text>
+<line x1="477.5" y1="297.91085" x2="477.5" y2="302.08914999999996" stroke="#0645ad" stroke-width="1"/><line x1="477.5" y1="293.91085" x2="477.5" y2="301.91085" stroke="#0645ad" stroke-width="1"/><line x1="477.5" y1="298.08914999999996" x2="477.5" y2="306.08914999999996" stroke="#0645ad" stroke-width="1"/><text x="477.5" y="314.0" font-size="12" fill="#0645ad" text-anchor="middle">W 38.1 mm [1.500 in]</text>
+<text x="295.0" y="304.0" font-size="12" fill="#333" text-anchor="middle">38.1 mm [1.500 in] sq x 3.2 mm [0.125 in] wall</text>
+<text x="560" y="112" font-size="13" font-weight="bold">KEY DIMENSIONS &amp; FEATURES</text>
+<text x="560" y="134" font-size="12">• Member length (each): 3000.0 mm [118.110 in]</text>
+<text x="560" y="152" font-size="12">• Spacing: 600</text>
+<text x="560" y="170" font-size="12">• Member: HSS 2x1x1/8</text>
+<text x="560" y="188" font-size="12">• Members: 5</text>
+<text x="560" y="212" font-size="11" fill="#555">PROVENANCE: ASSUMED design-intent (5 purlins @ ~600 mm).</text>
+<text x="560" y="230" font-size="11" fill="#555">NOTE: Carries the metal roofing panel + snow load (10.8 kN closed-roof snow case, see enclosure proof).</text>
+<rect x="16" y="626" width="1088" height="150" fill="none" stroke="black" stroke-width="2"/>
+<line x1="16" y1="652" x2="1104" y2="652" stroke="black" stroke-width="1"/>
+<line x1="16" y1="684" x2="1104" y2="684" stroke="black" stroke-width="1"/>
+<line x1="16" y1="716" x2="1104" y2="716" stroke="black" stroke-width="1"/>
+<line x1="16" y1="748" x2="1104" y2="748" stroke="black" stroke-width="1"/>
+<line x1="804" y1="626" x2="804" y2="776" stroke="black" stroke-width="1"/>
+<text x="26" y="644" font-size="13" font-weight="bold" fill="black">NIGHTWATCH OBSERVATORY — MOUNT &amp; ROLL-OFF TENDER</text>
+<text x="26" y="672" font-size="13" font-weight="bold" fill="black">PART: Roof rafters / purlins</text>
+<text x="26" y="698" font-size="12" font-weight="normal" fill="black">MATERIAL: ASTM A500 Gr B HSS (steel)</text>
+<text x="26" y="724" font-size="12" font-weight="normal" fill="black">FINISH: Hot-dip galvanize per ASTM A123</text>
+<text x="26" y="750" font-size="12" font-weight="normal" fill="black">TOLERANCE: n/a</text>
+<text x="26" y="774" font-size="11" font-weight="normal" fill="black">SURFACE FINISH: n/a</text>
+<text x="814" y="644" font-size="13" font-weight="bold" fill="black">DWG NW-RR-002</text>
+<text x="814" y="670" font-size="10" font-weight="normal" fill="black">PKG BP-04 — Roll-off roof (&#x27;disappearing turret&#x27;)</text>
+<text x="814" y="696" font-size="10" font-weight="normal" fill="black">PROCESS: Cut + weld (AWS D1.1)</text>
+<text x="814" y="722" font-size="10" font-weight="normal" fill="black">QTY: 5    REV: A    UNITS: mm [in]</text>
+<text x="814" y="748" font-size="9" font-weight="bold" fill="#a00">STATUS:</text>
+<text x="814" y="762" font-size="8" font-weight="bold" fill="#a00">ISSUED FOR BID / FOR PE REVIEW — NOT FOR CONSTRUCTION</text>
+</svg>

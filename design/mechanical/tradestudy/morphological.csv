@@ -1,0 +1,24 @@
+subsystem,option,role,description,proof_citation
+Optical tube assembly,MN78 f/8 (14 kg),baseline,"180 mm Mak-Newt, 1440 mm tube, 0.134 obstruction; doc-'selected'","stiffness: MN78 is the tube the FAIL is computed on (43.3"" vs 5"")"
+Optical tube assembly,MN76 f/6 (9 kg),alternative,"178 mm Mak-Newt, 700 mm tube, 0.25 obstruction; lighter/shorter",torque: lighter tube => lower RA torque; stiffness: shorter CG lever
+Optical tube assembly,MN86 f/6 (8-inch),alternative,"203 mm Mak-Newt; more aperture, heavier and longer tube",stiffness/torque: heaviest tube => worst mount loading
+Optical tube assembly,APM-LZOS apo triplet,bold,"refractor, zero obstruction, premium optics; long/heavy/costly",thermal: glass soak vs metal-tube focus walk; precision: no obstruction
+Optical tube assembly,ES-MN152 f/4.8,alternative,"152 mm Mak-Newt, in-production mass-market; cheap/light","torque/stiffness: lightest, in-production; lowest sourcing risk"
+Mount topology,Counterweighted GEM,baseline,German equatorial + 12.5 kg counterweight on 457 mm shaft,balance: 12.5 kg balances 18 kg payload at r=288 mm (fit 1.59)
+Mount topology,Counterweight-FREE GEM,bold,delete the shaft+weights; harmonic back-drive holds the imbalance,torque: RA SF 2.5 PASS; balance: deletes 15.4 kg + 29% RA inertia
+Mount topology,Fork + field derotator,alternative,"symmetric fork, no meridian flip; derotator adds a rotation axis",precision: derotator injects a continuous field-rotation error term
+Axis drive train,NEMA17 + 27:1 + harmonic,baseline,stepper + planetary + CSF harmonic (100:1 RA / 80:1 DEC),torque: PASS; encoder: on-axis ring moots upstream planetary PE
+Axis drive train,Direct-to-harmonic,alternative,delete planetary; larger motor straight into the harmonic,torque: 0.45 Nm x100 = 45 Nm ~ 49.9 Nm need => bigger motor required
+Axis drive train,Torque-motor direct drive,bold,"frameless torque motor on-axis, zero gear PE; needs on-axis encoder",encoder: only DD+ring reaches seeing-limited; power: holding-heat cost
+Feedback / encoder chain,AMT103 motor + AS5600 axis,baseline,fine motor encoder + 12-bit on-axis chip (homing-grade),"encoder: 5.02"" RMS FAILS the 1.0"" target => DISQUALIFIED"
+Feedback / encoder chain,On-axis high-res absolute ring,bold,"Renishaw RESA-class absolute ring, sub-arcsec LSB, on the axis","encoder: 0.54"" RMS => MEETS sub-arcsec (only option that does)"
+Feedback / encoder chain,Hybrid (motor + on-axis absolute),alternative,motor encoder for velocity + on-axis absolute for position correction,encoder: on-axis correction closes the PE+flexure gap the motor can't see
+Pier / foundation,Concrete Sonotube,baseline,12-inch x 36-inch concrete pier on a 36-inch embedment,"pier: governing SF 6.8 PASS, f_n 152 Hz (SF 15)"
+Pier / foundation,Isolated pier-in-pier,bold,inner OTA pier isolated from the building slab / enclosure floor,pier: core stiffness unchanged; isolates roof-drive/footfall vibration
+Pier / foundation,Steel-concrete hybrid,alternative,steel column on a concrete footing; faster to erect,pier: slender steel column => lower f_n; thermal bending of the column
+Enclosure,Roll-off roof,baseline,"flat roll-off roof, garage-door-class drive",enclosure: drive SF 2.1 PASS; wind: uplift SF 0.19 => anchors mandatory
+Enclosure,Clamshell dome,alternative,"rotating split-shell dome; better wind screen, worse flush",thermal: enclosed dome traps the DGX 14 K heat dump
+Enclosure,Roll-off + active thermal,bold,roll-off base + insulation + forced ventilation + day pre-cooling,thermal: FAIL focus-walk remedy; power: exhausts DGX 14 K enclosure dump
+Mount-head frame / housings,6061-T6 CNC plates,baseline,bolt-together CNC aluminium housings (E=68.9 GPa),stiffness: plates are NOT the governing compliance (bearings are)
+Mount-head frame / housings,Steel weldment,alternative,"welded steel frame, ~3x modulus; heavier, weld distortion",stiffness: 3x E cuts only the small beam term; bearings still govern
+Mount-head frame / housings,Cast housings,bold,"cast iron/Al monolithic housings; best damping, integral bearing seats",stiffness: integral large-span AC bearing seats attack the FAIL; foundry risk

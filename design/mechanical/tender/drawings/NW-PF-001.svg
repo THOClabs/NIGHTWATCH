@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1120" height="792" viewBox="0 0 1120 792" font-family="Helvetica,Arial,sans-serif">
+<rect x="0" y="0" width="1120" height="792" fill="white"/>
+<rect x="16" y="16" width="1088" height="760" fill="none" stroke="black" stroke-width="2"/>
+<text x="60" y="66" font-size="14" font-weight="bold">NW-PF-001 — Reinforced-concrete telescope pier</text>
+<text x="60" y="84" font-size="11" fill="#555">Envelope (ROUND) — bid control drawing; .scad/STEP is the 3-D master.</text>
+<rect x="130.5" y="272.58333333333337" width="329.0" height="54.833333333333336" fill="#eef3fb" stroke="black" stroke-width="1.5"/>
+<line x1="120.5" y1="300.00000000000006" x2="469.5" y2="300.00000000000006" stroke="#0645ad" stroke-width="0.7" stroke-dasharray="8 3 2 3"/>
+<line x1="130.5" y1="254.58333333333337" x2="459.5" y2="254.58333333333337" stroke="#0645ad" stroke-width="1"/><line x1="130.5" y1="250.58333333333337" x2="130.5" y2="258.58333333333337" stroke="#0645ad" stroke-width="1"/><line x1="459.5" y1="250.58333333333337" x2="459.5" y2="258.58333333333337" stroke="#0645ad" stroke-width="1"/><text x="295.0" y="248.58333333333337" font-size="12" fill="#0645ad" text-anchor="middle">L 1828.8 mm [72.000 in]</text>
+<line x1="477.5" y1="272.58333333333337" x2="477.5" y2="327.4166666666667" stroke="#0645ad" stroke-width="1"/><line x1="477.5" y1="268.58333333333337" x2="477.5" y2="276.58333333333337" stroke="#0645ad" stroke-width="1"/><line x1="477.5" y1="323.4166666666667" x2="477.5" y2="331.4166666666667" stroke="#0645ad" stroke-width="1"/><text x="477.5" y="314.0" font-size="12" fill="#0645ad" text-anchor="middle">Ø 304.8 mm [12.000 in]</text>
+<text x="295.0" y="304.00000000000006" font-size="12" fill="#333" text-anchor="middle">Ø304.8 mm [12.000 in]</text>
+<text x="560" y="112" font-size="13" font-weight="bold">KEY DIMENSIONS &amp; FEATURES</text>
+<text x="560" y="134" font-size="12">• Diameter: 304.8 mm [12.000 in]</text>
+<text x="560" y="152" font-size="12">• Height above grade: 914.4 mm [36.000 in]</text>
+<text x="560" y="170" font-size="12">• Embedment: 914.4 mm [36.000 in]</text>
+<text x="560" y="188" font-size="12">• f&#x27;c (psi): 4000</text>
+<text x="560" y="206" font-size="12">• Vertical rebar: 6 x #4 (A615 Gr60)</text>
+<text x="560" y="224" font-size="12">• Ties: #3 @ 12 in oc</text>
+<text x="560" y="248" font-size="11" fill="#555">PROVENANCE: Ø/height/embed/f&#x27;c = P.PIER (SOURCED); rebar schedule ASSUMED design-intent (PE to confirm).</text>
+<text x="560" y="266" font-size="11" fill="#555">NOTE: ISOLATED from any building slab (vibration). Embedment&gt;frost line. Rebar cage + anchor template cast integrally. REQUIRES PE STAMP.</text>
+<rect x="16" y="626" width="1088" height="150" fill="none" stroke="black" stroke-width="2"/>
+<line x1="16" y1="652" x2="1104" y2="652" stroke="black" stroke-width="1"/>
+<line x1="16" y1="684" x2="1104" y2="684" stroke="black" stroke-width="1"/>
+<line x1="16" y1="716" x2="1104" y2="716" stroke="black" stroke-width="1"/>
+<line x1="16" y1="748" x2="1104" y2="748" stroke="black" stroke-width="1"/>
+<line x1="804" y1="626" x2="804" y2="776" stroke="black" stroke-width="1"/>
+<text x="26" y="644" font-size="13" font-weight="bold" fill="black">NIGHTWATCH OBSERVATORY — MOUNT &amp; ROLL-OFF TENDER</text>
+<text x="26" y="672" font-size="13" font-weight="bold" fill="black">PART: Reinforced-concrete telescope pier</text>
+<text x="26" y="698" font-size="12" font-weight="normal" fill="black">MATERIAL: Cast-in-place concrete f&#x27;c = 4000 psi (27.6 MPa) per ACI 318 / ACI 301</text>
+<text x="26" y="724" font-size="12" font-weight="normal" fill="black">FINISH: none</text>
+<text x="26" y="750" font-size="12" font-weight="normal" fill="black">TOLERANCE: Plumb 1:200; top level 0.5 deg</text>
+<text x="26" y="774" font-size="11" font-weight="normal" fill="black">SURFACE FINISH: n/a</text>
+<text x="814" y="644" font-size="13" font-weight="bold" fill="black">DWG NW-PF-001</text>
+<text x="814" y="670" font-size="10" font-weight="normal" fill="black">PKG BP-03 — Pier &amp; foundation</text>
+<text x="814" y="696" font-size="10" font-weight="normal" fill="black">PROCESS: Cast-in-place</text>
+<text x="814" y="722" font-size="10" font-weight="normal" fill="black">QTY: 1    REV: A    UNITS: mm [in]</text>
+<text x="814" y="748" font-size="9" font-weight="bold" fill="#a00">STATUS:</text>
+<text x="814" y="762" font-size="8" font-weight="bold" fill="#a00">ISSUED FOR BID / FOR PE REVIEW — NOT FOR CONSTRUCTION</text>
+</svg>

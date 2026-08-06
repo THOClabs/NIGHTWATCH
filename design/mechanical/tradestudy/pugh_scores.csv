@@ -1,0 +1,24 @@
+subsystem,option,role,stiffness,precision,cost,buildability,thermal,sourcing,weighted_default,rank_default,gate,selected
+Optical tube assembly,MN78 f/8 (14 kg),baseline,2,4,3,3,4,2,2.94,3,ok,
+Optical tube assembly,MN76 f/6 (9 kg),alternative,4,3,3,4,3,2,3.21,2,ok,
+Optical tube assembly,MN86 f/6 (8-inch),alternative,1,4,2,2,3,1,2.16,5,ok,
+Optical tube assembly,APM-LZOS apo triplet,bold,2,5,1,3,3,2,2.76,4,ok,
+Optical tube assembly,ES-MN152 f/4.8,alternative,4,3,5,4,3,5,3.99,1,ok,SELECTED
+Mount topology,Counterweighted GEM,baseline,3,3,3,4,3,4,3.31,2,ok,
+Mount topology,Counterweight-FREE GEM,bold,3,4,4,4,3,4,3.68,1,ok,SELECTED
+Mount topology,Fork + field derotator,alternative,3,2,2,2,3,2,2.32,3,ok,
+Axis drive train,NEMA17 + 27:1 + harmonic,baseline,3,2,4,4,3,4,3.24,1,ok,SELECTED
+Axis drive train,Direct-to-harmonic,alternative,3,3,3,3,3,4,3.16,2,ok,
+Axis drive train,Torque-motor direct drive,bold,3,5,1,2,2,2,2.73,3,ok,
+Feedback / encoder chain,AMT103 motor + AS5600 axis,baseline,3,1,5,4,3,5,3.33,3,DISQUALIFIED,
+Feedback / encoder chain,On-axis high-res absolute ring,bold,3,5,1,2,3,2,2.83,2,ok,
+Feedback / encoder chain,Hybrid (motor + on-axis absolute),alternative,3,4,2,3,3,3,3.07,1,ok,SELECTED
+Pier / foundation,Concrete Sonotube,baseline,4,3,5,4,4,5,4.09,1,ok,SELECTED
+Pier / foundation,Isolated pier-in-pier,bold,4,4,3,3,4,4,3.7,2,ok,
+Pier / foundation,Steel-concrete hybrid,alternative,3,3,3,3,2,3,2.9,3,ok,
+Enclosure,Roll-off roof,baseline,3,3,5,5,3,5,3.92,1,ok,SELECTED
+Enclosure,Clamshell dome,alternative,3,3,2,2,2,2,2.44,3,ok,
+Enclosure,Roll-off + active thermal,bold,3,4,4,4,5,4,3.88,2,ok,
+Mount-head frame / housings,6061-T6 CNC plates,baseline,3,3,4,4,4,4,3.56,1,ok,SELECTED
+Mount-head frame / housings,Steel weldment,alternative,4,3,3,2,3,3,3.07,2,ok,
+Mount-head frame / housings,Cast housings,bold,4,4,2,1,3,2,2.83,3,ok,
