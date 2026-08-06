@@ -15,8 +15,8 @@
 <text x="560" y="206" font-size="12">• Bearing seat bore (7008) H7: 68.0 mm [2.677 in]</text>
 <text x="560" y="224" font-size="12">• Drive register bore (CSF-32): 80.0 mm [3.150 in]</text>
 <text x="560" y="242" font-size="12">• Flange bolt circle: 104.0 mm [4.094 in]</text>
-<text x="560" y="260" font-size="12">• Flange holes: 8.0 mm [0.315 in]</text>
-<text x="560" y="278" font-size="12">• Corner holes (M6): 4.0 mm [0.157 in]</text>
+<text x="560" y="260" font-size="12">• Flange holes: 8</text>
+<text x="560" y="278" font-size="12">• Corner holes (M6): 4</text>
 <text x="560" y="302" font-size="11" fill="#555">PROVENANCE: Outer/wall/depth = P.RA_HOUSING (SOURCED); bearing seat=7008 remediation; flange PCD DERIVED ~1.3x bore.</text>
 <text x="560" y="320" font-size="11" fill="#555">NOTE: Bearing seat sized for angular-contact 7008 (remediation of 6008). Pocket-lighten at bidder&#x27;s option; keep bore/flange datums.</text>
 <rect x="16" y="626" width="1088" height="150" fill="none" stroke="black" stroke-width="2"/>

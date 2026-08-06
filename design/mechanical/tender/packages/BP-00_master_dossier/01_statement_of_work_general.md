@@ -38,7 +38,7 @@ treat each as a **mandatory** feature of the parts they touch:
 
 | Remediation | Where it appears | Registry basis |
 |---|---|---|
-| **Angular-contact 7008 (RA) / 7006 (DEC) bearings**, back-to-back — replace deep-groove 6008/6006 | Housing seats NW-MH-001 (7008 seat) / NW-MH-002 (7006 seat); spindle journals NW-TP-002 / NW-TP-003; bearings NW-CO-003 / NW-CO-004 | Stiffness proof: 6008/6006 were ~98% of the 43.3″ deflection FAIL |
+| **Angular-contact 7008 (RA) / 7006 (DEC) bearings**, back-to-back — replace deep-groove 6008/6006 | Housing seats NW-MH-001 (7008 seat) / NW-MH-002 (7006 seat); spindle journals NW-TP-002 / NW-TP-003; bearings NW-CO-003 / NW-CO-004 | Stiffness proof: 6008/6006 were ~98% of the 43.5″ deflection FAIL |
 | **On-axis absolute encoder** (RA + DEC) — replaces homing-grade baseline | NW-CO-005 | Encoder proof: baseline 5.02″ RMS FAIL → on-axis ring 0.54″ |
 | **4× wind hold-down anchors** | Brackets NW-RR-006 + anchor set NW-PF-004 | Wind proof: survival uplift 9.2 kN, 4× 2 klbf anchors → SF 3.9 |
 | **Temperature-compensated focuser** | NW-CO-008 | Thermal proof: 22 K diurnal swing walks focus ~10× depth-of-focus |

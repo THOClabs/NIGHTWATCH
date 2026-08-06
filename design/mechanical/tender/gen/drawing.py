@@ -111,14 +111,36 @@ def _title_block(p: ps.Part) -> list[str]:
     return lines
 
 
+# key_dims_mm entries whose *name* contains one of these are NOT linear dimensions
+# and must not be rendered as "mm [in]" (they are counts, angles, pressures, etc.).
+_NONLENGTH_TOKENS = (
+    "hole", "member", "rail", "count", "angle", "deg", "psi", "f'c", "ratio",
+    "torque", "nm", "(v)", "ach", "period", "obstruction", "(psf)", "spacing",
+    "kg", "area", "(each)",
+)
+
+
+def _is_length_key(key: str) -> bool:
+    k = key.lower()
+    # "member length (each)" / "rail length (each)" ARE lengths despite the tokens
+    if "length" in k:
+        return True
+    return not any(tok in k for tok in _NONLENGTH_TOKENS)
+
+
+def _fmt_value(key: str, v) -> str:
+    if isinstance(v, bool) or not isinstance(v, (int, float)):
+        return str(v)
+    if _is_length_key(key) and v > 3:
+        return _dual(float(v))
+    return str(int(v)) if float(v).is_integer() else str(v)
+
+
 def _feature_table(p: ps.Part, x0: int, y0: int) -> list[str]:
     lines = [f'<text x="{x0}" y="{y0-8}" font-size="13" font-weight="bold">KEY DIMENSIONS &amp; FEATURES</text>']
     y = y0 + 14
     for k, v in p.key_dims_mm.items():
-        if isinstance(v, (int, float)) and not isinstance(v, bool) and v > 3:
-            val = f"{_dual(float(v))}"
-        else:
-            val = str(v)
+        val = _fmt_value(k, v)
         lines.append(f'<text x="{x0}" y="{y}" font-size="12">• {_esc(k)}: {_esc(val)}</text>')
         y += 18
     lines.append(f'<text x="{x0}" y="{y+6}" font-size="11" fill="#555">PROVENANCE: {_esc(p.provenance)}</text>')
