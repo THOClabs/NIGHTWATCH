@@ -9,13 +9,14 @@ fireball detection (post-entry) and close approach awareness (pre-entry).
 API Documentation: https://ssd-api.jpl.nasa.gov/doc/cad.html
 """
 
-import aiohttp
 import logging
 import math
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from enum import Enum
-from typing import Optional, List
+from typing import List, Optional
+
+import aiohttp
 
 logger = logging.getLogger("NIGHTWATCH.MeteorTracking")
 
@@ -38,12 +39,12 @@ class CloseApproach:
     distance_ld: float          # Miss distance in lunar distances
     distance_km: float          # Miss distance in km
     relative_velocity_km_s: float  # Relative velocity at close approach
-    absolute_magnitude_h: Optional[float]  # Absolute magnitude (H)
-    estimated_diameter_m_min: Optional[float]  # Minimum estimated diameter
-    estimated_diameter_m_max: Optional[float]  # Maximum estimated diameter
+    absolute_magnitude_h: float | None  # Absolute magnitude (H)
+    estimated_diameter_m_min: float | None  # Minimum estimated diameter
+    estimated_diameter_m_max: float | None  # Maximum estimated diameter
     is_potentially_hazardous: bool  # PHA flag
-    orbit_id: Optional[str]     # Orbit solution ID
-    fullname: Optional[str]     # Full object name
+    orbit_id: str | None     # Orbit solution ID
+    fullname: str | None     # Full object name
 
     @property
     def threat_level(self) -> ThreatLevel:
@@ -127,7 +128,7 @@ class CADClient:
     LD_TO_AU = 0.00257
     AU_TO_KM = 149_597_870.7
 
-    def __init__(self, session: Optional[aiohttp.ClientSession] = None):
+    def __init__(self, session: aiohttp.ClientSession | None = None):
         self._session = session
         self._owns_session = session is None
 
@@ -145,13 +146,13 @@ class CADClient:
 
     async def fetch_close_approaches(
         self,
-        date_min: Optional[datetime] = None,
-        date_max: Optional[datetime] = None,
+        date_min: datetime | None = None,
+        date_max: datetime | None = None,
         dist_max_au: float = 0.05,
-        min_h_mag: Optional[float] = None,
+        min_h_mag: float | None = None,
         sort: str = "dist",
         limit: int = 50
-    ) -> List[CloseApproach]:
+    ) -> list[CloseApproach]:
         """
         Fetch close approach data from CNEOS CAD API.
 
@@ -197,7 +198,7 @@ class CADClient:
             logger.error(f"CNEOS CAD API error: {e}")
             return []
 
-    async def fetch_today(self) -> List[CloseApproach]:
+    async def fetch_today(self) -> list[CloseApproach]:
         """Fetch close approaches for today and tomorrow."""
         now = datetime.utcnow()
         return await self.fetch_close_approaches(
@@ -206,7 +207,7 @@ class CADClient:
             dist_max_au=0.05
         )
 
-    async def fetch_watch_level(self, days: int = 7) -> List[CloseApproach]:
+    async def fetch_watch_level(self, days: int = 7) -> list[CloseApproach]:
         """Fetch approaches at WATCH level or higher within N days."""
         approaches = await self.fetch_close_approaches(
             date_max=datetime.utcnow() + timedelta(days=days),
@@ -214,7 +215,7 @@ class CADClient:
         )
         return [a for a in approaches if a.threat_level.value in ('watch', 'alert', 'significant')]
 
-    def _parse_approaches(self, data: dict) -> List[CloseApproach]:
+    def _parse_approaches(self, data: dict) -> list[CloseApproach]:
         """Parse CAD API response into CloseApproach objects."""
         approaches = []
 
@@ -236,7 +237,7 @@ class CADClient:
 
         return approaches
 
-    def _parse_row(self, row: list, field_map: dict) -> Optional[CloseApproach]:
+    def _parse_row(self, row: list, field_map: dict) -> CloseApproach | None:
         """Parse a single row from the CAD API response."""
         designation = self._get_field(row, field_map, 'des', '')
         if not designation:
@@ -293,7 +294,7 @@ class CADClient:
             return row[idx]
         return default
 
-    def _parse_float(self, value) -> Optional[float]:
+    def _parse_float(self, value) -> float | None:
         if value is None or value == '':
             return None
         try:
@@ -318,7 +319,7 @@ class CADClient:
         return datetime.utcnow()
 
 
-def generate_approach_prayer(approaches: List[CloseApproach]) -> str:
+def generate_approach_prayer(approaches: list[CloseApproach]) -> str:
     """
     Generate a Lexicon-style report for close approaches.
 
@@ -360,7 +361,7 @@ def generate_approach_prayer(approaches: List[CloseApproach]) -> str:
     return "\n".join(lines)
 
 
-async def fetch_upcoming_approaches(days: int = 7, dist_max_au: float = 0.05) -> List[CloseApproach]:
+async def fetch_upcoming_approaches(days: int = 7, dist_max_au: float = 0.05) -> list[CloseApproach]:
     """Convenience function to fetch upcoming close approaches."""
     client = CADClient()
     try:

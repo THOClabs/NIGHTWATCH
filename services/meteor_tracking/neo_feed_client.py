@@ -12,11 +12,12 @@ which the CAD API does not include. Combining both gives more complete data.
 API Documentation: https://api.nasa.gov/ (NeoWs section)
 """
 
-import aiohttp
 import logging
 from dataclasses import dataclass
-from datetime import datetime, timedelta, date
-from typing import Optional, List
+from datetime import date, datetime, timedelta
+from typing import List, Optional
+
+import aiohttp
 
 from .close_approach_client import CloseApproach, ThreatLevel
 
@@ -44,7 +45,7 @@ class NEOFeedClient:
     def __init__(
         self,
         api_key: str = "DEMO_KEY",
-        session: Optional[aiohttp.ClientSession] = None
+        session: aiohttp.ClientSession | None = None
     ):
         self.api_key = api_key
         self._session = session
@@ -64,9 +65,9 @@ class NEOFeedClient:
 
     async def fetch_neo_feed(
         self,
-        start_date: Optional[date] = None,
-        end_date: Optional[date] = None
-    ) -> List[CloseApproach]:
+        start_date: date | None = None,
+        end_date: date | None = None
+    ) -> list[CloseApproach]:
         """
         Fetch NEO feed data from NASA API.
 
@@ -112,7 +113,7 @@ class NEOFeedClient:
             logger.error(f"NEO Feed API error: {e}")
             return []
 
-    def _parse_neo_feed(self, data: dict) -> List[CloseApproach]:
+    def _parse_neo_feed(self, data: dict) -> list[CloseApproach]:
         """Parse NEO Feed API response into CloseApproach objects."""
         approaches = []
         neo_objects = data.get('near_earth_objects', {})
@@ -130,7 +131,7 @@ class NEOFeedClient:
         approaches.sort(key=lambda a: a.close_approach_date)
         return approaches
 
-    def _parse_neo_object(self, obj: dict) -> Optional[CloseApproach]:
+    def _parse_neo_object(self, obj: dict) -> CloseApproach | None:
         """Parse a single NEO object from the feed."""
         close_approach_data = obj.get('close_approach_data', [])
         if not close_approach_data:
