@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1120" height="792" viewBox="0 0 1120 792" font-family="Helvetica,Arial,sans-serif">
+<rect x="0" y="0" width="1120" height="792" fill="white"/>
+<rect x="16" y="16" width="1088" height="760" fill="none" stroke="black" stroke-width="2"/>
+<text x="60" y="66" font-size="14" font-weight="bold">NW-MH-002 — DEC axis housing + Losmandy-D saddle</text>
+<text x="60" y="84" font-size="11" fill="#555">Envelope (PLATE) — bid control drawing; .scad/STEP is the 3-D master.</text>
+<rect x="148.0" y="153.0" width="294.0" height="294.0" fill="#eef3fb" stroke="black" stroke-width="1.5"/>
+<line x1="148.0" y1="135.0" x2="442.0" y2="135.0" stroke="#0645ad" stroke-width="1"/><line x1="148.0" y1="131.0" x2="148.0" y2="139.0" stroke="#0645ad" stroke-width="1"/><line x1="442.0" y1="131.0" x2="442.0" y2="139.0" stroke="#0645ad" stroke-width="1"/><text x="295.0" y="129.0" font-size="12" fill="#0645ad" text-anchor="middle">L 152.4 mm [6.000 in]</text>
+<line x1="460.0" y1="153.0" x2="460.0" y2="447.0" stroke="#0645ad" stroke-width="1"/><line x1="460.0" y1="149.0" x2="460.0" y2="157.0" stroke="#0645ad" stroke-width="1"/><line x1="460.0" y1="443.0" x2="460.0" y2="451.0" stroke="#0645ad" stroke-width="1"/><text x="460.0" y="314.0" font-size="12" fill="#0645ad" text-anchor="middle">W 152.4 mm [6.000 in]</text>
+<text x="295.0" y="304.0" font-size="12" fill="#333" text-anchor="middle">THK 63.5 mm [2.500 in]</text>
+<text x="560" y="112" font-size="13" font-weight="bold">KEY DIMENSIONS &amp; FEATURES</text>
+<text x="560" y="134" font-size="12">• Outer X: 152.4 mm [6.000 in]</text>
+<text x="560" y="152" font-size="12">• Outer Y: 152.4 mm [6.000 in]</text>
+<text x="560" y="170" font-size="12">• Depth (bearing span): 63.5 mm [2.500 in]</text>
+<text x="560" y="188" font-size="12">• Wall: 8.0 mm [0.315 in]</text>
+<text x="560" y="206" font-size="12">• Bearing seat bore (7006) H7: 55.0 mm [2.165 in]</text>
+<text x="560" y="224" font-size="12">• Drive register bore (CSF-25): 64.0 mm [2.520 in]</text>
+<text x="560" y="242" font-size="12">• Flange bolt circle: 83.0 mm [3.268 in]</text>
+<text x="560" y="260" font-size="12">• Losmandy-D saddle width: 76.2 mm [3.000 in]</text>
+<text x="560" y="278" font-size="12">• Dovetail angle (deg): 15.0 mm [0.591 in]</text>
+<text x="560" y="302" font-size="11" fill="#555">PROVENANCE: Outer/wall/depth = P.DEC_HOUSING (SOURCED); saddle = Losmandy-D ASSUMED std; bearing seat=7006 remediation.</text>
+<text x="560" y="320" font-size="11" fill="#555">NOTE: Integral Losmandy-D dovetail saddle. Bearing seat sized for angular-contact 7006.</text>
+<rect x="16" y="626" width="1088" height="150" fill="none" stroke="black" stroke-width="2"/>
+<line x1="16" y1="652" x2="1104" y2="652" stroke="black" stroke-width="1"/>
+<line x1="16" y1="684" x2="1104" y2="684" stroke="black" stroke-width="1"/>
+<line x1="16" y1="716" x2="1104" y2="716" stroke="black" stroke-width="1"/>
+<line x1="16" y1="748" x2="1104" y2="748" stroke="black" stroke-width="1"/>
+<line x1="804" y1="626" x2="804" y2="776" stroke="black" stroke-width="1"/>
+<text x="26" y="644" font-size="13" font-weight="bold" fill="black">NIGHTWATCH OBSERVATORY — MOUNT &amp; ROLL-OFF TENDER</text>
+<text x="26" y="672" font-size="13" font-weight="bold" fill="black">PART: DEC axis housing + Losmandy-D saddle</text>
+<text x="26" y="698" font-size="12" font-weight="normal" fill="black">MATERIAL: 6061-T6 aluminium plate per ASTM B209 / AMS-QQ-A-250/11</text>
+<text x="26" y="724" font-size="12" font-weight="normal" fill="black">FINISH: Type III hardcoat anodize, 0.002 in, per MIL-A-8625F Class 1 (clear)</text>
+<text x="26" y="750" font-size="12" font-weight="normal" fill="black">TOLERANCE: General ISO 2768-mK; bearing bores H7 (+0.030/0); flange faces flat 0.05</text>
+<text x="26" y="774" font-size="11" font-weight="normal" fill="black">SURFACE FINISH: Ra 1.6 um</text>
+<text x="814" y="644" font-size="13" font-weight="bold" fill="black">DWG NW-MH-002</text>
+<text x="814" y="670" font-size="10" font-weight="normal" fill="black">PKG BP-01 — Mount head machining</text>
+<text x="814" y="696" font-size="10" font-weight="normal" fill="black">PROCESS: CNC mill, 3-axis</text>
+<text x="814" y="722" font-size="10" font-weight="normal" fill="black">QTY: 1    REV: A    UNITS: mm [in]</text>
+<text x="814" y="748" font-size="9" font-weight="bold" fill="#a00">STATUS:</text>
+<text x="814" y="762" font-size="8" font-weight="bold" fill="#a00">ISSUED FOR BID / FOR PE REVIEW — NOT FOR CONSTRUCTION</text>
+</svg>
