@@ -14,7 +14,7 @@ API Documentation: https://api.nasa.gov/ (NeoWs section)
 
 import logging
 from dataclasses import dataclass
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from typing import List, Optional
 
 import aiohttp
@@ -81,7 +81,9 @@ class NEOFeedClient:
             List of CloseApproach objects (same type as CAD client)
         """
         if start_date is None:
-            start_date = date.today()
+            # Use UTC (the CAD client and all NEO timing are UTC), so the feed
+            # window cannot shift a day relative to close-approach queries.
+            start_date = datetime.now(timezone.utc).date()
         if end_date is None:
             end_date = start_date + timedelta(days=7)
 
@@ -145,11 +147,22 @@ class NEOFeedClient:
         d_min = meters.get('estimated_diameter_min')
         d_max = meters.get('estimated_diameter_max')
 
-        # Distance
+        # Distance — prefer the astronomical value, fall back to kilometres.
+        # A missing distance must NOT default to 0: distance_ld == 0 reads as an
+        # extremely close pass and would trip a false ALERT, so skip such objects.
         miss_distance = ca.get('miss_distance', {})
-        dist_au = float(miss_distance.get('astronomical', 0))
-        dist_km = float(miss_distance.get('kilometers', 0))
-        dist_ld = dist_au / LD_TO_AU if dist_au else 0
+        au_raw = miss_distance.get('astronomical')
+        km_raw = miss_distance.get('kilometers')
+        if au_raw is not None:
+            dist_au = float(au_raw)
+            dist_km = float(km_raw) if km_raw is not None else dist_au * AU_TO_KM
+        elif km_raw is not None:
+            dist_km = float(km_raw)
+            dist_au = dist_km / AU_TO_KM
+        else:
+            logger.debug("NEO object missing miss_distance; skipping")
+            return None
+        dist_ld = dist_au / LD_TO_AU
 
         # Velocity
         rel_velocity = ca.get('relative_velocity', {})

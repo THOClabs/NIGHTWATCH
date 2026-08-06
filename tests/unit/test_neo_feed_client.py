@@ -165,6 +165,56 @@ class TestNEOFeedClient:
         assert len(approaches) == 0
 
     @pytest.mark.asyncio
+    async def test_missing_miss_distance_is_skipped_not_alerted(self):
+        """A NEO with no miss_distance must be SKIPPED, not defaulted to 0
+        (distance 0 would read as an extremely close pass and trip a false ALERT)."""
+        client = NEOFeedClient()
+        response = {
+            'near_earth_objects': {
+                '2026-03-23': [{
+                    'neo_reference_id': 'no-distance',
+                    'name': 'no-distance',
+                    'absolute_magnitude_h': 22.0,
+                    'estimated_diameter': {'meters': {
+                        'estimated_diameter_min': 10, 'estimated_diameter_max': 20}},
+                    'is_potentially_hazardous_asteroid': False,
+                    'close_approach_data': [{
+                        'close_approach_date': '2026-03-23',
+                        'relative_velocity': {'kilometers_per_second': '12.0'},
+                        # miss_distance intentionally absent
+                    }],
+                }]
+            }
+        }
+        approaches = client._parse_neo_feed(response)
+        assert approaches == []  # skipped, not a phantom ALERT at distance 0
+
+    @pytest.mark.asyncio
+    async def test_kilometers_only_distance_derives_au(self):
+        """When only kilometres are present, AU/LD are derived (not defaulted to 0)."""
+        client = NEOFeedClient()
+        response = {
+            'near_earth_objects': {
+                '2026-03-23': [{
+                    'neo_reference_id': 'km-only',
+                    'name': 'km-only',
+                    'absolute_magnitude_h': 22.0,
+                    'estimated_diameter': {'meters': {
+                        'estimated_diameter_min': 10, 'estimated_diameter_max': 20}},
+                    'is_potentially_hazardous_asteroid': False,
+                    'close_approach_data': [{
+                        'close_approach_date': '2026-03-23',
+                        'relative_velocity': {'kilometers_per_second': '12.0'},
+                        'miss_distance': {'kilometers': '14959787.07'},  # 0.1 AU
+                    }],
+                }]
+            }
+        }
+        approaches = client._parse_neo_feed(response)
+        assert len(approaches) == 1
+        assert approaches[0].distance_au == pytest.approx(0.1, rel=1e-3)
+
+    @pytest.mark.asyncio
     async def test_close_no_session(self):
         """Test closing with no active session."""
         client = NEOFeedClient()
