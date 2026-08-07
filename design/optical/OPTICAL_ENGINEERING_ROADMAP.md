@@ -273,7 +273,7 @@ design/optical/
 
 **Seed prescriptions (ray-trace-verified this research pass; DERIVED):**
 N-BK7 meniscus, OD 215 mm, CA ≥ 204 mm, CT 22 mm, achromat condition
-R1−R2 = −0.565·t with spherochromatism factor /0.97:
+R2−R1 = −0.565·t with spherochromatism factor /0.97:
 
 | Case | Mirror R | Corrector R1 | Corrector R2 |
 |---|---|---|---|
@@ -413,7 +413,7 @@ should complete before any RFQ goes out.
 ## Appendix A — Seed prescription table (DERIVED, ray-trace-verified 2026-08-06)
 
 Glass N-BK7 (n_e = 1.51872, n_F = 1.52238, n_C = 1.51432); OD 215.0 +0/−0.2 mm;
-CA ≥ 204 mm; CT 22.0 ± 0.2 mm; achromat condition R1−R2 = −0.565·t (with /0.97
+CA ≥ 204 mm; CT 22.0 ± 0.2 mm; achromat condition R2−R1 = −0.565·t (with /0.97
 spherochromatism factor); corrector-mirror gap seed 0.85·f; residual F–C focus shift
 ~10–11 µm at the 0.7 zone (inside depth of focus); element mass ≈ 2.0 kg.
 
@@ -452,7 +452,7 @@ Removed from candidate lists (verified 2026-08): Zambuto (closed to new orders
 > OD 215.0 +0/−0.2 mm; CA ≥ 204 mm; CT 22.0 ± 0.2 mm. Baseline (f/8): R1 = −513.4 mm,
 > R2 = −525.8 mm; alternate (f/6): R1 = −413.1 mm, R2 = −425.6 mm. Radii to test plate
 > ±0.1%; R1−R2 difference held to ±0.25 mm (f/8) / ±0.10 mm (f/6), coupled to CT per
-> R1−R2 = −0.565·t. Irregularity ≤ λ/8 P-V per surface at 633 nm over CA; surface
+> R2−R1 = −0.565·t. Irregularity ≤ λ/8 P-V per surface at 633 nm over CA; surface
 > quality 60-40; wedge ≤ 1 arcmin ETD. BBAR both sides, R_avg < 0.5%, 400–700 nm.
 > Note: seed radii are optimization starting points — final prescription to be
 > co-optimized with the specific primary and delivered melt data (design-assist clause).
