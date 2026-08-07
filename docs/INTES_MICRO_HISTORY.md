@@ -274,7 +274,9 @@ Additional factors contributed to the end of Russian amateur telescope productio
 
 ### Future Outlook
 
-According to industry sources, **there will be no more large Maksutovs (>180mm) from Russian sources**. The primary constraint is that corrector plate blanks have become prohibitively expensive due to environmental regulations on glass production. The specialized optical glass required for large meniscus correctors is no longer economically viable to produce for the amateur telescope market.
+**There will be no more large Maksutovs (>180mm) from Russian sources.** The Russian pipeline ended through the 2018 Intes Micro closure and, after 2022, sanctions on LZOS (part of Shvabe/Rostec) that stopped Western resellers from purchasing Russian optics at all.
+
+A caution on a widely-repeated claim: community lore holds that large meniscus corrector blanks became impossible to obtain "due to environmental regulations on glass production." This is overstated. Eco-glass reformulation (lead/arsenic-free melts) and shrinking demand did raise the cost of large fine-annealed blanks, but Schott's TIE-41 documents N-BK7 blanks producible above 300 mm at H2 homogeneity, and Sky-Watcher's 190 mm Maksutov-Newtonian (Starlux 190MN) remains in current production — proof that ~200 mm-class meniscus correctors are still economically manufacturable. Large corrector blanks are a cost and lead-time problem, not a physical or regulatory impossibility. *(Corrected 2026-08-06 during the v0.1.1 optics research pass; see design/optical/OPTICAL_ENGINEERING_ROADMAP.md.)*
 
 ### End of an Era
 

@@ -2,11 +2,35 @@
 
 This document outlines the planned development trajectory for NIGHTWATCH.
 
-## Current Release: v0.1.0
+## v0.1.0
 
-**Status:** Released (January 2024)
+**Status:** Released (January 2026)
 
 Core foundation with voice control, mount operation, weather monitoring, and safety systems.
+
+---
+
+## Current Release: v0.1.1 - Repo Consolidation & Optics Engineering Roadmap
+
+**Status:** Released (August 2026)
+
+Single-branch consolidation and the start of the core-telescope engineering effort.
+
+### Repository Consolidation
+- [x] Salvage swarm capabilities before branch purge (hourly scanner, event journal, space weather, scan severity — 142 new tests)
+- [x] CNEOS fireball lat/lon sign fix (southern/western events were mislocated)
+- [x] Salvage review tooling (`.claude/agents/`, `/full-review`) and frontend design prompt pack (`docs/design/`)
+- [x] Archive historical landscape audit to `docs/audits/`
+- [x] Merge pyproject.toml canonical-URL fix (closes #78)
+- [x] Resolve all open PRs; delete 88 stale remote branches — repo ends at exactly `main`
+
+### Optics Engineering (the core telescope)
+- [x] `design/optical/OPTICAL_ENGINEERING_ROADMAP.md` — requirements flowdown, make-vs-buy gate, glass sourcing reality (Astrositall → CTE-class spec), f/6-vs-f/8 fork dissolution, phase plan P0–P6, committed budget envelope
+- [x] Documentation corrections: Intes production status (ceased 2018), MN76≠MN78, corrector-blank scarcity claim
+- [ ] P0 decision packets: planetary sensor baseline, v1 tracking status, focuser steps→µm
+- [ ] P1 design skeleton: `design/optical/calc/` prescription + CI ray-trace proofs (optiland/prysm)
+- [ ] P2 trade study: retire the f-ratio fork with computed gates
+- [ ] P3 tender BP-06: primary / corrector / flat RFQ lots with acceptance criteria
 
 ---
 
