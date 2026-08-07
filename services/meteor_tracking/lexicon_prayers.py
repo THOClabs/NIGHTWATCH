@@ -180,10 +180,85 @@ def generate_prayer_of_watching(
     return "\n".join(lines)
 
 
+def generate_prayer_of_approach(
+    designation: str,
+    approach_date: datetime,
+    distance_lunar: float,
+    velocity_km_s: float,
+    risk_level: str = "nominal",
+    size_class: str = "unknown-size",
+    h_magnitude: Optional[float] = None,
+) -> str:
+    """
+    Generate the Prayer of Approach in Lexicon.
+
+    This is spoken when a near-Earth object makes a notable close approach.
+    Unlike luminara-flash (atmospheric entries), these are orbital passes —
+    witnessed through calculation, not light.
+
+    Components:
+    - nightwatch-approach: Declaration of orbital awareness
+    - varek: When closest approach occurs
+    - neo-pass: Object designation and pass details
+    - distance: How close in lunar distances
+    - velocity: How fast relative to Earth
+    - risk-assess: Current risk classification
+    - presa-orbital: Presence toward the orbital realm
+    - velmu-sky-pass: Gratitude for the passage
+    """
+    fmt = LexiconFormatter()
+    lines = []
+
+    # Opening
+    lines.append("nightwatch-approach.")
+
+    # Timestamp
+    varek = approach_date.strftime("%Y-%m-%d %H:%M")
+    lines.append(f"varek: {varek}")
+
+    # Object identity
+    lines.append(f"neo-pass: {designation}")
+
+    # Distance
+    if distance_lunar < 1:
+        dist_desc = "closer-than-moon"
+    elif distance_lunar < 5:
+        dist_desc = "near-lunar"
+    elif distance_lunar < 20:
+        dist_desc = "inner-field"
+    else:
+        dist_desc = "outer-field"
+    lines.append(f"distance: {distance_lunar:.1f} lunar ({dist_desc})")
+
+    # Velocity
+    lines.append(f"velocity: {velocity_km_s:.1f} km/s")
+
+    # Size
+    if size_class != "unknown-size":
+        lines.append(f"size: {size_class}")
+
+    # H magnitude if known
+    if h_magnitude is not None:
+        lines.append(f"h-magnitude: {h_magnitude:.1f}")
+
+    # Risk assessment
+    lines.append(f"risk-assess: {risk_level}")
+
+    # Closing
+    lines.append("")
+    lines.append("presa-orbital.")
+    lines.append("velmu-sky-pass.")
+    lines.append("do-good-us.")
+    lines.append(fmt.ALCHEMICAL_SYMBOL)
+
+    return "\n".join(lines)
+
+
 def generate_status_prayer(
     active_windows: int,
     last_check: Optional[datetime],
     known_fireballs: int,
+    known_approaches: int = 0,
     next_shower_name: Optional[str] = None,
     next_shower_date: Optional[str] = None
 ) -> str:
@@ -208,6 +283,7 @@ def generate_status_prayer(
         lines.append("last-check: ne-yet")
 
     lines.append(f"fireballs-known: {known_fireballs}")
+    lines.append(f"neo-approaches-tracked: {known_approaches}")
 
     if next_shower_name and next_shower_date:
         lines.append("")
