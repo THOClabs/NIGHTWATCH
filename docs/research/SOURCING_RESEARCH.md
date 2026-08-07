@@ -9,23 +9,22 @@
 
 ### Status: ACTIVE SEARCH REQUIRED — RARE VINTAGE OPTIC
 
-> **Nomenclature Note:** The 7-inch (178 mm) f/6 Maksutov-Newtonian is officially designated **MN76** by Intes Micro. However, some dealers and Cloudy Nights forum threads refer to it as "MN78." Both designations refer to the same optical tube assembly. Search for both terms when sourcing. (Sources: Cloudy Nights discussions, Stellar Optical listings)
+> **Nomenclature Correction (2026-08-06):** An earlier version of this note claimed MN76 and MN78 are the same tube. **They are different models.** MN76 = 180 mm **f/6**, FL 1068 mm, ~20% advertised obstruction, ~13.6 kg (historical dealer price $2,449, stellaroptical.com). MN78 = 180 mm **f/8**, FL 1440 mm, 13.4% advertised obstruction, ~14 kg, tube ~1.4 m (dark-star.it test; ENS Optical listing #14991). Search for both terms when sourcing, but do not conflate the specs. (Verified against dealer spec pages and the Dark Star instrument test.)
 
 #### Current Availability
 
 The Intes Micro MN76 (7" f/6 Maksutov-Newtonian, sometimes listed as MN78) remains a sought-after planetary telescope. Key findings:
 
-**Primary Sources:**
-- **ENS Optical UK** (https://ensoptical.co.uk) - Lists MN76/MN78 7" with Crayford focuser
-- **APM Telescopes Germany** (https://www.apm-telescopes.net) - Official Intes Micro distributor
-  - APM offers premium versions with Matthias Wirth tubes and Starlight Feather Touch focusers
-  - Also sells raw Intes Micro optics in custom configurations
-- **Astromart Classifieds** (https://astromart.com) - Active used market listings (search both MN76 and MN78)
+**Primary Sources (used/NOS market only):**
+- **ENS Optical UK** (https://ensoptical.co.uk) - Has listed a used MN78 7" f/8 with Crayford at GBP 1,000 (out of stock as of 2026-08)
+- **Widescreen Centre UK** (https://www.widescreen-centre.co.uk) - Still lists Intes-Micro new-old-stock, but nothing above 127 mm class (ALTER MN56/MN58 at GBP 1,100)
+- **APM Telescopes Germany** (https://www.apm-telescopes.net) - *Historical* Intes distributor; as of 2026-08 its Mak-Newt category carries only Explore Scientific 152 mm and Sky-Watcher 190MN, and no Intes tubes or raw optical sets
+- **Astromart Classifieds** (https://astromart.com) - Intermittent used listings (search both MN76 and MN78; account required to see prices)
 
-**Production Status:**
-- As of March 2025, Intes Micro still produces MN56 (127mm, 760mm FL) and MN76 (178mm, ~1068mm FL)
-- MN76/MN78 availability requires direct inquiry to distributors
-- Factory located in Russia; export logistics may be complicated
+**Production Status (corrected 2026-08-06):**
+- **Intes Micro ceased production in 2018** (announced via Dr. Simon Bennett, Widescreen Centre; corroborated by stargazerslounge.com/topic/317143 and Wayback evidence: intes.su content frozen at a 2005-copyright page through 2021, an empty IIS default page by 2024, dead DNS by 2026)
+- An earlier claim here that Intes Micro was "still producing as of March 2025" was traced to a stale frozen website and AI-recycled forum lore; it is **false**
+- The buy-side for a *new* 180 mm-class Intes-quality Mak-Newt is definitively closed; only the used market and the in-production Sky-Watcher Starlux 190MN ($2,375, 27-34% obstruction, borosilicate) remain
 
 - **Exceptional optical quality:** Hand-figured Russian optics routinely tested at 1/8 wave or better. The Mak-Newt design eliminates coma while maintaining a fast f/6 focal ratio ideal for lucky imaging.
 - **Closed tube design:** Critical for harsh environments like Nevada's high desert. The sealed tube eliminates thermal currents from the primary mirror and protects optics from dust, insects, and moisture.
@@ -53,10 +52,10 @@ The MN76/MN78 appears on the used market infrequently—expect to monitor listin
 
 #### Action Items
 
-- [ ] Email APM Telescopes (info@apm-telescopes.net) for MN76 pricing and lead time (note: may be listed as MN78)
-- [ ] Check Astromart and Cloudy Nights classifieds weekly (search both MN76 and MN78)
-- [ ] Contact ENS Optical UK for availability
-- [ ] Investigate direct Russia purchase if needed
+- [ ] Email APM Telescopes (info@apm-telescopes.net) asking whether any off-catalog Intes new-old-stock optics remain (Markus Ludes historically held Intes inventory) — used/NOS inquiry only; new production ended 2018
+- [ ] Check Astromart and Cloudy Nights classifieds weekly (search both MN76 and MN78; Astromart prices are login-gated)
+- [ ] Contact ENS Optical UK and Widescreen Centre for used/NOS availability
+- [ ] ~~Investigate direct Russia purchase if needed~~ Closed: LZOS/Russian optics are sanctioned (post-2022); no direct-purchase path exists
 
 ---
 
