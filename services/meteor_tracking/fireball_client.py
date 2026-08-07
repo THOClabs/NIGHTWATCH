@@ -155,7 +155,13 @@ class CNEOSClient:
             return []
 
     def _parse_fireballs(self, data: dict) -> List[Fireball]:
-        """Parse API response into Fireball objects."""
+        """Parse API response into Fireball objects.
+
+        The CNEOS API returns coordinates as separate numeric and direction fields:
+        - 'lat' (numeric, always positive) + 'lat-dir' ("N" or "S")
+        - 'lon' (numeric, always positive) + 'lon-dir' ("E" or "W")
+        We must combine these to get signed lat/lon values.
+        """
         fireballs = []
 
         if 'data' not in data or 'fields' not in data:
@@ -166,14 +172,40 @@ class CNEOSClient:
 
         for row in data['data']:
             try:
+                # Parse latitude with direction sign
+                raw_lat = self._parse_float(
+                    row[field_map['lat']] if 'lat' in field_map else None
+                )
+                if raw_lat is not None and 'lat-dir' in field_map:
+                    lat_dir = str(row[field_map['lat-dir']]).strip().upper()
+                    if lat_dir == 'S':
+                        raw_lat = -raw_lat
+
+                # Parse longitude with direction sign
+                raw_lon = self._parse_float(
+                    row[field_map['lon']] if 'lon' in field_map else None
+                )
+                if raw_lon is not None and 'lon-dir' in field_map:
+                    lon_dir = str(row[field_map['lon-dir']]).strip().upper()
+                    if lon_dir == 'W':
+                        raw_lon = -raw_lon
+
                 fireball = Fireball(
                     date=self._parse_datetime(row[field_map.get('date', 0)]),
-                    latitude=self._parse_float(row[field_map.get('lat', -1)] if 'lat' in field_map else None),
-                    longitude=self._parse_float(row[field_map.get('lon', -1)] if 'lon' in field_map else None),
-                    altitude_km=self._parse_float(row[field_map.get('alt', -1)] if 'alt' in field_map else None),
-                    velocity_km_s=self._parse_float(row[field_map.get('vel', -1)] if 'vel' in field_map else None),
-                    total_radiated_energy_j=self._parse_energy(row[field_map.get('energy', -1)] if 'energy' in field_map else None),
-                    calculated_total_impact_energy_kt=self._parse_float(row[field_map.get('impact-e', -1)] if 'impact-e' in field_map else None)
+                    latitude=raw_lat,
+                    longitude=raw_lon,
+                    altitude_km=self._parse_float(
+                        row[field_map['alt']] if 'alt' in field_map else None
+                    ),
+                    velocity_km_s=self._parse_float(
+                        row[field_map['vel']] if 'vel' in field_map else None
+                    ),
+                    total_radiated_energy_j=self._parse_energy(
+                        row[field_map['energy']] if 'energy' in field_map else None
+                    ),
+                    calculated_total_impact_energy_kt=self._parse_float(
+                        row[field_map['impact-e']] if 'impact-e' in field_map else None
+                    )
                 )
                 fireballs.append(fireball)
             except (IndexError, KeyError, ValueError) as e:

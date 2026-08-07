@@ -10,6 +10,15 @@ Other modules work without external dependencies.
 """
 
 # Core modules (no external dependencies beyond stdlib)
+from .event_journal import (
+    EventCategory,
+    EventJournal,
+    EventRing,
+    HourlyEntry,
+    SkyEvent,
+    calculate_bearing,
+    classify_ring,
+)
 from .hopi_circles import (
     SearchCircle,
     SearchPattern,
@@ -17,6 +26,7 @@ from .hopi_circles import (
 )
 from .lexicon_prayers import (
     LexiconFormatter,
+    generate_prayer_of_approach,
     generate_prayer_of_finding,
     generate_prayer_of_watching,
     generate_status_prayer,
@@ -79,6 +89,58 @@ def get_neo_feed_client():
     return NEOFeedClient
 
 
+def get_hourly_scanner():
+    """Get the hourly event scanner (requires aiohttp)."""
+    from .hourly_scanner import (
+        THREAT_LEVEL_MAP,
+        HourlyEventScanner,
+        ScanEvent,
+        ScannerConfig,
+        ScanResult,
+    )
+    return HourlyEventScanner, ScannerConfig, ScanResult, ScanEvent, THREAT_LEVEL_MAP
+
+
+def get_space_weather_client():
+    """Get the NOAA SWPC space weather client (requires aiohttp)."""
+    from .space_weather import (
+        GeomagneticLevel,
+        KpReading,
+        SolarWindReading,
+        SpaceWeatherClient,
+        SpaceWeatherSummary,
+    )
+    return (
+        SpaceWeatherClient,
+        SpaceWeatherSummary,
+        GeomagneticLevel,
+        KpReading,
+        SolarWindReading,
+    )
+
+
+def get_scan_severity():
+    """Get scan severity classification helpers (requires aiohttp via fireball_client)."""
+    from .scan_severity import (
+        EventSeverity,
+        ScanCircleZone,
+        SpaceWeatherConditions,
+        classify_fireball_severity,
+        classify_neo_severity,
+        classify_zone_by_distance,
+        distance_from_home,
+    )
+    return (
+        EventSeverity,
+        ScanCircleZone,
+        SpaceWeatherConditions,
+        classify_zone_by_distance,
+        classify_fireball_severity,
+        classify_neo_severity,
+        distance_from_home,
+    )
+
+
 __all__ = [
     # Shower calendar
     'ShowerCalendar',
@@ -98,7 +160,16 @@ __all__ = [
     'WatchManager',
     'WatchIntensity',
     'WatchRequestParser',
+    # Event journal
+    'EventJournal',
+    'SkyEvent',
+    'HourlyEntry',
+    'EventCategory',
+    'EventRing',
+    'classify_ring',
+    'calculate_bearing',
     # Lexicon prayers
+    'generate_prayer_of_approach',
     'generate_prayer_of_finding',
     'generate_prayer_of_watching',
     'generate_status_prayer',
@@ -106,4 +177,7 @@ __all__ = [
     # Lazy loaders
     'get_fireball_clients',
     'get_meteor_service',
+    'get_hourly_scanner',
+    'get_space_weather_client',
+    'get_scan_severity',
 ]
